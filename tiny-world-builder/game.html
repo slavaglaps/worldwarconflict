@@ -4534,7 +4534,9 @@ requestAnimationFrame(loop);
   if(!onMsg){ console.warn('[cs] нет onMsg'); return; }
   try{ MP.sock.onclose=null; MP.sock.onerror=null; MP.sock.close(); }catch(e){}  // отцепляем релей
 
-  const ENDPOINT = 'ws://'+(location.hostname||'localhost')+':2567';
+  // эндпоинт: ?cs=wss://your-app.colyseus.cloud → прод; ?cs=1 → локальный :2567
+  const csVal = params.get('cs');
+  const ENDPOINT = (csVal && /^wss?:\/\//.test(csVal)) ? csVal : ('ws://'+(location.hostname||'localhost')+':2567');
   const gy = (x,z)=> (typeof getTerrainHeight==='function'? getTerrainHeight(x,z) : 0);
   const WY = (typeof WATER_Y_SHIP!=='undefined'? WATER_Y_SHIP : -0.1);
   const PA = (typeof PLANE_ALT!=='undefined'? PLANE_ALT : 4.5);

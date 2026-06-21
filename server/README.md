@@ -38,6 +38,25 @@ Colyseus-стейта (`applySnap`/`reconcile`), а `MP.cmd` → `room.send(...)
 join за эту фракцию (сервер чтит `options.faction`). Локальный сим заморожен — всё авторитетно.
 (Минимальный клиент-кубики `mp-client.html` оставлен для отладки.)
 
+## Деплой на Colyseus Cloud
+
+Проект уже в нужной структуре (`@colyseus/tools`: `app.config.js` + `index.js` → `listen()`).
+
+1. **Cloud → New Application → Link with GitHub** → выбери репозиторий `worldwarconflict`.
+2. **Важно:** в настройках приложения укажи **директорию = `server`** (сервер лежит в подпапке, не в корне репо).
+3. **Settings → Environment** задай переменные:
+   - `JWT_SECRET` — длинная случайная строка (обязательно),
+   - (позже) `DATABASE_URL` для Postgres вместо файлового стора.
+4. Deploy → Cloud сам ставит зависимости, поднимает инстанс, даёт **wss-эндпоинт** (напр. `wss://xxxx.colyseus.cloud`). PORT/presence/driver/масштаб Cloud впрыскивает сам.
+5. **Клиент**: захости `tiny-world-builder/` на CDN (Cloudflare Pages) и открывай
+   `game.html?mp=room&cs=wss://xxxx.colyseus.cloud` — мост подключится к проду (эндпоинт настраивается через `?cs=`).
+
+⚠️ Файловый стор `db.js` на Cloud **эфемерный/по-инстансный** — для реальных аккаунтов вынеси на Postgres
+(Neon/Supabase free): замени реализацию в `db.js` за тем же интерфейсом, добавь `DATABASE_URL`.
+
+Self-host (Hetzner/DO) — та же структура: `npm start`, перед сервером Caddy (авто-TLS/WSS),
+для мультипроцесса задай `REDIS_URL` + `@colyseus/proxy`.
+
 ## Тесты
 
 ```bash

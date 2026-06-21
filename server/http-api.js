@@ -5,7 +5,10 @@ const { generateId } = require('colyseus');
 
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
 function json(res, code, obj) { res.writeHead(code, { 'content-type': 'application/json', ...CORS }); res.end(JSON.stringify(obj)); }
-function body(req) { return new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b || '{}')); } catch { r({}); } }); }); }
+function body(req) {
+  if (req.body && typeof req.body === 'object') return Promise.resolve(req.body);   // уже распарсено express.json()
+  return new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b || '{}')); } catch { r({}); } }); });
+}
 const publicUser = (u) => ({ id: u.id, username: u.username, wins: u.wins || 0, losses: u.losses || 0, rating: u.rating || 1000 });
 
 // true → запрос обработан; false → пусть дальше (404/Colyseus)

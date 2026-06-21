@@ -13,6 +13,7 @@
     "bench": "node bench-combat.js"
   },
   "dependencies": {
+    "@colyseus/tools": "^0.16.20",
     "colyseus": "0.16.5",
     "colyseus.js": "0.16.22",
     "ws": "^8.18.0"
