@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mushroom Wars — прототип</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #1b2b1f; overflow: hidden; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas { background: #2e4a32; touch-action: none; box-shadow: 0 0 40px rgba(0,0,0,.5); cursor: crosshair; }
+  #hud {
+    position: fixed; top: 12px; left: 12px; color: #eafae0;
+    font-size: 14px; text-shadow: 0 1px 2px rgba(0,0,0,.6); user-select: none;
+    background: rgba(0,0,0,.3); padding: 10px 14px; border-radius: 10px;
+  }
+  #hud b { color: #9cff7a; }
+  #overlay {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 18px; background: rgba(10,18,12,.78); color: #eafae0; z-index: 10;
+  }
+  #overlay h1 { font-size: 48px; }
+  #overlay button {
+    font-size: 18px; padding: 12px 28px; border: none; border-radius: 10px;
+    background: #6fd34a; color: #133; cursor: pointer; font-weight: 700;
+  }
+  #overlay button:hover { background: #88e85f; }
+  .hint { position: fixed; bottom: 12px; left: 12px; color: #b8d8b0; font-size: 12px;
+    background: rgba(0,0,0,.3); padding: 8px 12px; border-radius: 8px; user-select: none; }
+  #slider { position: fixed; top: 12px; right: 12px; color: #eafae0; font-size: 13px;
+    background: rgba(0,0,0,.3); padding: 10px 14px; border-radius: 10px; user-select: none; }
+  #slider input { vertical-align: middle; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div id="hud">
+  Здания: <b id="hMine">0</b> твои / <span id="hEnemy">0</span> врага / <span id="hNeut">0</span> нейтр.<br>
+  Армия: <b id="hUnits">0</b>
+</div>
+<div id="slider">
+  Отправлять: <b id="pctVal">50%</b><br>
+  <input id="pct" type="range" min="10" max="100" step="10" value="50">
+</div>
+<div class="hint">Зажми ЛКМ на своей башне → тяни к цели. Рамкой выдели несколько. ПКМ — снять выделение. R — рестарт.</div>
+<div id="overlay"><h1 id="ovTitle">Победа!</h1><button id="ovBtn">Играть снова</button></div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 960, H = 600;
+canvas.width = W; canvas.height = H;
+
+const OWNER = { NEUTRAL: 0, PLAYER: 1, ENEMY: 2 };
+const COLORS = {
+  0: '#9a9a8e', 1: '#5fcf4a', 2: '#e0533f',
+};
+const COLORS_DARK = { 0: '#6e6e63', 1: '#3a9b2c', 2: '#a83626' };
+
+let sendPct = 0.5;
+document.getElementById('pct').addEventListener('input', e => {
+  sendPct = e.target.value / 100;
+  document.getElementById('pctVal').textContent = e.target.value + '%';
+});
+
+function rand(a, b) { return a + Math.random() * (b - a); }
+function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
+
+class Building {
+  constructor(x, y, owner, level) {
+    this.x = x; this.y = y;
+    this.owner = owner;
+    this.level = level || 1;          // 1..3 — размер/производство/ёмкость
+    this.units = owner === OWNER.NEUTRAL ? Math.round(rand(8, 22)) : 18;
+    this.prodTimer = 0;
+  }
+  get radius() { return 20 + this.level * 6; }
+  get capacity() { return 40 + this.level * 25; }
+  get prodInterval() { return 1.4 - this.level * 0.18; } // сек на 1 юнит
+  update(dt) {
+    if (this.owner === OWNER.NEUTRAL) return;       // нейтралы не производят
+    if (this.units >= this.capacity) return;
+    this.prodTimer += dt;
+    while (this.prodTimer >= this.prodInterval && this.units < this.capacity) {
+      this.prodTimer -= this.prodInterval;
+      this.units++;
+    }
+  }
+  draw(sel) {
+    const r = this.radius;
+    // ножка
+    ctx.fillStyle = '#efe6c8';
+    ctx.fillRect(this.x - r * 0.28, this.y, r * 0.56, r * 0.7);
+    // шляпка
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y, r, r * 0.78, 0, Math.PI, 0);
+    ctx.fillStyle = COLORS[this.owner];
+    ctx.fill();
+    ctx.strokeStyle = COLORS_DARK[this.owner];
+    ctx.lineWidth = 3; ctx.stroke();
+    // пятнышки
+    ctx.fillStyle = 'rgba(255,255,255,.65)';
+    for (let i = 0; i < this.level + 1; i++) {
+      const a = Math.PI + (i + 1) / (this.level + 2) * Math.PI;
+      ctx.beginPath();
+      ctx.arc(this.x + Math.cos(a) * r * 0.5, this.y + Math.sin(a) * r * 0.45, r * 0.12, 0, 7);
+      ctx.fill();
+    }
+    if (sel) {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y + r * 0.3, r + 8, 0, 7);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    // число юнитов
+    ctx.fillStyle = '#10220f';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(this.units, this.x, this.y + r * 0.32);
+  }
+}
+
+// группа юнитов в пути
+class Squad {
+  constructor(owner, count, from, to) {
+    this.owner = owner; this.count = count; this.target = to;
+    this.units = [];
+    const startA = Math.atan2(to.y - from.y, to.x - from.x);
+    for (let i = 0; i < count; i++) {
+      const off = rand(-0.5, 0.5);
+      const r = from.radius + rand(2, 14);
+      this.units.push({
+        x: from.x + Math.cos(startA + off) * r,
+        y: from.y + Math.sin(startA + off) * r,
+        ph: rand(0, 7), spd: rand(95, 120),
+      });
+    }
+  }
+  update(dt) {
+    const t = this.target;
+    let arrived = 0;
+    for (const u of this.units) {
+      if (u.done) { arrived++; continue; }
+      const dx = t.x - u.x, dy = t.y - u.y;
+      const d = Math.hypot(dx, dy);
+      if (d < t.radius) { u.done = true; arrived++; continue; }
+      u.x += dx / d * u.spd * dt;
+      u.y += dy / d * u.spd * dt;
+      u.ph += dt * 12;
+    }
+    return arrived === this.units.length;
+  }
+  draw() {
+    ctx.fillStyle = COLORS[this.owner];
+    ctx.strokeStyle = COLORS_DARK[this.owner];
+    ctx.lineWidth = 1.5;
+    for (const u of this.units) {
+      if (u.done) continue;
+      const bob = Math.sin(u.ph) * 2;
+      ctx.beginPath();
+      ctx.arc(u.x, u.y + bob, 4.2, 0, 7);
+      ctx.fill(); ctx.stroke();
+    }
+  }
+}
+
+let buildings, squads, selected, dragFrom, mouse, boxStart, gameOver;
+
+function level(map) { return map; }
+
+function newGame() {
+  buildings = [];
+  squads = [];
+  selected = new Set();
+  dragFrom = null;
+  boxStart = null;
+  mouse = { x: 0, y: 0, down: false };
+  gameOver = false;
+  document.getElementById('overlay').style.display = 'none';
+
+  // расстановка: игрок слева, враг справа, нейтралы в центре
+  buildings.push(new Building(110, 300, OWNER.PLAYER, 2));
+  buildings.push(new Building(170, 130, OWNER.PLAYER, 1));
+  buildings.push(new Building(170, 470, OWNER.PLAYER, 1));
+
+  buildings.push(new Building(850, 300, OWNER.ENEMY, 2));
+  buildings.push(new Building(790, 130, OWNER.ENEMY, 1));
+  buildings.push(new Building(790, 470, OWNER.ENEMY, 1));
+
+  const neut = [
+    [480, 90, 2], [480, 510, 2], [480, 300, 3],
+    [340, 300, 1], [620, 300, 1],
+    [340, 130, 1], [620, 130, 1],
+    [340, 470, 1], [620, 470, 1],
+  ];
+  for (const [x, y, lv] of neut) buildings.push(new Building(x, y, OWNER.NEUTRAL, lv));
+}
+
+function buildingAt(x, y) {
+  for (const b of buildings) {
+    if (dist(x, y, b.x, b.y + b.radius * 0.3) < b.radius + 6) return b;
+  }
+  return null;
+}
+
+function sendUnits(from, to) {
+  if (from === to) return;
+  const n = Math.floor(from.units * sendPct);
+  if (n <= 0) return;
+  from.units -= n;
+  squads.push(new Squad(from.owner, n, from, to));
+}
+
+function resolveArrival(sq) {
+  const t = sq.target;
+  if (t.owner === sq.owner) {
+    t.units = Math.min(t.units + sq.count, t.capacity + sq.count);
+  } else {
+    if (sq.count > t.units) {
+      t.units = sq.count - t.units;
+      t.owner = sq.owner;
+      t.prodTimer = 0;
+    } else {
+      t.units -= sq.count;
+    }
+  }
+}
+
+// ---- ИИ врага ----
+let aiTimer = 0;
+function aiUpdate(dt) {
+  aiTimer += dt;
+  if (aiTimer < 1.6) return;
+  aiTimer = 0;
+  const mine = buildings.filter(b => b.owner === OWNER.ENEMY);
+  if (!mine.length) return;
+  // источник с наибольшим числом юнитов
+  const src = mine.reduce((a, b) => b.units > a.units ? b : a);
+  if (src.units < 12) return;
+  // цель: ближайшее не-вражеское здание, предпочтительно слабое
+  const targets = buildings.filter(b => b.owner !== OWNER.ENEMY);
+  if (!targets.length) return;
+  let best = null, bestScore = Infinity;
+  for (const t of targets) {
+    const d = dist(src.x, src.y, t.x, t.y);
+    const score = d * 0.6 + t.units * 6 - (t.owner === OWNER.PLAYER ? 40 : 0);
+    if (score < bestScore) { bestScore = score; best = t; }
+  }
+  if (best && Math.floor(src.units * 0.6) > 0) {
+    const n = Math.floor(src.units * 0.6);
+    src.units -= n;
+    squads.push(new Squad(OWNER.ENEMY, n, src, best));
+  }
+}
+
+function checkEnd() {
+  const mine = buildings.some(b => b.owner === OWNER.PLAYER);
+  const enemy = buildings.some(b => b.owner === OWNER.ENEMY);
+  const mineMoving = squads.some(s => s.owner === OWNER.PLAYER);
+  const enemyMoving = squads.some(s => s.owner === OWNER.ENEMY);
+  if (!enemy && !enemyMoving) endGame('Победа!');
+  else if (!mine && !mineMoving) endGame('Поражение');
+}
+function endGame(title) {
+  if (gameOver) return;
+  gameOver = true;
+  document.getElementById('ovTitle').textContent = title;
+  document.getElementById('overlay').style.display = 'flex';
+}
+
+// ---- ввод ----
+function canvasPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+}
+canvas.addEventListener('mousedown', e => {
+  if (gameOver) return;
+  const p = canvasPos(e); mouse = { ...p, down: true };
+  if (e.button === 2) { selected.clear(); return; }
+  const b = buildingAt(p.x, p.y);
+  if (b && b.owner === OWNER.PLAYER) {
+    dragFrom = b;
+  } else {
+    boxStart = { x: p.x, y: p.y };
+    if (!e.shiftKey) selected.clear();
+  }
+});
+canvas.addEventListener('mousemove', e => {
+  const p = canvasPos(e); mouse.x = p.x; mouse.y = p.y;
+});
+canvas.addEventListener('mouseup', e => {
+  if (gameOver) return;
+  const p = canvasPos(e);
+  if (dragFrom) {
+    const tgt = buildingAt(p.x, p.y);
+    if (tgt && tgt !== dragFrom) sendUnits(dragFrom, tgt);
+    dragFrom = null;
+  } else if (boxStart) {
+    const x1 = Math.min(boxStart.x, p.x), x2 = Math.max(boxStart.x, p.x);
+    const y1 = Math.min(boxStart.y, p.y), y2 = Math.max(boxStart.y, p.y);
+    if (dist(boxStart.x, boxStart.y, p.x, p.y) < 6) {
+      // клик: если есть выделение и кликнули по цели — отправить
+      const tgt = buildingAt(p.x, p.y);
+      if (tgt && selected.size) {
+        for (const b of selected) if (b.owner === OWNER.PLAYER) sendUnits(b, tgt);
+      } else if (tgt && tgt.owner === OWNER.PLAYER) {
+        selected.clear(); selected.add(tgt);
+      }
+    } else {
+      for (const b of buildings) {
+        if (b.owner === OWNER.PLAYER && b.x > x1 && b.x < x2 && b.y > y1 && b.y < y2) selected.add(b);
+      }
+    }
+    boxStart = null;
+  }
+  mouse.down = false;
+});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('keydown', e => { if (e.key === 'r' || e.key === 'R') newGame(); });
+document.getElementById('ovBtn').addEventListener('click', newGame);
+
+// ---- цикл ----
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+
+  if (!gameOver) {
+    for (const b of buildings) b.update(dt);
+    aiUpdate(dt);
+    for (let i = squads.length - 1; i >= 0; i--) {
+      if (squads[i].update(dt)) { resolveArrival(squads[i]); squads.splice(i, 1); }
+    }
+    checkEnd();
+  }
+
+  // отрисовка
+  ctx.clearRect(0, 0, W, H);
+  // фон-травка
+  ctx.fillStyle = '#2e4a32'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,.025)';
+  for (let i = 0; i < 60; i++) ctx.fillRect((i * 137) % W, (i * 211) % H, 3, 3);
+
+  // линия перетаскивания
+  if (dragFrom) {
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath(); ctx.moveTo(dragFrom.x, dragFrom.y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke();
+    ctx.setLineDash([]);
+    const tgt = buildingAt(mouse.x, mouse.y);
+    if (tgt) { ctx.beginPath(); ctx.arc(tgt.x, tgt.y + tgt.radius*0.3, tgt.radius + 6, 0, 7); ctx.stroke(); }
+  }
+  // линии от выделенных к курсору
+  if (selected.size && !dragFrom) {
+    ctx.strokeStyle = 'rgba(150,255,120,.25)'; ctx.lineWidth = 1.5;
+    for (const b of selected) { ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke(); }
+  }
+
+  for (const b of buildings) b.draw(selected.has(b));
+  for (const s of squads) s.draw();
+
+  // рамка выделения
+  if (boxStart && mouse.down) {
+    ctx.strokeStyle = '#9cff7a'; ctx.fillStyle = 'rgba(150,255,120,.12)'; ctx.lineWidth = 1.5;
+    const x = Math.min(boxStart.x, mouse.x), y = Math.min(boxStart.y, mouse.y);
+    const w = Math.abs(mouse.x - boxStart.x), h = Math.abs(mouse.y - boxStart.y);
+    ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h);
+  }
+
+  // HUD
+  document.getElementById('hMine').textContent = buildings.filter(b => b.owner === OWNER.PLAYER).length;
+  document.getElementById('hEnemy').textContent = buildings.filter(b => b.owner === OWNER.ENEMY).length;
+  document.getElementById('hNeut').textContent = buildings.filter(b => b.owner === OWNER.NEUTRAL).length;
+  document.getElementById('hUnits').textContent =
+    buildings.filter(b => b.owner === OWNER.PLAYER).reduce((s, b) => s + b.units, 0);
+
+  requestAnimationFrame(loop);
+}
+
+newGame();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

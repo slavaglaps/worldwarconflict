@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Voxel Wars — Colyseus client</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0d1420;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#e8eef6}
+  #c{position:fixed;inset:0;display:block}
+  #labels{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+  .lab{position:absolute;transform:translate(-50%,-50%);font-weight:700;font-size:13px;
+    text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap;color:#fff}
+  .lab .occ{color:#ffb347;font-size:11px}
+  #hud{position:fixed;top:12px;left:12px;background:rgba(12,20,32,.82);border:1px solid #2a3850;
+    border-radius:12px;padding:10px 14px;display:flex;gap:18px;align-items:center;font-size:14px;backdrop-filter:blur(6px)}
+  #hud .sw{width:16px;height:16px;border-radius:4px;border:1px solid #0006}
+  #hud b{font-size:16px}
+  #status{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:rgba(12,20,32,.82);
+    border:1px solid #2a3850;border-radius:10px;padding:6px 14px;font-size:13px;color:#9fb3cc}
+  #panel{position:fixed;right:12px;bottom:12px;width:230px;background:rgba(12,20,32,.9);border:1px solid #2a3850;
+    border-radius:12px;padding:14px;font-size:13px;display:none}
+  #panel h3{font-size:15px;margin-bottom:8px}
+  #panel .row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  button{background:#1d2c44;color:#e8eef6;border:1px solid #38507a;border-radius:8px;padding:7px 10px;
+    font-size:13px;cursor:pointer;flex:1}
+  button:hover{background:#27406a}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  #hint{position:fixed;left:12px;bottom:12px;font-size:12px;color:#7d93ad;max-width:330px;line-height:1.5}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="hud">
+  <span>Фракция <span class="sw" id="fsw"></span> <b id="fid">—</b></span>
+  <span>💰 <b id="gold">—</b></span>
+  <span>👥 <b id="mp">—</b></span>
+  <span style="color:#7d93ad">tick <span id="tick">0</span></span>
+</div>
+<div id="status">подключение…</div>
+<div id="panel">
+  <h3 id="pTitle">Город</h3>
+  <div id="pInfo"></div>
+  <div class="row">
+    <button id="bBuy">Нанять (max)</button>
+  </div>
+  <div class="row">
+    <button data-track="prod">⚙ Эконом.</button>
+    <button data-track="def">🛡 Оборона</button>
+    <button data-track="atk">⚔ Атака</button>
+  </div>
+  <div style="margin-top:8px;color:#7d93ad;font-size:12px">Клик по другому городу — отправить армию.</div>
+</div>
+<div id="hint">Клик — выбрать свой город. Затем кнопки найма/прокачки или клик по чужому — осада. Драг ЛКМ — вращать, колесо — зум.</div>
+
+<script src="vendor/three/three.r128.min.js"></script>
+<script src="vendor/colyseus.js"></script>
+<script>
+const T3 = THREE;
+const OWNER_COL = [0xe2524a,0x4a7fe2,0x49c46a,0xd9b54a,0xa05fd0,0x46c4c4];
+const SPEC_NAME = {0:'—',1:'⚙ Эконом.',2:'🛡 Оборона',3:'⚔ Атака'};
+const GRID = 256, CX = GRID/2;
+
+/* ── Three сцена ───────────────────────────────────────────── */
+const canvas = document.getElementById('c');
+const renderer = new T3.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+const scene = new T3.Scene();
+scene.background = new T3.Color(0x0d1420);
+scene.fog = new T3.Fog(0x0d1420, 260, 620);
+const camera = new T3.PerspectiveCamera(50, 1, 1, 2000);
+scene.add(new T3.AmbientLight(0xffffff, 0.65));
+const sun = new T3.DirectionalLight(0xffffff, 0.85); sun.position.set(120,260,80); scene.add(sun);
+// вода/земля
+const ground = new T3.Mesh(new T3.PlaneGeometry(GRID,GRID),
+  new T3.MeshLambertMaterial({color:0x16263c}));
+ground.rotation.x = -Math.PI/2; ground.position.set(CX,0,CX); scene.add(ground);
+const grid = new T3.GridHelper(GRID, 16, 0x24405f, 0x1a2d44);
+grid.position.set(CX,0.02,CX); scene.add(grid);
+
+// орбита камеры (минимальная)
+let camYaw = 0.6, camPitch = 0.95, camDist = 360;
+function placeCam(){
+  const cp = Math.max(0.25, Math.min(1.45, camPitch));
+  camera.position.set(
+    CX + Math.sin(camYaw)*Math.cos(cp)*camDist,
+    Math.sin(cp)*camDist,
+    CX + Math.cos(camYaw)*Math.cos(cp)*camDist);
+  camera.lookAt(CX, 0, CX);
+}
+function resize(){ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); }
+addEventListener('resize', resize); resize(); placeCam();
+
+let drag=false, lx=0, ly=0, moved=0;
+canvas.addEventListener('mousedown', e=>{drag=true;lx=e.clientX;ly=e.clientY;moved=0;});
+addEventListener('mouseup', ()=>{drag=false;});
+addEventListener('mousemove', e=>{ if(!drag)return; const dx=e.clientX-lx, dy=e.clientY-ly; lx=e.clientX; ly=e.clientY;
+  moved+=Math.abs(dx)+Math.abs(dy); camYaw-=dx*0.005; camPitch-=dy*0.005; placeCam(); });
+canvas.addEventListener('wheel', e=>{ camDist=Math.max(120,Math.min(700,camDist+e.deltaY*0.4)); placeCam(); e.preventDefault(); },{passive:false});
+
+/* ── состояние и виды городов ──────────────────────────────── */
+const cityViews = new Map();   // idx -> {mesh, ring, lab, key}
+let selIdx = null;
+const cityGeoCache = {};
+function cityMesh(){
+  const g = new T3.BoxGeometry(7, 1, 7);
+  const m = new T3.Mesh(g, new T3.MeshLambertMaterial({color:0xffffff}));
+  m.castShadow = true; scene.add(m); return m;
+}
+function ringMesh(){
+  const r = new T3.Mesh(new T3.TorusGeometry(7.5,0.6,8,28),
+    new T3.MeshBasicMaterial({color:0xffffff}));
+  r.rotation.x = Math.PI/2; r.visible=false; scene.add(r); return r;
+}
+function ensureView(idx){
+  let v = cityViews.get(idx);
+  if(!v){
+    const lab = document.createElement('div'); lab.className='lab';
+    document.getElementById('labels').appendChild(lab);
+    v = { mesh: cityMesh(), ring: ringMesh(), lab, key:String(idx) };
+    v.mesh.userData.idx = idx;
+    cityViews.set(idx, v);
+  }
+  return v;
+}
+function syncCity(idx, c){
+  const v = ensureView(idx);
+  const h = 6 + c.size*5 + c.tier*4;
+  v.mesh.scale.set(1, h, 1);
+  v.mesh.position.set(c.gx, h/2, c.gz);
+  v.mesh.material.color.setHex(OWNER_COL[c.owner] ?? 0x888888);
+  v.mesh.material.emissive.setHex(idx===selIdx ? 0x333333 : 0x000000);
+  v.ring.position.set(c.gx, 0.3, c.gz);
+  v.ring.visible = idx===selIdx;
+  v._c = c;
+}
+
+/* ── отряды (движущиеся армии) ──────────────────────────────── */
+const squadViews = new Map();
+function squadMesh(){
+  const m = new T3.Mesh(new T3.OctahedronGeometry(2.4), new T3.MeshLambertMaterial({color:0xffffff}));
+  m.castShadow = true; scene.add(m); return m;
+}
+function syncSquads(state){
+  const live = new Set();
+  state.squads.forEach((s, id)=>{
+    live.add(id);
+    let v = squadViews.get(id);
+    if(!v){
+      const lab = document.createElement('div'); lab.className='lab';
+      document.getElementById('labels').appendChild(lab);
+      v = { mesh: squadMesh(), lab }; squadViews.set(id, v);
+    }
+    v.mesh.position.set(s.x, 3, s.z);
+    v.mesh.material.color.setHex(OWNER_COL[s.owner] ?? 0xffffff);
+    v.mesh.material.emissive.setHex(s.fighting ? 0x6b1a12 : 0x000000);
+    v._s = s;
+  });
+  for(const [id,v] of squadViews) if(!live.has(id)){ scene.remove(v.mesh); v.lab.remove(); squadViews.delete(id); }
+}
+
+/* ── корабли + самолёты ─────────────────────────────────────── */
+const shipViews = new Map(), planeViews = new Map();
+function unitMesh(geo){ const m=new T3.Mesh(geo, new T3.MeshLambertMaterial({color:0xffffff})); m.castShadow=true; scene.add(m); return m; }
+function syncUnits(coll, views, y, geoFn){
+  const live=new Set();
+  coll.forEach((u,id)=>{
+    live.add(id);
+    let v=views.get(id);
+    if(!v){ const lab=document.createElement('div'); lab.className='lab'; document.getElementById('labels').appendChild(lab); v={mesh:unitMesh(geoFn()), lab}; views.set(id,v); }
+    v.mesh.position.set(u.x, y, u.z);
+    v.mesh.material.color.setHex(OWNER_COL[u.owner] ?? 0xffffff);
+    v.mesh.material.emissive.setHex(u.fighting?0x6b1a12:0x000000);
+    v._u=u;
+  });
+  for(const [id,v] of views) if(!live.has(id)){ scene.remove(v.mesh); v.lab.remove(); views.delete(id); }
+}
+function labelUnits(views, y, icon){
+  for(const [id,v] of views){ const u=v._u; if(!u)continue;
+    tmp.set(u.x, y, u.z).project(camera);
+    if(tmp.z>1){ v.lab.style.display='none'; continue; }
+    v.lab.style.display='block';
+    v.lab.style.left=((tmp.x*0.5+0.5)*innerWidth)+'px';
+    v.lab.style.top=((-tmp.y*0.5+0.5)*innerHeight)+'px';
+    v.lab.innerHTML=(u.fighting?'⚔':icon)+Math.round(u.hp);
+  }
+}
+
+/* ── Colyseus ──────────────────────────────────────────────── */
+const client = new Colyseus.Client('ws://' + location.hostname + ':2567');
+let room=null, myFid=null;
+async function connect(){
+  try{
+    room = await client.joinOrCreate('game');
+    document.getElementById('status').textContent = 'комната ' + room.roomId;
+    room.onMessage('assigned', m=>{ myFid=m.faction; updateHud(); });
+    room.onStateChange(state=>{ render2(state); });
+  }catch(e){
+    document.getElementById('status').textContent = 'нет сервера на :2567 — запусти `npm start` в server/';
+    console.error(e);
+  }
+}
+function render2(state){
+  state.cities.forEach((c, key)=> syncCity(Number(key), c));
+  syncSquads(state);
+  syncUnits(state.ships, shipViews, 1.5, ()=>new T3.BoxGeometry(4,1.5,2));
+  syncUnits(state.planes, planeViews, 9, ()=>new T3.ConeGeometry(1.6,4,4));
+  document.getElementById('tick').textContent = state.tick;
+  updateHud(state);
+  if(selIdx!=null) updatePanel(state);
+}
+function updateHud(state){
+  state = state || (room && room.state);
+  const fsw = document.getElementById('fsw');
+  if(myFid!=null){ fsw.style.background = '#'+(OWNER_COL[myFid]||0x888888).toString(16).padStart(6,'0'); }
+  document.getElementById('fid').textContent = myFid!=null ? myFid : '—';
+  if(state){
+    document.getElementById('gold').textContent = Math.round(state.gold[myFid] ?? 0);
+    document.getElementById('mp').textContent = Math.round(state.manpower[myFid] ?? 0);
+  }
+}
+
+/* ── выбор города + команды ────────────────────────────────── */
+const ray = new T3.Raycaster(), mouse = new T3.Vector2();
+canvas.addEventListener('click', e=>{
+  if(moved>6) return;                                   // это был драг, не клик
+  mouse.x = (e.clientX/innerWidth)*2-1; mouse.y = -(e.clientY/innerHeight)*2+1;
+  ray.setFromCamera(mouse, camera);
+  const hits = ray.intersectObjects([...cityViews.values()].map(v=>v.mesh));
+  if(!hits.length) return;
+  const idx = hits[0].object.userData.idx;
+  const c = cityViews.get(idx)._c;
+  if(selIdx!=null && selIdx!==idx && cityViews.get(selIdx)._c.owner===myFid){
+    room.send('send', { from: selIdx, to: idx, pct: 0.5 });   // отправка армии
+    return;
+  }
+  selIdx = idx; render2(room.state);
+});
+function updatePanel(state){
+  const v = cityViews.get(selIdx); if(!v){document.getElementById('panel').style.display='none';return;}
+  const c = v._c, mine = c.owner===myFid;
+  document.getElementById('panel').style.display='block';
+  document.getElementById('pTitle').textContent = `Город #${selIdx}` + (mine?' (твой)':'');
+  document.getElementById('pInfo').innerHTML =
+    `Гарнизон: <b>${c.units}</b> · размер ${c.size}<br>Спец: ${SPEC_NAME[c.spec]} · тир ${c.tier}` +
+    (c.occ?'<br><span style="color:#ffb347">🏴 оккупирован</span>':'');
+  document.getElementById('bBuy').disabled = !mine;
+  document.querySelectorAll('#panel [data-track]').forEach(b=> b.disabled = !mine);
+}
+document.getElementById('bBuy').onclick = ()=>{ if(selIdx!=null) room.send('buy', { city: selIdx, spec:'max' }); };
+document.querySelectorAll('#panel [data-track]').forEach(b=>{
+  b.onclick = ()=>{ if(selIdx!=null) room.send('upg', { city: selIdx, track: b.dataset.track }); };
+});
+
+/* ── рендер-цикл: позиции меток + сцена ────────────────────── */
+const tmp = new T3.Vector3();
+function loop(){
+  for(const [idx,v] of cityViews){
+    const c = v._c; if(!c){ continue; }
+    tmp.set(c.gx, 6 + c.size*5 + c.tier*4 + 6, c.gz).project(camera);
+    if(tmp.z>1){ v.lab.style.display='none'; continue; }
+    v.lab.style.display='block';
+    v.lab.style.left = ((tmp.x*0.5+0.5)*innerWidth)+'px';
+    v.lab.style.top  = ((-tmp.y*0.5+0.5)*innerHeight)+'px';
+    v.lab.innerHTML = `${Math.round(c.units)}` + (c.occ?' <span class="occ">🏴</span>':'');
+  }
+  for(const [id,v] of squadViews){
+    const s = v._s; if(!s) continue;
+    tmp.set(s.x, 7, s.z).project(camera);
+    if(tmp.z>1){ v.lab.style.display='none'; continue; }
+    v.lab.style.display='block';
+    v.lab.style.left = ((tmp.x*0.5+0.5)*innerWidth)+'px';
+    v.lab.style.top  = ((-tmp.y*0.5+0.5)*innerHeight)+'px';
+    v.lab.innerHTML = (s.fighting?'⚔':'') + Math.round(s.count);
+  }
+  labelUnits(shipViews, 4, '⚓');
+  labelUnits(planeViews, 12, '✈');
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+loop();
+connect();
+</script>
+</body>
+</html>

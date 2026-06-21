@@ -1,0 +1,3 @@
+display_name: Tiny World Low-Poly Prompt
+short_description: Prompt models to design coherent low-poly 3D board scenes.
+default_prompt: Use Tiny World low-poly prompting for generated worlds and Auto suggestions.

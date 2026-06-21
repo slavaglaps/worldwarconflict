@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# os
+.DS_Store
+
+# logs
+*.log
+
+# runtime data (file-based account store)
+server/data/
+
+# env / secrets
+.env
+.env.local
+.env.*.local

@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "generatedAt": "2026-05-28T07:08:38.420Z",
+  "source": "tools/model-stamps.js",
+  "models": [
+    {
+      "id": "building-1",
+      "label": "Building 1",
+      "path": "Building_1.glb",
+      "url": "models/Building_1.glb",
+      "format": "glb",
+      "supported": true,
+      "size": 449904,
+      "mtimeMs": 1779825421396
+    },
+    {
+      "id": "building-14",
+      "label": "Building 14",
+      "path": "Building_14.glb",
+      "url": "models/Building_14.glb",
+      "format": "glb",
+      "supported": true,
+      "size": 184160,
+      "mtimeMs": 1779825421397
+    },
+    {
+      "id": "buildings-pack-2",
+      "label": "Buildings Pack 2",
+      "path": "Buildings_Pack_2.obj",
+      "url": "models/Buildings_Pack_2.obj",
+      "format": "obj",
+      "supported": true,
+      "size": 1472092,
+      "mtimeMs": 1779825421401,
+      "sidecars": {
+        "mtl": [
+          {
+            "path": "City_2.mtl",
+            "url": "models/City_2.mtl",
+            "name": "City_2.mtl",
+            "exists": false
+          }
+        ]
+      },
+      "warnings": [
+        "Missing OBJ material library: City_2.mtl"
+      ]
+    },
+    {
+      "id": "heisenberg",
+      "label": "Heisenberg",
+      "path": "Heisenberg.obj",
+      "url": "models/Heisenberg.obj",
+      "format": "obj",
+      "supported": true,
+      "size": 147398,
+      "mtimeMs": 1779949155753,
+      "sidecars": {
+        "mtl": [
+          {
+            "path": "Heisenberg.mtl",
+            "url": "models/Heisenberg.mtl",
+            "name": "Heisenberg.mtl",
+            "exists": false
+          }
+        ]
+      },
+      "warnings": [
+        "Missing OBJ material library: Heisenberg.mtl"
+      ]
+    },
+    {
+      "id": "hitman-t-pose",
+      "label": "Hitman T Pose",
+      "path": "Hitman_T_Pose.obj",
+      "url": "models/Hitman_T_Pose.obj",
+      "format": "obj",
+      "supported": true,
+      "size": 156734,
+      "mtimeMs": 1666716094000,
+      "sidecars": {
+        "mtl": [
+          {
+            "path": "Hitman_T_Pose.mtl",
+            "url": "models/Hitman_T_Pose.mtl",
+            "name": "Hitman_T_Pose.mtl",
+            "exists": true,
+            "size": 214
+          }
+        ],
+        "textures": [
+          {
+            "path": "Hitman_T_Pose.png",
+            "url": "models/Hitman_T_Pose.png",
+            "name": "Hitman_T_Pose.png",
+            "format": "png",
+            "size": 504
+          }
+        ]
+      }
+    },
+    {
+      "id": "stunt-plane",
+      "label": "Stunt Plane",
+      "path": "stunt_plane.glb",
+      "url": "models/stunt_plane.glb",
+      "format": "glb",
+      "supported": true,
+      "size": 264956,
+      "mtimeMs": 1779825421410,
+      "sidecars": {
+        "textures": [
+          {
+            "path": "Polygon_Plane_Texture_01.png",
+            "url": "models/Polygon_Plane_Texture_01.png",
+            "name": "Polygon_Plane_Texture_01.png",
+            "format": "png",
+            "size": 234637
+          },
+          {
+            "path": "Polygon_Plane_Texture_02.png",
+            "url": "models/Polygon_Plane_Texture_02.png",
+            "name": "Polygon_Plane_Texture_02.png",
+            "format": "png",
+            "size": 224380
+          },
+          {
+            "path": "Polygon_Plane_Texture_03.png",
+            "url": "models/Polygon_Plane_Texture_03.png",
+            "name": "Polygon_Plane_Texture_03.png",
+            "format": "png",
+            "size": 223156
+          }
+        ]
+      }
+    },
+    {
+      "id": "trap-1-obj",
+      "label": "Trap 1 Obj",
+      "path": "Trap 1 Obj.obj",
+      "url": "models/Trap%201%20Obj.obj",
+      "format": "obj",
+      "supported": true,
+      "size": 36515,
+      "mtimeMs": 1736461470000,
+      "sidecars": {
+        "mtl": [
+          {
+            "path": "Trap 1 Obj.mtl",
+            "url": "models/Trap%201%20Obj.mtl",
+            "name": "Trap 1 Obj.mtl",
+            "exists": true,
+            "size": 211
+          }
+        ],
+        "textures": [
+          {
+            "path": "Trap 1 Obj.png",
+            "url": "models/Trap%201%20Obj.png",
+            "name": "Trap 1 Obj.png",
+            "format": "png",
+            "size": 1158
+          }
+        ]
+      }
+    }
+  ]
+}

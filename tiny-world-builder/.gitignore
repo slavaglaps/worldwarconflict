@@ -1,0 +1,22 @@
+.DS_Store
+.env
+.tinyworld-ai-logs/
+.grok/
+context.md
+models/stamp-defaults.local.json
+node_modules/
+*.log
+/.playwright-mcp
+
+dist/
+*.zip
+
+# Local Netlify folder
+.netlify
+.partykit/
+.claude/worktrees/agent-a17895f4/
+.claude/worktrees/agent-a35bb1ef/
+.claude/worktrees/agent-a6b44378/
+/.antigravitycli
+.gstack/
+/.gstack

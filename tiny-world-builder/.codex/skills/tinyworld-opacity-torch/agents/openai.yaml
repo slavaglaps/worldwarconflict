@@ -1,0 +1,3 @@
+display_name: Tiny World Opacity Torch
+short_description: Maintain ghost boards, panning, and smooth opacity torch behavior.
+default_prompt: Use the Tiny World opacity torch model for visibility and panning work.
