@@ -4592,6 +4592,8 @@ requestAnimationFrame(loop);
     catch(e){ console.warn('[cs] join failed', e); alert('Не удалось подключиться к комнате: '+e.message); return; }
     MP.on = true;
     room.onMessage('assigned', ()=>{});
+    const DENY = { war:'⚔ Война: не хватает политочков (нужно 50🏛) или перемирие', ally:'🤝 Союз отклонён или мало политочков', break:'💔 Разрыв: мало политочков', peace:'🕊 Мир: мало политочков или кулдаун', buy:'Найм: мало голды/манпауэра/места', upg:'Прокачка недоступна (голда/тир/оккупация)', research:'🔬 Мало голды или нет пререквизитов', bship:'⚓ Нужна верфь + tech + голда/манпауэр', bplane:'✈ Нужен аэродром + tech + голда/манпауэр', yard:'🏗 Верфь — в прибрежном городе; нужна голда', aa:'🛡 Мало голды/манпауэра', send:'Нет пути или нужно объявить войну' };
+    room.onMessage('denied', (m)=>{ try{ if(typeof toast==='function') toast(DENY[m&&m.cmd] || '⛔ Действие недоступно'); }catch(e){} });
     room.onStateChange((state)=> push(state));
     console.log('[cs] joined room', room.roomId, 'as faction', fid);
   }

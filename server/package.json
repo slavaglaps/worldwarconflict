@@ -7,10 +7,11 @@
   "scripts": {
     "start": "node index.js",
     "build": "echo \"no build step (plain JS)\"",
-    "test": "node test/sim.test.js && node test/e2e.test.js && node test/meta.test.js",
+    "test": "node test/sim.test.js && node test/e2e.test.js && node test/meta.test.js && node test/play3.test.js",
     "test:sim": "node test/sim.test.js",
     "test:e2e": "node test/e2e.test.js",
     "test:meta": "node test/meta.test.js",
+    "test:play3": "node test/play3.test.js",
     "bench": "node bench-combat.js"
   },
   "dependencies": {

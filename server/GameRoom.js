@@ -16,7 +16,7 @@ const RELN = { war: 1, ally: 2 };
 
 class GameRoom extends Room {
   onCreate(options) {
-    this.sim = new Sim(GameRoom.simOptions || { map: MAP, ai: true });   // реальная Европа (143 города, 24 страны) + ИИ незанятых
+    this.sim = new Sim(GameRoom.simOptions || { map: MAP, ai: true, politStart: 80, goldStart: 200 });   // Европа + ИИ; старт-ресурсы: война (50🏛) доступна сразу
     this.maxClients = this.sim.factions;
     this.assigned = {};                              // sessionId -> faction
     this.identities = {};                            // sessionId -> {id, username, guest}
@@ -34,25 +34,26 @@ class GameRoom extends Room {
     }
     for (let f = 0; f < this.sim.factions; f++) { this.state.gold.push(this.sim.gold[f]); this.state.manpower.push(this.sim.manpower[f]); this.state.politPts.push(this.sim.politPts[f]); }
 
-    // команды городов
-    this.onMessage('buy',  (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdBuy(f, m.city | 0, String(m.spec ?? m.n ?? 'max')); });
-    this.onMessage('upg',  (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdUpgrade(f, m.city | 0, TRACK[m.track]); });
-    this.onMessage('send', (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdSend(f, m.from | 0, m.to | 0, m.pct ?? 0.5); });
-    // дипломатия
-    this.onMessage('war',   (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdWar(f, m.tg | 0); });
-    this.onMessage('ally',  (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdAlly(f, m.tg | 0); });
-    this.onMessage('break', (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdBreak(f, m.tg | 0); });
-    this.onMessage('sup',   (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdSupport(f, m.tg | 0); });
-    this.onMessage('peace', (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdPeace(f, m.tg | 0, { land: !!m.land, money: m.money | 0, repar: m.repar | 0 }); });
-    // исследования
-    this.onMessage('research', (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdResearch(f, String(m.node)); });
-    // флот / авиация
-    this.onMessage('bship',    (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdBuildShip(f, m.city | 0); });
-    this.onMessage('bplane',   (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdBuildPlane(f, m.city | 0); });
-    this.onMessage('shipmove', (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdShipMove(f, m.id | 0, m.x, m.z); });
-    this.onMessage('airorder', (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdAirOrder(f, m.recall ? -1 : (m.city != null ? m.city | 0 : -1), m.x, m.z); });
-    this.onMessage('aa',       (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdBuildAA(f, m.city | 0); });
-    this.onMessage('yard',     (cl, m) => { const f = this.factionOf(cl); if (f !== null) this.sim.cmdBuildYard(f, m.city | 0, m.kind); });
+    // регистрация команды + фидбэк об отказе (sim вернул false → шлём клиенту 'denied')
+    const cmd = (type, fn) => this.onMessage(type, (cl, m) => {
+      const f = this.factionOf(cl); if (f === null) return;
+      if (fn(f, m) === false) cl.send('denied', { cmd: type });
+    });
+    cmd('buy',      (f, m) => this.sim.cmdBuy(f, m.city | 0, String(m.spec ?? m.n ?? 'max')));
+    cmd('upg',      (f, m) => this.sim.cmdUpgrade(f, m.city | 0, TRACK[m.track]));
+    cmd('send',     (f, m) => this.sim.cmdSend(f, m.from | 0, m.to | 0, m.pct ?? 0.5));
+    cmd('war',      (f, m) => this.sim.cmdWar(f, m.tg | 0));
+    cmd('ally',     (f, m) => this.sim.cmdAlly(f, m.tg | 0));
+    cmd('break',    (f, m) => this.sim.cmdBreak(f, m.tg | 0));
+    cmd('sup',      (f, m) => this.sim.cmdSupport(f, m.tg | 0));
+    cmd('peace',    (f, m) => this.sim.cmdPeace(f, m.tg | 0, { land: !!m.land, money: m.money | 0, repar: m.repar | 0 }).ok !== false);
+    cmd('research', (f, m) => this.sim.cmdResearch(f, String(m.node)));
+    cmd('bship',    (f, m) => this.sim.cmdBuildShip(f, m.city | 0));
+    cmd('bplane',   (f, m) => this.sim.cmdBuildPlane(f, m.city | 0));
+    cmd('shipmove', (f, m) => this.sim.cmdShipMove(f, m.id | 0, m.x, m.z));
+    cmd('airorder', (f, m) => this.sim.cmdAirOrder(f, m.recall ? -1 : (m.city != null ? m.city | 0 : -1), m.x, m.z));
+    cmd('aa',       (f, m) => this.sim.cmdBuildAA(f, m.city | 0));
+    cmd('yard',     (f, m) => this.sim.cmdBuildYard(f, m.city | 0, m.kind));
 
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_HZ);
     console.log(`[GameRoom ${this.roomId}] sim: ${this.sim.cities.length} cities, ${this.sim.factions} factions`);
