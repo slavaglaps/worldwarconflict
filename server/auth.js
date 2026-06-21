@@ -2,6 +2,9 @@
 // Для прод-усиления — RS256/argon2, но HS256+scrypt вполне боевой вариант.
 const crypto = require('crypto');
 const SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-prod';
+if (process.env.NODE_ENV === 'production' && SECRET === 'dev-secret-change-in-prod') {
+  throw new Error('JWT_SECRET must be set in production');
+}
 const b64 = (s) => Buffer.from(s).toString('base64url');
 
 function hashPassword(pw) {

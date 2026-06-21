@@ -30,7 +30,7 @@ HTTP-API: `POST /auth/register`, `POST /auth/login` → `{token, user}`; `GET /l
 действия транслируются в команды). Запуск:
 
 ```
-http://localhost:3000/game.html?mp=ROOM&cs=1     # mp= активирует guest-режим, cs=1 — мост на Colyseus
+http://localhost:3000/game.html?mp=ROOM          # Colyseus server-authoritative
 ```
 
 Мост в конце `game.html`: захватывает внутренний guest-`onMsg`, кормит его снапшотами из

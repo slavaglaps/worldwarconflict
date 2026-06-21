@@ -16,7 +16,11 @@ module.exports = config({
     app.use((req, res, next) => {
       api.handle(req, res)
         .then((handled) => { if (!handled) next(); })
-        .catch(() => { res.writeHead(500, { 'content-type': 'application/json' }); res.end('{"error":"server"}'); });
+        .catch((e) => {
+          const code = e && e.status ? e.status : 500;
+          res.writeHead(code, { 'content-type': 'application/json' });
+          res.end(code === 413 ? '{"error":"body too large"}' : '{"error":"server"}');
+        });
     });
   },
 

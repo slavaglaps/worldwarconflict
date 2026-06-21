@@ -10,9 +10,24 @@ const MAP = require('./sim/map-data.json');
 const RECONNECT_SEC = 30;   // окно реконнекта при обрыве — фракция сохраняется
 
 const TICK_HZ = 15;
+const CMD_RATE = { refill: 12, burst: 30 };
 const SPEC_ID = { prod: 1, def: 2, atk: 3 };
 const TRACK = { 1: 'prod', 2: 'def', 3: 'atk', prod: 'prod', def: 'def', atk: 'atk' };
 const RELN = { war: 1, ally: 2 };
+const YARD_KIND = { ship: 'ship', air: 'air' };
+
+const intOrNull = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? n : null;
+};
+const finiteOrNull = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+const pctOrNull = (v) => {
+  const n = finiteOrNull(v);
+  return n > 0 && n <= 1 ? n : null;
+};
 
 class GameRoom extends Room {
   onCreate(options) {
@@ -20,6 +35,7 @@ class GameRoom extends Room {
     this.maxClients = this.sim.factions;
     this.assigned = {};                              // sessionId -> faction
     this.identities = {};                            // sessionId -> {id, username, guest}
+    this.cmdBuckets = {};                            // sessionId -> token bucket анти-спама команд
     this.setMetadata({ name: (options && options.name) || 'Партия', region: (options && options.region) || 'eu', players: 0, maxPlayers: this.sim.factions, over: false });
     this.setState(new GameState());
     this.state.roomName = (options && options.name) || 'Партия';
@@ -37,29 +53,44 @@ class GameRoom extends Room {
     // регистрация команды + фидбэк об отказе (sim вернул false → шлём клиенту 'denied')
     const cmd = (type, fn) => this.onMessage(type, (cl, m) => {
       const f = this.factionOf(cl); if (f === null) return;
+      if (!this._allowCommand(cl)) { cl.send('denied', { cmd: type }); return; }
       if (fn(f, m) === false) cl.send('denied', { cmd: type });
     });
-    cmd('buy',      (f, m) => this.sim.cmdBuy(f, m.city | 0, String(m.spec ?? m.n ?? 'max')));
-    cmd('upg',      (f, m) => this.sim.cmdUpgrade(f, m.city | 0, TRACK[m.track]));
-    cmd('send',     (f, m) => this.sim.cmdSend(f, m.from | 0, m.to | 0, m.pct ?? 0.5));
-    cmd('war',      (f, m) => this.sim.cmdWar(f, m.tg | 0));
-    cmd('ally',     (f, m) => this.sim.cmdAlly(f, m.tg | 0));
-    cmd('break',    (f, m) => this.sim.cmdBreak(f, m.tg | 0));
-    cmd('sup',      (f, m) => this.sim.cmdSupport(f, m.tg | 0));
-    cmd('peace',    (f, m) => this.sim.cmdPeace(f, m.tg | 0, { land: !!m.land, money: m.money | 0, repar: m.repar | 0 }).ok !== false);
+    cmd('buy',      (f, m) => this.sim.cmdBuy(f, intOrNull(m.city), String(m.spec ?? m.n ?? 'max')));
+    cmd('upg',      (f, m) => this.sim.cmdUpgrade(f, intOrNull(m.city), TRACK[m.track]));
+    cmd('send',     (f, m) => this.sim.cmdSend(f, intOrNull(m.from), intOrNull(m.to), pctOrNull(m.pct)));
+    cmd('war',      (f, m) => this.sim.cmdWar(f, intOrNull(m.tg)));
+    cmd('ally',     (f, m) => this.sim.cmdAlly(f, intOrNull(m.tg)));
+    cmd('break',    (f, m) => this.sim.cmdBreak(f, intOrNull(m.tg)));
+    cmd('sup',      (f, m) => this.sim.cmdSupport(f, intOrNull(m.tg)));
+    cmd('peace',    (f, m) => this.sim.cmdPeace(f, intOrNull(m.tg), {
+      land: !!m.land,
+      money: intOrNull(m.money) ?? 0,
+      repar: intOrNull(m.repar) ?? 0,
+    }).ok !== false);
     cmd('research', (f, m) => this.sim.cmdResearch(f, String(m.node)));
-    cmd('bship',    (f, m) => this.sim.cmdBuildShip(f, m.city | 0));
-    cmd('bplane',   (f, m) => this.sim.cmdBuildPlane(f, m.city | 0));
-    cmd('shipmove', (f, m) => this.sim.cmdShipMove(f, m.id | 0, m.x, m.z));
-    cmd('airorder', (f, m) => this.sim.cmdAirOrder(f, m.recall ? -1 : (m.city != null ? m.city | 0 : -1), m.x, m.z));
-    cmd('aa',       (f, m) => this.sim.cmdBuildAA(f, m.city | 0));
-    cmd('yard',     (f, m) => this.sim.cmdBuildYard(f, m.city | 0, m.kind));
+    cmd('bship',    (f, m) => this.sim.cmdBuildShip(f, intOrNull(m.city)));
+    cmd('bplane',   (f, m) => this.sim.cmdBuildPlane(f, intOrNull(m.city)));
+    cmd('shipmove', (f, m) => this.sim.cmdShipMove(f, intOrNull(m.id), finiteOrNull(m.x), finiteOrNull(m.z)));
+    cmd('airorder', (f, m) => this.sim.cmdAirOrder(f, m.recall ? -1 : intOrNull(m.city), finiteOrNull(m.x), finiteOrNull(m.z)));
+    cmd('aa',       (f, m) => this.sim.cmdBuildAA(f, intOrNull(m.city)));
+    cmd('yard',     (f, m) => this.sim.cmdBuildYard(f, intOrNull(m.city), YARD_KIND[m.kind]));
 
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_HZ);
     console.log(`[GameRoom ${this.roomId}] sim: ${this.sim.cities.length} cities, ${this.sim.factions} factions`);
   }
 
   factionOf(cl) { const f = this.assigned[cl.sessionId]; return f === undefined ? null : f; }
+
+  _allowCommand(cl) {
+    const now = Date.now() / 1000;
+    const b = this.cmdBuckets[cl.sessionId] || (this.cmdBuckets[cl.sessionId] = { tokens: CMD_RATE.burst, ts: now });
+    b.tokens = Math.min(CMD_RATE.burst, b.tokens + (now - b.ts) * CMD_RATE.refill);
+    b.ts = now;
+    if (b.tokens < 1) return false;
+    b.tokens -= 1;
+    return true;
+  }
 
   // авторизация: JWT → identity; без токена → гость
   async onAuth(client, options) {
@@ -86,7 +117,7 @@ class GameRoom extends Room {
   // обрыв связи → ждём реконнекта RECONNECT_SEC секунд (фракция сохраняется)
   async onLeave(cl, consented) {
     if (!consented) { try { await this.allowReconnection(cl, RECONNECT_SEC); return; } catch (e) { /* не вернулся */ } }
-    delete this.assigned[cl.sessionId]; delete this.identities[cl.sessionId];
+    delete this.assigned[cl.sessionId]; delete this.identities[cl.sessionId]; delete this.cmdBuckets[cl.sessionId];
     this._syncMeta();
   }
 
@@ -132,6 +163,14 @@ class GameRoom extends Room {
       let su = 0, so = 0;                                                    // сильнейший осаждающий пул
       if (c.siege) for (const o in c.siege) if (c.siege[o].units > su) { su = c.siege[o].units; so = +o; }
       s.siegeUnits = Math.min(65535, Math.round(su)); s.siegeOwner = so;
+      // ── таймеры (в десятых долях секунды) ──
+      const b0 = c.batches && c.batches[0];                                  // ⏳ найм: текущая партия
+      s.prodTime    = b0 ? Math.min(65535, Math.round(b0.time * 10)) : 0;
+      s.prodElapsed = b0 ? Math.min(65535, Math.round(b0.elapsed * 10)) : 0;
+      s.shipQ  = Math.min(255, c.shipQueue | 0);                             // ⚓ верфь
+      s.shipT  = Math.min(65535, Math.round((c.shipTimer || 0) * 10));
+      s.planeQ = Math.min(255, c.planeQueue | 0);                           // ✈ аэродром
+      s.planeT = Math.min(65535, Math.round((c.planeTimer || 0) * 10));
     }
     // отряды: добавить новые, обновить движущиеся, удалить дошедшие
     const sq = this.state.squads, live = new Set();
@@ -155,6 +194,20 @@ class GameRoom extends Room {
     const rel = this.sim.relations, sr = this.state.relations;
     for (const k in rel) { const v = RELN[rel[k]] || 0; if (v && sr.get(k) !== v) sr.set(k, v); }
     for (const k of [...sr.keys()]) if (!rel[k]) sr.delete(k);
+    // часы сима (для отсчёта мобилизации) + время начала каждой войны
+    this.state.clock = this.sim.time;
+    const ws = this.state.warStart, since = this.sim.warSince;
+    for (const k in since) if (rel[k] === 'war') { if (ws.get(k) !== since[k]) ws.set(k, since[k]); }
+    for (const k of [...ws.keys()]) if (rel[k] !== 'war') ws.delete(k);
+    // технологии: активные исследования (id:tДс) + завершённые (id,id) — на фракцию
+    const research = this.state.research, tech = this.state.tech;
+    for (let f = 0; f < this.sim.factions; f++) {
+      const fk = String(f), arr = this.sim.techRes[f];
+      const rstr = (arr && arr.length) ? arr.map(r => r.id + ':' + Math.round(r.t * 10)).join(';') : '';
+      if (rstr) { if (research.get(fk) !== rstr) research.set(fk, rstr); } else if (research.has(fk)) research.delete(fk);
+      const dstr = [...(this.sim.techDone[f] || [])].join(',');
+      if (tech.get(fk) !== dstr) tech.set(fk, dstr);
+    }
   }
 }
 

@@ -18,6 +18,7 @@ class Sim {
     this.rng = opts.rng || Math.random;             // инъекция для детерминированных тестов
     this.politStart = opts.politStart ?? C.POLIT_START;
     this.goldStart = opts.goldStart ?? 60;
+    this.warPrep = opts.warPrep ?? C.WAR_PREP;       // секунд мобилизации перед атакой (тесты могут занулить)
     this.aiEnabled = opts.ai ?? false;              // ИИ управляет незанятыми фракциями (вкл. для реальной игры)
     this.humanFactions = new Set();                 // обновляется комнатой; ИИ их не трогает
     this.factionTimer = [];                         // таймеры раздумий ИИ
@@ -180,7 +181,10 @@ class Sim {
     if (this.gold[fid] < C.PLANE_COST || (this.manpower[fid] || 0) < C.PLANE_MP) return false;
     this.gold[fid] -= C.PLANE_COST; this.manpower[fid] -= C.PLANE_MP; c.planeQueue++; return true;
   }
-  cmdShipMove(fid, shipId, x, z) { const s = this.ships.find(sh => sh.id === shipId && sh.owner === fid); if (!s) return false; s.setTarget(x, z); return true; }
+  cmdShipMove(fid, shipId, x, z) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
+    const s = this.ships.find(sh => sh.id === shipId && sh.owner === fid); if (!s) return false; s.setTarget(x, z); return true;
+  }
   // приказ авиации: бомбить вражеский город / патрулировать точку / отозвать
   cmdAirOrder(fid, cityIdx, x, z) {
     if (cityIdx != null && cityIdx >= 0) {
@@ -188,7 +192,7 @@ class Sim {
       if (c && c.owner !== fid && this.atWar(fid, c.owner)) { this.airOrder[fid] = { kind: 'bomb', cityIdx }; return true; }
       return false;
     }
-    if (x != null && z != null) { this.airOrder[fid] = { kind: 'patrol', x, z }; return true; }
+    if (Number.isFinite(x) && Number.isFinite(z)) { this.airOrder[fid] = { kind: 'patrol', x, z }; return true; }
     this.airOrder[fid] = null; return true;                               // отзыв
   }
   cmdBuildAA(fid, idx) {
@@ -398,6 +402,7 @@ class Sim {
   manpowerRate(fid) { let r = 0; for (const c of this.cities) if (c.owner === fid) r += (C.MP_RATE_BASE + c.size * C.MP_RATE_PER_SIZE + c.tier * C.MP_RATE_PER_TIER) * (c.capital ? C.MP_CAPITAL : 1); return r * this.techMul(fid, 'prod'); }
   politRate(fid) { let n = 0, t = 0; for (const c of this.cities) if (c.owner === fid) { n++; t += c.tier; } return Math.min(C.POLIT_RATE_MAX, C.POLIT_RATE_BASE + n * C.POLIT_PER_CITY + t * C.POLIT_PER_TIER); }
   factionStrength(fid) { let s = 0; for (const c of this.cities) if (c.owner === fid) s += c.units + 10; return s; }
+  validFaction(fid) { return Number.isInteger(fid) && fid >= 0 && fid < this.factions; }
 
   // ── дипломатия ──
   relKey(a, b) { return a < b ? a + '_' + b : b + '_' + a; }
@@ -406,7 +411,7 @@ class Sim {
   allied(a, b) { return this.relation(a, b) === 'ally'; }
   setRelation(a, b, r) { const k = this.relKey(a, b); if (r === 'neutral') { delete this.relations[k]; delete this.warSince[k]; } else this.relations[k] = r; }
   setWar(a, b) { this.setRelation(a, b, 'war'); this.warSince[this.relKey(a, b)] = this.time; }
-  warCountdown(a, b) { return Math.max(0, C.WAR_PREP - (this.time - (this.warSince[this.relKey(a, b)] || 0))); }
+  warCountdown(a, b) { return Math.max(0, this.warPrep - (this.time - (this.warSince[this.relKey(a, b)] || 0))); }
   warReady(a, b) { return this.atWar(a, b) && this.warCountdown(a, b) <= 0; }
   canPass(o, no) { return o === no || this.allied(o, no); }
   setTruce(a, b) { this.truceUntil[this.relKey(a, b)] = this.time + C.TRUCE_TIME; }
@@ -454,27 +459,29 @@ class Sim {
 
   // ── дипломатические команды (валидируются на сервере) ──
   cmdWar(fid, t) {
-    if (fid === t || this.truceLeft(fid, t) > 0 || this.politPts[fid] < C.POLIT_WAR) return false;
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || this.truceLeft(fid, t) > 0 || this.politPts[fid] < C.POLIT_WAR) return false;
     this.politPts[fid] -= C.POLIT_WAR; this.setWar(fid, t); this.dragAlliesIntoWar(fid, t); return true;
   }
   cmdAlly(fid, t) {
-    if (fid === t || this.atWar(fid, t) || this.allied(fid, t) || this.politPts[fid] < C.POLIT_ALLY) return false;
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || this.atWar(fid, t) || this.allied(fid, t) || this.politPts[fid] < C.POLIT_ALLY) return false;
     if (!this.acceptAlliance(t, fid)) return false;
     this.politPts[fid] -= C.POLIT_ALLY; this.setRelation(fid, t, 'ally'); return true;
   }
   cmdBreak(fid, t) {
-    if (fid === t || !this.allied(fid, t) || this.politPts[fid] < C.POLIT_BREAK) return false;
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || !this.allied(fid, t) || this.politPts[fid] < C.POLIT_BREAK) return false;
     this.politPts[fid] -= C.POLIT_BREAK; this.setRelation(fid, t, 'neutral'); return true;
   }
   cmdSupport(fid, t) {
-    if (fid === t) return false;
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t) return false;
     const amt = Math.min(100, this.gold[fid] | 0); if (amt < 20) return false;
     this.gold[fid] -= amt; this.gold[t] = (this.gold[t] || 0) + amt; return true;
   }
   cmdPeace(fid, t, terms = {}) {
-    if (fid === t || !this.atWar(fid, t) || this.peaceCDLeft(fid, t) > 0 || this.politPts[fid] < C.POLIT_PEACE) return { ok: false };
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || !this.atWar(fid, t) || this.peaceCDLeft(fid, t) > 0 || this.politPts[fid] < C.POLIT_PEACE) return { ok: false };
     const occ = this.occCount(fid, t);
-    const T = { land: !!terms.land && occ > 0, money: terms.money || 0, repar: terms.repar || 0, occ };
+    const money = Math.max(0, Math.min(100, Number.isFinite(Number(terms.money)) ? Number(terms.money) : 0));
+    const repar = Math.max(0, Math.min(100, Number.isFinite(Number(terms.repar)) ? Number(terms.repar) : 0));
+    const T = { land: !!terms.land && occ > 0, money, repar, occ };
     this.setPeaceCD(fid, t);
     if (this.rng() < this.peaceAcceptChance(t, fid, T)) {
       this.politPts[fid] -= C.POLIT_PEACE;
@@ -542,6 +549,7 @@ class Sim {
   }
   cmdUpgrade(fid, idx, track) {
     const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ || c.tier >= C.MAX_TIER) return false;
+    if (!['prod', 'def', 'atk'].includes(track)) return false;
     if (c.spec && c.spec !== track) return false;
     const cost = C.upgradeCost(c.tier);
     if (this.gold[fid] < cost) return false;
@@ -553,8 +561,9 @@ class Sim {
   cmdSend(fid, fromIdx, toIdx, pct = 0.5) {
     const a = this.cities[fromIdx], b = this.cities[toIdx];
     if (!a || !b || a === b || a.owner !== fid) return false;
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 1) return false;
     const enemy = b.owner !== fid && !this.allied(fid, b.owner);
-    if (enemy && !this.atWar(fid, b.owner)) return false;       // нельзя нападать без войны
+    if (enemy && !this.warReady(fid, b.owner)) return false;    // нельзя нападать без войны и до конца мобилизации (WAR_PREP)
     const n = Math.floor(a.units * pct); if (n <= 0) return false;
     if (this.map) {                                            // реальная карта: отряд идёт по пути
       const path = this.findPath(fromIdx, toIdx, fid); if (!path) return false;

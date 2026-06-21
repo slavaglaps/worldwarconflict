@@ -2006,7 +2006,9 @@ class City{
       this.planeTimer+=dt;
       if(this.planeTimer>=PLANE_BUILD_TIME){ this.planeTimer=0; this.planeQueue--; spawnPlane(this); }
     }
-    // production ring geometry
+    this.drawProdRing();   // кольцо производства (вынесено — гость тоже его рисует)
+  }
+  drawProdRing(){
     if(this.batches.length){
       const b=this.batches[0], frac=Math.min(1,b.elapsed/b.time);
       this.pring.visible=true;
@@ -3093,7 +3095,6 @@ function sendSupport(t){
 /* ── переговоры о мире: игрок предлагает (с данью), ИИ решает ── */
 let peaceTarget=null, peaceLand=false, peaceMoney=0, peaceRepar=0;
 function openPeaceDialog(t){
-  if(MP.guest){ MP.cmd({cmd:'peace',tg:t}); return; }
   if(!atWar(PLAYER,t))return;
   peaceTarget=t; peaceLand=occCount(PLAYER,t)>0; peaceMoney=0; peaceRepar=0; // по умолчанию оставляем занятое
   document.getElementById('peaceWin').style.display='flex'; refreshPeaceDialog();
@@ -3127,6 +3128,7 @@ function proposePeace(){
   if(cd>0){ toast(`🕊 Переговоры на паузе: ещё ${Math.ceil(cd)}с`); return; } // анти-спам: нельзя сразу перепредложить
   if(!politEnough(POLIT_PEACE))return;          // мир стоит политочки
   const T=peaceTermsObj();
+  if(MP.guest){ MP.cmd({cmd:'peace',tg:t,land:T.land,money:T.money,repar:T.repar}); closePeace(); return; }
   setPeaceCD(PLAYER,t);                          // одно предложение раз в PEACE_CD секунд (успех или отказ)
   if(Math.random()<peaceAcceptChance(t,PLAYER,T)){
     politPts[PLAYER]-=POLIT_PEACE;
@@ -4239,6 +4241,16 @@ function loop(now){
     cityAA(gdt);         // 🚀 зенитки сбивают вражеские самолёты в радиусе
     updateMissiles(gdt); // баллистические ракеты + взрывы
     checkEnd();
+  } else if(MP.guest && !gameOver && gdt>0){
+    // гость: сим заморожен, но локально продвигаем ТОЛЬКО таймеры (плавность между снапшотами; сервер их корректирует)
+    gameTime+=gdt;                                                          // ⏳ отсчёт мобилизации войны
+    for(const c of cities){
+      if(c.batches.length){ const b=c.batches[0]; if(b.elapsed<b.time)b.elapsed=Math.min(b.time,b.elapsed+gdt); } // найм
+      if(c.isShipyard&&c.shipQueue>0&&c.shipTimer<SHIP_BUILD_TIME)c.shipTimer=Math.min(SHIP_BUILD_TIME,c.shipTimer+gdt);   // ⚓
+      if(c.isAirport&&c.planeQueue>0&&c.planeTimer<PLANE_BUILD_TIME)c.planeTimer=Math.min(PLANE_BUILD_TIME,c.planeTimer+gdt); // ✈
+      c.drawProdRing();
+    }
+    const rs=techRes[PLAYER]; if(rs)for(const r of rs){ const n=NODE[r.id]; if(n&&r.t<n.t)r.t=Math.min(n.t,r.t+gdt); }      // 🔬
   }
   // во время поворота камеры (Q/E или мышь) прячем DOM-подписи целиком — иначе они дрожат
   const _rot=camRotating; document.getElementById('labels').style.visibility=_rot?'hidden':'visible';
@@ -4274,21 +4286,15 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 
-/* ===================== МУЛЬТИПЛЕЕР (host-authoritative, delta-sync) =====================
- * Протокол (JSON через релей mp-server.js):
- *   server→client: hello{id,host,hostId,peers}  join{id,hostId}  leave{id,hostId}
- *   host→all:  snap{time,over,g,p,m,[c|dc],[rel,ws]}   c=keyframe(все города), dc=дельта(только изменённые)
- *              ent{e:[[id,kind,owner,x,y,z,extra]]}    позиции движущихся (шлётся только когда есть сущности)
- *              newcity{idx,gx,gz,country,owner,kind,name}
- *   guest→host: joinInfo{fid,country}   cmd{cmd,...}
- * Оптимизации: города — дельтой по idx (обычно 0/тик); дипломатия — только при изменении (подпись);
- *   keyframe при входе игрока и раз в 3с (ресинк); O(1) поиск города по idx; ent пропускается, если пусто.
+/* ===================== МУЛЬТИПЛЕЕР (Colyseus server-authoritative) =====================
+ * Клиент в online-режиме всегда гость рендера: сервер крутит Sim, Colyseus шлёт schema state,
+ * bridge ниже переводит его в локальные snap/ent события для существующего UI.
  */
 (function mpBoot(){
   const params=new URLSearchParams(location.search);
   const room=params.get('mp')||params.get('room')||(params.has('cs')?'cs':null);
   if(!room) return;                         // нет ?mp= и нет ?cs= → обычная одиночная игра
-  MP.host=params.has('host'); MP.guest=!MP.host;   // роль из URL (?host=1) — устойчиво к перезагрузкам
+  MP.host=false; MP.guest=true;             // актуальный backend — Colyseus; браузер-хоста больше нет
   const SPEC2ID={prod:1,def:2,atk:3}, ID2SPEC=[null,'prod','def','atk'];
   const labels=document.getElementById('labels');
   let prevWar=new Set(), tSnap=0, tEnt=0, tKey=0;
@@ -4307,7 +4313,7 @@ function loop(now){
   function setPill(){ const role=MP.host?'ХОСТ':(MP.guest?'ГОСТЬ':'—');
     const me=FACTIONS[PLAYER]?FACTIONS[PLAYER].country:'—';
     const extra=MP.host?(` · людей: ${MP.humans?MP.humans.size:1}`+(gameSpeed===0?' · ⏸ ВЫБЕРИТЕ СТРАНУ':'')):'';
-    pill.innerHTML=`🌐 <b style="color:#7ad0ff">${room}</b> · ${role} · ${me} · игроков: ${MP.players||1}${extra}`; }
+    pill.textContent=`🌐 ${room} · ${role} · ${me} · игроков: ${MP.players||1}${extra}`; }
 
   /* ── транспорт ── */
   MP.send=o=>{ const s=MP.sock; if(s&&s.readyState===1){ try{s.send(JSON.stringify(o));}catch(e){} } };
@@ -4350,10 +4356,13 @@ function loop(now){
   }
 
   /* ── гость: применить состояние одного города ── */
-  function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner){
+  function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner,prodTime,prodElapsed,shipQ,shipT,planeQ,planeT){
     const spec=ID2SPEC[specId]||null, prevOwner=c.owner, specChanged=(c.spec!==spec||c.tier!==tier);
     c.owner=owner; c.units=units; c.spec=spec; c.tier=tier; c.occ=!!occ;
-    if(queued!==undefined) c.batches = queued>0 ? [{count:queued,time:1,elapsed:0}] : [];               // ⏳ производство в лейбле
+    if(queued!==undefined)   // ⏳ найм: реальные время/прогресс партии с сервера (дс→с) → кольцо и прогресс-бар идут
+      c.batches = queued>0 ? [{count:queued, time:Math.max(0.1,(prodTime||10)/10), elapsed:Math.min((prodTime||10)/10,(prodElapsed||0)/10)}] : [];
+    if(shipQ!==undefined){ c.shipQueue=shipQ|0; c.shipTimer=(shipT||0)/10; }                            // ⚓ верфь: очередь + таймер
+    if(planeQ!==undefined){ c.planeQueue=planeQ|0; c.planeTimer=(planeT||0)/10; }                       // ✈ аэродром: очередь + таймер
     if(siegeUnits!==undefined) c.siege = siegeUnits>0 ? {[siegeOwner]:{units:siegeUnits,atkMult:1}} : null; // осада → орбы + кольцо боя + тряска
     if(specChanged){ try{c.buildMeshes&&c.buildMeshes();}catch(e){} }
     if(prevOwner!==owner){ try{c.recolor&&c.recolor();}catch(e){} }
@@ -4374,7 +4383,7 @@ function loop(now){
     MP._lastTime=m.time; gameTime=m.time;
     const list=m.c||m.dc;
     if(m.c)MP._synced=true;   // получили полный keyframe → можно судить о победе/поражении
-    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8]); } regionsDirty=true; }
+    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14]); } regionsDirty=true; }
     const g=m.g; for(let i=0;i<g.length;i++){gold[i]=g[i];politPts[i]=m.p[i];manpower[i]=m.m[i];}
     if(m.rel){ relations={}; for(const [k,v] of m.rel)relations[k]=v; warSince={}; for(const [k,v] of m.ws)warSince[k]=+v; warNotify(); }
     // победа/поражение — только после keyframe И если видели партию ИДУЩЕЙ (не врываемся в уже оконченную)
@@ -4475,15 +4484,7 @@ function loop(now){
 
   function connect(){
     MP._onMsg = onMsg; MP._pill = pill;      // отдать guest-пайплайн + плашку статуса мосту Colyseus
-    if(params.has('cs')) return;             // cs-режим: транспорт через Colyseus, релей не нужен (и ws:// на https запрещён)
-    const base=params.get('mphost')||('ws://'+(location.hostname||'localhost')+':3001');
-    const url=base+(base.includes('?')?'&':'/?')+'room='+encodeURIComponent(room);
-    let s; try{ s=new WebSocket(url); }catch(e){ pill.textContent='🌐 MP: ошибка URL'; return; }
-    MP.sock=s;
-    s.onopen=()=>{ pill.textContent='🌐 MP: соединено'; };
-    s.onmessage=onMsg;
-    s.onclose=()=>{ MP.on=false; pill.textContent='🌐 MP: отключено'; };
-    s.onerror=()=>{ pill.textContent='🌐 MP: нет сервера — node mp-server.js'; };
+    return;                                  // транспорт подключает только Colyseus bridge ниже
   }
   connect();
 
@@ -4528,15 +4529,16 @@ requestAnimationFrame(loop);
 </script>
 
 <!-- ── Мост game.html → Colyseus: богатый рендер на авторитетном сервере ──
-     Загрузка: game.html?mp=ROOM&cs=1  (mp= активирует guest-машинерию, cs=1 переключает транспорт на Colyseus) -->
+     Загрузка: game.html?mp=ROOM или game.html?cs=1  (Colyseus server-authoritative) -->
 <script>
 (function colyseusBridge(){
   const params = new URLSearchParams(location.search);
-  if(!params.has('cs')) return;                                  // без ?cs=1 — обычный режим/релей
-  if(typeof MP==='undefined' || !MP.guest){ console.warn('[cs] нужен ?mp=ROOM рядом с ?cs=1'); return; }
+  const roomParam = params.get('mp') || params.get('room') || (params.has('cs') ? 'Игра' : '');
+  if(!roomParam && !params.get('rid')) return;                    // без online-параметров — одиночная игра
+  if(typeof MP==='undefined' || !MP.guest){ console.warn('[cs] online bootstrap не готов'); return; }
   const onMsg = MP._onMsg;                                       // guest-пайплайн (applySnap/reconcile), отдан из connect()
   if(!onMsg){ console.warn('[cs] нет onMsg'); return; }
-  // релей в cs-режиме не поднимается (connect его пропустил) — отцеплять нечего
+  // сетевой транспорт полностью живёт в Colyseus bridge
 
   // эндпоинт: ?cs=wss://... → явный; иначе localhost → локальный :2567, прочее → прод (Colyseus Cloud)
   const PROD_ENDPOINT = 'wss://de-fra-fe578df7.colyseus.cloud';
@@ -4556,8 +4558,9 @@ requestAnimationFrame(loop);
       case 'buy':    room.send('buy',   {city:o.c, spec:String(o.spec)}); break;
       case 'upg':    room.send('upg',   {city:o.c, track:o.track}); break;
       case 'army':   room.send('send',  {from:o.a, to:o.b, pct:(o.pct||50)/100}); break;
-      case 'war': case 'ally': case 'break': case 'sup': case 'peace':
+      case 'war': case 'ally': case 'break': case 'sup':
                      room.send(o.cmd,   {tg:o.tg}); break;
+      case 'peace': room.send('peace',  {tg:o.tg, land:!!o.land, money:o.money|0, repar:o.repar|0}); break;
       case 'bship':  room.send('bship', {city:o.c}); break;
       case 'bplane': room.send('bplane',{city:o.c}); break;
       case 'shipmove': (o.ids||[]).forEach(id=> room.send('shipmove',{id: parseInt(String(id).replace(/\D/g,''))||0, x:o.x, z:o.z})); break;
@@ -4586,24 +4589,44 @@ requestAnimationFrame(loop);
     const rid = params.get('rid');
     try{
       if(rid) room = await client.joinById(rid, { faction: fid });                                   // войти в конкретную комнату из лобби
-      else if(params.has('create')) room = await client.create('game', { faction: fid, name: params.get('mp') || 'Игра' }); // создать новую
+      else if(params.has('create')) room = await client.create('game', { faction: fid, name: roomParam || 'Игра' }); // создать новую
       else room = await client.joinOrCreate('game', { faction: fid });                               // прямая ссылка
     }
     catch(e){ console.warn('[cs] join failed', e); alert('Не удалось подключиться к комнате: '+e.message); return; }
     MP.on = true;
-    room.onMessage('assigned', ()=>{});
-    const DENY = { war:'⚔ Война: не хватает политочков (нужно 50🏛) или перемирие', ally:'🤝 Союз отклонён или мало политочков', break:'💔 Разрыв: мало политочков', peace:'🕊 Мир: мало политочков или кулдаун', buy:'Найм: мало голды/манпауэра/места', upg:'Прокачка недоступна (голда/тир/оккупация)', research:'🔬 Мало голды или нет пререквизитов', bship:'⚓ Нужна верфь + tech + голда/манпауэр', bplane:'✈ Нужен аэродром + tech + голда/манпауэр', yard:'🏗 Верфь — в прибрежном городе; нужна голда', aa:'🛡 Мало голды/манпауэра', send:'Нет пути или нужно объявить войну' };
+    room.onMessage('assigned', (m)=>{
+      const assignedFid = Number.isInteger(m&&m.faction) ? m.faction : fid;
+      if(FACTIONS[assignedFid]){
+        PLAYER=assignedFid; OWNER.PLAYER=assignedFid; PLAYER_COUNTRY=FACTIONS[assignedFid].country;
+        FACTIONS.forEach(f=>f.isPlayer=f.id===assignedFid);
+        MP._synced=false; MP._sawRunning=false;
+        try{ toast(`${flagOf(PLAYER_COUNTRY)} Сервер назначил: ${PLAYER_COUNTRY}`); }catch(e){}
+      }
+    });
+    const DENY = { war:'⚔ Война: не хватает политочков (нужно 50🏛) или перемирие', ally:'🤝 Союз отклонён или мало политочков', break:'💔 Разрыв: мало политочков', peace:'🕊 Мир: мало политочков или кулдаун', buy:'Найм: мало голды/манпауэра/места', upg:'Прокачка недоступна (голда/тир/оккупация)', research:'🔬 Мало голды или нет пререквизитов', bship:'⚓ Нужна верфь + tech + голда/манпауэр', bplane:'✈ Нужен аэродром + tech + голда/манпауэр', yard:'🏗 Верфь — в прибрежном городе; нужна голда', aa:'🛡 Мало голды/манпауэра', send:'⏳ Нет пути, война не объявлена, или идёт мобилизация (до 60с)' };
     room.onMessage('denied', (m)=>{ try{ if(typeof toast==='function') toast(DENY[m&&m.cmd] || '⛔ Действие недоступно'); }catch(e){} });
     room.onStateChange((state)=> push(state));
     console.log('[cs] joined room', room.roomId, 'as faction', fid);
   }
 
   function push(state){
-    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0]));
+    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0]));
     const G=state.gold, P=state.politPts, M=state.manpower, g=[], p=[], m=[];
     for(let i=0;i<G.length;i++){ g[i]=Math.round(G[i]||0); p[i]=Math.round((P&&P[i])||0); m[i]=Math.round((M&&M[i])||0); }
     const rel=[]; state.relations.forEach((v,k)=> rel.push([k, v===1?'war':'ally']));
-    onMsg({ data: JSON.stringify({ t:'snap', time: state.tick, over:0, g, p, m, c, rel, ws:[] }) });
+    const ws=[]; if(state.warStart) state.warStart.forEach((v,k)=> ws.push([k, v]));   // время начала каждой войны → отсчёт мобилизации (60с)
+    onMsg({ data: JSON.stringify({ t:'snap', time:+state.clock||0, over:0, g, p, m, c, rel, ws }) });   // time = sim.time (сек), не tick!
+    // 🔬 технологии: активные исследования игрока (прогресс таймера) + завершённые техи всех фракций (разблокировки)
+    if(typeof techRes!=='undefined' && state.research){
+      const mine = state.research.get(String(PLAYER)); const arr=[];
+      if(mine) for(const part of mine.split(';')){ const [id,td]=part.split(':'); if(id) arr.push({ id, t:(+td||0)/10 }); }
+      techRes[PLAYER]=arr;
+    }
+    if(typeof techDone!=='undefined' && state.tech){ push._techSig=push._techSig||{};
+      state.tech.forEach((ids,k)=>{ const fid=+k; if(push._techSig[fid]!==ids){ push._techSig[fid]=ids;
+        techDone[fid]=new Set(ids?ids.split(','):[]); try{recomputeTech(fid);}catch(e){}
+        if(fid===PLAYER&&typeof buildTechWindow==='function'){try{buildTechWindow();}catch(e){}} } });
+    }
     // синк динамических верфей/аэродромов на локальные города (чтобы появился UI постройки)
     if(!push._by || push._n!==cities.length){ push._by={}; for(const cc of cities)push._by[cc.idx]=cc; push._n=cities.length; }
     state.cities.forEach((cc,key)=>{ const lc=push._by[Number(key)]; if(lc){ lc.isShipyard=!!cc.shipyard; lc.isAirport=!!cc.airport; lc.aa=cc.aa|0; } });
@@ -4615,7 +4638,7 @@ requestAnimationFrame(loop);
     // плашка статуса: реальное имя комнаты + страна + число игроков (с сервера, без путающего «ГОСТЬ»)
     if(MP._pill){
       const ctry = (typeof FACTIONS!=='undefined' && FACTIONS[PLAYER]) ? FACTIONS[PLAYER].country : '';
-      MP._pill.innerHTML = `🌐 <b style="color:#7ad0ff">${state.roomName||'Игра'}</b> · ${ctry} · 👥 ${state.playerCount||1}`;
+      MP._pill.textContent = `🌐 ${state.roomName||'Игра'} · ${ctry} · 👥 ${state.playerCount||1}`;
     }
   }
 

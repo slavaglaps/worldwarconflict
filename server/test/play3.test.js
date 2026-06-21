@@ -30,7 +30,7 @@ const planes = (room, f) => [...room.state.planes.values()].filter(s => s.owner 
 const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
 
 (async () => {
-  GameRoom.simOptions = { map, goldStart: 4000, politStart: 400, rng: () => 0.01 };   // без ai → доска статична, кроме игроков
+  GameRoom.simOptions = { map, goldStart: 4000, politStart: 400, warPrep: 0, rng: () => 0.01 };   // без ai → доска статична; warPrep:0 → атака сразу (мобилизацию тестит sim.test)
   const server = new Server({ transport: new WebSocketTransport({ server: require('http').createServer() }), presence: new LocalPresence(), driver: new LocalDriver() });
   server.define('game', GameRoom);
   await server.listen(PORT);
@@ -44,6 +44,14 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
 
   await testAsync('3 игрока в одной комнате, playerCount=3', async () => { eq(rDE.roomId, rFR.roomId); eq(rPL.roomId, rFR.roomId); eq(rFR.state.playerCount, 3); });
   await testAsync('фракции назначены по запросу (Франция владеет своими городами)', async () => { const k = own(FR)[0]; eq(rFR.state.cities.get(String(k)).owner, FR); });
+  const cDU = new Client(`ws://localhost:${PORT}`); const rDU = await cDU.joinById(rFR.roomId, { faction: FR });
+  let fDU = null; rDU.onMessage('assigned', m => fDU = m.faction);
+  await sleep(300);
+  await testAsync('занятая фракция → сервер назначает свободную через assigned', async () => {
+    assert(fDU != null, 'получил assigned'); assert(fDU !== FR && fDU !== DE && fDU !== PL, `assigned=${fDU}`);
+  });
+  rDU.leave();
+  await sleep(300);
 
   await testAsync('АРМИЯ: найм солдат растит гарнизон', async () => {
     const k = own(FR)[0]; const before = rFR.state.cities.get(String(k)).units;
@@ -157,6 +165,21 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
     // у какого-то города Германии под осадой Франции должно быть siegeUnits>0 (из теста атаки) — или проверим поле есть
     let anySiege = false; rFR.state.cities.forEach(c => { if (c.siegeUnits > 0) anySiege = true; });
     assert(typeof rFR.state.cities.get(String(own(DE)[0])).siegeUnits === 'number', 'поле siegeUnits синкается');
+  });
+
+  await testAsync('ТАЙМЕРЫ синкаются клиенту (найм/прогресс + clock + warStart + tech)', async () => {
+    const k = own(FR)[0];
+    rFR.send('buy', { city: k, spec: '10' });                              // запустить партию найма
+    await sleep(500);
+    const c0 = rFR.state.cities.get(String(k));
+    gt(c0.prodTime, 0, 'prodTime (полное время партии) синкается');
+    const e0 = c0.prodElapsed; await sleep(900);
+    gt(rFR.state.cities.get(String(k)).prodElapsed, e0, 'прогресс найма растёт на клиенте');
+    eq(typeof rFR.state.cities.get(String(k)).shipT, 'number', 'таймер верфи синкается');
+    eq(typeof rFR.state.cities.get(String(k)).planeT, 'number', 'таймер аэродрома синкается');
+    gt(rFR.state.clock, 0, 'часы сима (для мобилизации) синкаются');
+    assert(rFR.state.warStart.get(relKey(FR, DE)) !== undefined, 'время начала войны синкается');
+    eq(typeof rFR.state.tech.get(String(FR)), 'string', 'завершённые технологии синкаются');
   });
 
   rFR.leave(); rDE.leave(); rPL.leave();

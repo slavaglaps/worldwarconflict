@@ -25,8 +25,7 @@ mushroom-wars-clone/
 ├── europe.html              2D-предок (карта Европы) — источник координат городов
 └── tiny-world-builder/      ← движок (склон https://github.com/jasonkneen/tiny-world-builder)
     ├── game.html            ★ ВСЯ ИГРА (~4500 строк, один инлайн-<script>)
-    ├── mp-server.js         WebSocket-релей для мультиплеера
-    ├── mp-*.js              тест-скрипты сети (fakehost/guest/unit — для регрессий)
+    ├── mp-*.js              старые/отладочные клиентские сетевые тесты
     ├── vendor/three/        Three.js r128 (глобал THREE)
     └── tools/dev-server.js  статический дев-сервер
 ```
@@ -42,11 +41,11 @@ mushroom-wars-clone/
 ```bash
 cd tiny-world-builder
 node tools/dev-server.js 3000     # игра: http://localhost:3000/game.html
-node mp-server.js 3001            # релей мультиплеера (нужен только для MP)
+cd ../server && npm start         # Colyseus backend
 ```
 
 - **Одиночная игра:** `http://localhost:3000/game.html`
-- **Мультиплеер:** ХОСТ → `...game.html?mp=ROOM&host=1`, ГОСТЬ → `...game.html?mp=ROOM`
+- **Мультиплеер:** `http://localhost:3000/game.html?mp=ROOM` или лобби `tiny-world-builder/index.html`
 - ⚠️ Карта/ландшафт строятся ОДИН РАЗ при загрузке. **R** в игре пересоздаёт только партию
   (города/фракции/дипломатию), не карту — для изменений карты нужен полный Cmd+R.
 
@@ -57,9 +56,7 @@ const m=[...h.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n')
 fs.writeFileSync('/tmp/g.js',m);" && node --check /tmp/g.js && echo OK
 ```
 
-**E2E-тесты сети** (Node-боты против живого браузерного хоста через релей):
-`mp-test.js` (транспорт), `mp-fakehost2.js` (новый дельта-протокол → браузерный гость),
-`mp-guest-persist.js` / `mp-unittest.js` (команды гостя).
+**E2E-тесты сети:** `cd server && npm test`.
 
 ---
 
@@ -137,51 +134,38 @@ MAX_TIER=3, SOLDIER_PRICE=4, SQUAD_SPEED=4, WAR_PREP=60 (мобилизация,
 
 ## 7. Сетевая архитектура (мультиплеер) ★
 
-**Модель: host-authoritative.** Хост крутит полную симуляцию (как в одиночке) и рассылает состояние;
-гости НЕ симулируют — зеркалят снимок хоста, а свои действия шлют командами хосту.
+**Модель: server-authoritative на Colyseus.** Сервер крутит чистую симуляцию `server/sim/Sim.js`,
+клиенты НЕ симулируют — зеркалят schema-state Colyseus, а свои действия шлют командами в `GameRoom`.
 
 ### Транспорт
-- `mp-server.js` — тупой WebSocket-релей: разводит JSON-сообщения по комнатам (`?room=ID`).
-  Первый вошедший помечается хостом сервером, НО роль клиент берёт **из URL** (`?host=1`) — устойчиво к
-  перезагрузкам. Команды широковещательны (обрабатывает только тот, у кого `MP.host`).
-- Абстрагирован: `?mphost=wss://...` позволит подменить на задеплоенный сервер без правок игры.
+- `server/index.js` + `server/GameRoom.js` — актуальный Colyseus backend.
+- `tiny-world-builder/game.html` подключается как богатый клиент: bridge переводит Colyseus schema-state
+  в локальные `snap/ent` события для существующего рендера.
 
 ### Роли (глобал `MP`)
 ```
 MP = { on, host, guest, id, hostId, sock, humans:Set, assign:{clientId→fid}, ghosts:Map, ... }
 ```
-- Роль из URL: `MP.host = params.has('host')`.
-- Гость объявляет свою фракцию каждый раз при смене (`mpTick`: `joinInfo{fid}`); хост заносит в
-  `MP.assign` и `MP.humans` (ИИ перестаёт вести человеческие фракции).
+- В online-режиме `MP.guest=true`: браузер не является хостом.
+- Фракцию назначает сервер через `assigned`; если выбранная страна занята, клиент переключается на
+  фактически выданную сервером фракцию.
 
 ### Протокол сообщений
 ```
-server→client: hello{id,host,hostId,peers}  join{id,hostId}  leave{id,hostId}
-host→all:  snap{time,over,g,p,m,[c|dc],[rel,ws]}   c=keyframe(все города), dc=дельта(изменённые)
-           ent{e:[[id,kind,owner,x,y,z,extra]]}    позиции движущихся (только когда есть)
-           newcity{idx,gx,gz,country,owner,kind,name}   реплика построенной верфи/аэропорта
-guest→host: joinInfo{fid,country}   cmd{cmd,...}
+Colyseus schema: GameState { cities, squads, ships, planes, gold, manpower, politPts, relations }
+client→server: buy/upg/send/war/ally/break/sup/peace/research/bship/bplane/shipmove/airorder/aa/yard
+server→client message: assigned{faction,you}, denied{cmd}
 ```
 
-### Снапшоты — оптимизация (delta-sync)
-Реализовано в IIFE `mpBoot()` в конце скрипта. Ключевые приёмы:
+### Синхронизация
+Colyseus сам шлёт бинарные дельты schema-state. В `game.html` bridge собирает из schema локальные
+`snap`/`ent` события, чтобы переиспользовать существующие `applySnap()`/`reconcile()` и богатый Three.js рендер.
 
-1. **Дельта городов по idx.** Хост хранит `sent:Map(idx→packed)`. Каждый тик шлёт **только изменившиеся**
-   города (`dc`), упакованные в `[idx,owner,units,spec,tier,occ]`. Полный кадр (`c`, все города) — при
-   входе игрока (`keyframeDue` на `join`/`joinInfo`) и раз в 3с (ресинк).
-   *Замер: дельта ~405 байт vs keyframe ~2700 (в ~6.7× меньше), большинство тиков — дельты.*
-2. **Дипломатия — только при изменении.** `rel`/`ws` шлются, лишь когда подпись `relSig` поменялась.
-3. **idx-ключи** (не позиционный `cities[i]`) → устойчиво к разным наборам городов у клиентов
-   (поздний вход, динамические верфи). Применение — `applyCity()` через `ci(idx)`.
-4. **O(1) индекс** `byIdx:Map`; `ensureIndex()` детектит rebuild мира по identity `cities[0]`;
-   `MP.reindex()` пересобирает индекс (на хосте — сбрасывает дельта-кэш + форсит keyframe).
-5. **`ent`** не шлётся, если нет сущностей; позиции округлены до 0.1.
-
-### Команды гостя (`hostCmd`, с проверкой `owner===fid`)
+### Команды клиента
 `army, buy, upg` (город) · `war, ally, peace, break, sup` (дипломатия) ·
 `yard, bship, bplane` (постройка верфи/аэропорта/флота/авиации) · `shipmove, airorder` (управление юнитами).
-Постройка/управление параметризованы фракцией-актёром (`buildShip(yard,actor)` и т.д.); у гостя
-функции перехватываются (`if(MP.guest){MP.cmd(...);return;}`) и применяются хостом за фракцию гостя.
+Все команды валидируются на сервере через `Sim.cmd*`: владение, диапазоны id, ресурсы, состояние войны,
+проценты отправки армии и условия мира.
 
 ### Зеркала сущностей (ghosts)
 Гость держит `MP.ghosts:Map(id→ghost)`; `reconcile()` создаёт/двигает/удаляет лёгкие меши по `ent`.
@@ -194,11 +178,9 @@ Ghost несёт `_mpid/owner/pos/isAir/mat` — этого хватает, чт
 ложное поражение на переходе вход→синхрон и при входе в уже завершённую чужую партию.
 
 ### Инварианты MP (важно)
-- ХОСТ — полноценный игрок любой страны; пока он **не выбрал страну**, `gameSpeed=0` → симуляция на
-  паузе → у всех всё стоит (индикаторы: пилюля `⏸ ВЫБЕРИТЕ СТРАНУ` / баннер `⏳ Ожидание хоста`).
-- Реролл/конец партии у хоста (R) рассылает keyframe; гости ресинкаются.
-- Выход хоста = сессия завершается (миграции хоста нет — MVP-упрощение).
-- Весь MP-код за гвардами `MP.guest`/`MP.host`; одиночная игра идентична (без `?mp=`).
+- Браузер-хоста больше нет; выход одного игрока не останавливает комнату.
+- `R` в online-клиенте не должен считаться авторитетным рестартом комнаты.
+- Одиночная игра идентична без online-параметров.
 
 ---
 

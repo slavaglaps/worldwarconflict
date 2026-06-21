@@ -65,10 +65,11 @@ test('тиры 1→2→3 по растущей цене', () => { const s = new 
 test('не выше MAX_TIER', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1e9; for (let i = 0; i < 5; i++) s.cmdUpgrade(0, 0, 'prod'); eq(s.cities[0].tier, C.MAX_TIER); });
 test('нельзя без голды', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 10; eq(s.cmdUpgrade(0, 0, 'prod'), false); });
 test('нельзя оккупированный', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 200; s.cities[0].occ = true; eq(s.cmdUpgrade(0, 0, 'prod'), false); });
+test('нельзя апгрейдить с невалидной веткой', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 200; eq(s.cmdUpgrade(0, 0, undefined), false); eq(s.cities[0].tier, 0); eq(s.gold[0], 200); });
 
 group('Отправка армии / осада / захват / оккупация / аннексия');
 test('подкрепление своего города', () => { const s = new Sim({ factions: 1, cities: 2 }); const u1 = s.cities[1].units; assert(s.cmdSend(0, 0, 1, 0.5)); gt(s.cities[1].units, u1); });
-test('осада чужого (в войне): создаётся пул', () => { const s = new Sim({ factions: 2, cities: 2 }); s.setWar(0, 1); const u0 = s.cities[0].units; assert(s.cmdSend(0, 0, 1, 0.5)); eq(s.cities[0].units, u0 - Math.floor(u0 * 0.5)); assert(s.cities[1].siege && s.cities[1].siege[0]); });
+test('осада чужого (в войне): создаётся пул', () => { const s = new Sim({ factions: 2, cities: 2, warPrep: 0 }); s.setWar(0, 1); const u0 = s.cities[0].units; assert(s.cmdSend(0, 0, 1, 0.5)); eq(s.cities[0].units, u0 - Math.floor(u0 * 0.5)); assert(s.cities[1].siege && s.cities[1].siege[0]); });
 test('нельзя нападать без объявления войны', () => { const s = new Sim({ factions: 2, cities: 2 }); eq(s.cmdSend(0, 0, 1, 0.5), false); assert(!s.cities[1].siege); });
 test('нельзя слать из чужого города', () => { const s = new Sim({ factions: 2, cities: 2 }); eq(s.cmdSend(0, 1, 0, 0.5), false); });
 test('осада со временем захватывает город (owner+occ+occFrom)', () => {
@@ -111,6 +112,11 @@ test('союз отклонён (rng>0.5, нет общего врага)', () =
 test('общий враг → союз принимается всегда', () => { const s = new Sim({ factions: 3, cities: 3, rng: () => 0.99 }); s.setWar(0, 2); s.setWar(1, 2); assert(s.cmdAlly(0, 1)); });
 test('разрыв союза: −20🏛', () => { const s = new Sim({ factions: 2, cities: 2, rng: () => 0.1 }); s.cmdAlly(0, 1); s.politPts[0] = 100; assert(s.cmdBreak(0, 1)); assert(!s.allied(0, 1)); });
 test('поддержка: перевод голды союзнику/кому угодно', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 100; const g1 = s.gold[1]; assert(s.cmdSupport(0, 1)); lt(s.gold[0], 100); gt(s.gold[1], g1); });
+test('дипломатия отклоняет несуществующие фракции', () => {
+  const s = new Sim({ factions: 2, cities: 2 }); s.politPts[0] = 500; s.gold[0] = 500;
+  eq(s.cmdWar(0, 999), false); eq(s.cmdAlly(0, -1), false); eq(s.cmdBreak(0, 2), false); eq(s.cmdSupport(0, 999), false); eq(s.cmdPeace(0, 999).ok, false);
+  eq(s.gold.length, 2); eq(Object.keys(s.relations).length, 0);
+});
 test('союзники втягиваются в войну с агрессором', () => { const s = new Sim({ factions: 3, cities: 3, rng: () => 0.1 }); s.setRelation(1, 2, 'ally'); s.politPts[0] = 100; s.cmdWar(0, 1); assert(s.atWar(0, 2)); });
 test('мир завершает войну + ставит перемирие', () => { const s = new Sim({ factions: 2, cities: 2, rng: () => 0.001 }); s.politPts[0] = 100; s.cmdWar(0, 1); const r = s.cmdPeace(0, 1, {}); assert(r.accepted); assert(!s.atWar(0, 1)); gt(s.truceLeft(0, 1), 0); });
 test('во время перемирия нельзя снова объявить войну', () => { const s = new Sim({ factions: 2, cities: 2, rng: () => 0.001 }); s.politPts[0] = 200; s.cmdWar(0, 1); s.cmdPeace(0, 1, {}); s.politPts[0] = 200; eq(s.cmdWar(0, 1), false); });
@@ -135,8 +141,13 @@ test('карта грузится: 143 города, 24 фракции, граф
 test('столицы/верфь/аэропорт на месте', () => { const s = new Sim({ map }); eq(s.cities.filter(c => c.capital).length, 24); assert(s.cities.some(c => c.isShipyard)); assert(s.cities.some(c => c.isAirport)); });
 test('поиск пути между своими городами (мультихоп)', () => { const s = new Sim({ map }); const p = s.findPath(0, 6, 0); assert(p && p.length >= 2, 'путь найден'); eq(p[0], 0); eq(p[p.length - 1], 6); });
 test('cmdSend создаёт движущийся отряд + тратит гарнизон', () => { const s = new Sim({ map }); const own = s.cities.filter(c => c.owner === 0).map(c => c.idx); const u0 = s.cities[own[0]].units; assert(s.cmdSend(0, own[0], own[1], 0.5)); eq(s.squads.length, 1); lt(s.cities[own[0]].units, u0); });
+test('cmdSend отклоняет невалидный pct', () => {
+  const s = new Sim({ map }); const own = s.cities.filter(c => c.owner === 0).map(c => c.idx); const u0 = s.cities[own[0]].units;
+  eq(s.cmdSend(0, own[0], own[1], 2), false); eq(s.cmdSend(0, own[0], own[1], Infinity), false); eq(s.cmdSend(0, own[0], own[1], -0.5), false);
+  eq(s.cities[own[0]].units, u0); eq(s.squads.length, 0);
+});
 test('отряд доходит и подкрепляет свой город', () => { const s = new Sim({ map }); const own = s.cities.filter(c => c.owner === 0).map(c => c.idx); const tgt = own[1]; const before = s.cities[tgt].units; s.cmdSend(0, own[0], tgt, 0.5); for (let i = 0; i < 400 && s.squads.length; i++) s.tick(0.1); eq(s.squads.length, 0); gt(s.cities[tgt].units, before); });
-test('отряд осаждает вражеский город (в войне)', () => { const s = new Sim({ map }); const eo = s.cities[7].owner; assert(eo !== 0, 'город 7 вражеский'); s.setWar(0, eo); assert(s.cmdSend(0, 0, 7, 0.9)); for (let i = 0; i < 600 && s.squads.length; i++) s.tick(0.1); assert((s.cities[7].siege && s.cities[7].siege[0]) || s.cities[7].owner === 0, 'осада началась или город взят'); });
+test('отряд осаждает вражеский город (в войне)', () => { const s = new Sim({ map, warPrep: 0 }); const eo = s.cities[7].owner; assert(eo !== 0, 'город 7 вражеский'); s.setWar(0, eo); assert(s.cmdSend(0, 0, 7, 0.9)); for (let i = 0; i < 600 && s.squads.length; i++) s.tick(0.1); assert((s.cities[7].siege && s.cities[7].siege[0]) || s.cities[7].owner === 0, 'осада началась или город взят'); });
 test('нет пути через чужую территорию без войны/союза → отказ', () => { const s = new Sim({ map }); const far = s.cities.findIndex(c => c.owner !== 0 && !(s.adj.get(c.idx) || []).some(n => s.cities[n.to].owner === 0)); assert(far >= 0, 'найден удалённый город'); eq(s.findPath(0, far, 0), null); });
 test('полевой бой: вражеские отряды истощают друг друга', () => { const s = new Sim({ map }); s.setWar(0, 1); const a = new Squad(0, 30, [0, 2], s, 1), b = new Squad(1, 30, [0, 2], s, 1); a.x = b.x = 100; a.z = b.z = 100; s.squads.push(a, b); s.fieldBattles(0.5); lt(a.fcount, 30); lt(b.fcount, 30); });
 
@@ -170,5 +181,25 @@ test('ИИ объявляет войны', () => { const s = new Sim({ map, ai: 
 test('ИИ исследует технологии', () => { const s = new Sim({ map, ai: true, goldStart: 300 }); for (let i = 0; i < 600; i++) s.tick(0.1); gt(s.techDone.filter(t => t.size > 0).length, 0); });
 test('ИИ строит и двигает армии (захваты идут)', () => { const s = new Sim({ map, ai: true, goldStart: 250 }); for (let i = 0; i < 1000; i++) s.tick(0.1); gt(s.cities.filter(c => c.occ).length, 0); });
 test('ИИ НЕ управляет фракциями людей', () => { const s = new Sim({ map, ai: true, goldStart: 300 }); s.humanFactions = new Set([5]); for (let i = 0; i < 400; i++) s.tick(0.1); eq(s.squads.filter(sq => sq.owner === 5).length, 0); eq(s.techDone[5].size, 0); eq(s.techRes[5].length, 0); });
+
+group('Мобилизация: атака только после WAR_PREP');
+// сосед-враг для фракции 0 (по графу симуляции)
+const enemyPair = (s) => { for (const c of s.cities) { if (c.owner !== 0) continue; for (const { to } of (s.adj.get(c.idx) || [])) { const n = s.cities[to]; if (n.owner !== 0) return { a: c, b: n }; } } return {}; };
+test('cmdSend на врага отклонён во время мобилизации, разрешён после', () => {
+  const s = new Sim({ map, goldStart: 4000, politStart: 200, warPrep: 60, rng: () => 0.01 });
+  const { a, b } = enemyPair(s); assert(a && b, 'есть граница фракции 0 с врагом'); a.units = 200;
+  assert(s.cmdWar(0, b.owner), 'война объявлена');
+  eq(s.warReady(0, b.owner), false, 'идёт мобилизация');
+  eq(s.cmdSend(0, a.idx, b.idx, 0.5), false, 'атака во время мобилизации отклонена');
+  for (let i = 0; i < 320 && !s.warReady(0, b.owner); i++) s.tick(0.2);     // промотать > WAR_PREP
+  eq(s.warReady(0, b.owner), true, 'мобилизация завершена');
+  const sq0 = s.squads.length; assert(s.cmdSend(0, a.idx, b.idx, 0.5), 'атака после мобилизации проходит'); gt(s.squads.length, sq0, 'отряд создан');
+});
+test('warPrep:0 → атака сразу после объявления войны', () => {
+  const s = new Sim({ map, goldStart: 4000, politStart: 200, warPrep: 0, rng: () => 0.01 });
+  const { a, b } = enemyPair(s); a.units = 200; assert(s.cmdWar(0, b.owner));
+  eq(s.warReady(0, b.owner), true, 'без мобилизации готов сразу');
+  assert(s.cmdSend(0, a.idx, b.idx, 0.5), 'атака проходит сразу');
+});
 
 summary('SERVER (sim)');

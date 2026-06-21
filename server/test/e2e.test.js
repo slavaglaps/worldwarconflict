@@ -15,7 +15,7 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
 
 (async () => {
   // сервер задаёт конфиг сима: хватает голды/политочков на войну/исследования; rng детерминирован
-  GameRoom.simOptions = { factions: 6, cities: 18, politStart: 200, goldStart: 300, rng: () => 0.01 };
+  GameRoom.simOptions = { factions: 6, cities: 18, politStart: 200, goldStart: 300, warPrep: 0, rng: () => 0.01 };   // warPrep:0 → осаду тестим сразу (мобилизацию проверяет sim.test)
   const server = new Server();
   server.define('game', GameRoom);
   await server.listen(PORT);

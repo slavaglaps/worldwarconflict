@@ -18,6 +18,13 @@ defineTypes(CityState, {
   queued: 'uint16', // ⏳ солдат в очереди производства
   siegeUnits: 'uint16', // осаждающая армия (сильнейший пул)
   siegeOwner: 'uint8',  // чья осада
+  // ── таймеры (дс = десятые доли секунды; клиент рисует кольца/прогресс-бары) ──
+  prodTime:    'uint16', // полное время текущей партии найма
+  prodElapsed: 'uint16', // сколько уже прошло у партии найма
+  shipQ:       'uint8',  // кораблей в очереди верфи
+  shipT:       'uint16', // таймер текущего корабля
+  planeQ:      'uint8',  // самолётов в очереди аэродрома
+  planeT:      'uint16', // таймер текущего самолёта
 });
 
 class SquadState extends Schema {}
@@ -49,6 +56,10 @@ class GameState extends Schema {
     this.manpower = new ArraySchema();
     this.politPts = new ArraySchema();
     this.relations = new MapSchema(); // "a_b" -> 1=война, 2=союз (нейтрал = нет ключа)
+    this.clock = 0;                   // sim.time (сек) — отсчёт мобилизации на клиенте
+    this.warStart = new MapSchema();  // "a_b" -> sim.time начала войны (для warCountdown)
+    this.research = new MapSchema();  // fid -> "id:tДс;id2:tДс" активных исследований
+    this.tech = new MapSchema();      // fid -> "id,id,id" завершённых техов (для разблокировок)
   }
 }
 defineTypes(GameState, {
@@ -63,6 +74,10 @@ defineTypes(GameState, {
   manpower:  ['number'],
   politPts:  ['number'],
   relations: { map: 'uint8' },
+  clock:     'float32',
+  warStart:  { map: 'float32' },
+  research:  { map: 'string' },
+  tech:      { map: 'string' },
 });
 
 module.exports = { CityState, SquadState, ShipState, PlaneState, GameState };
