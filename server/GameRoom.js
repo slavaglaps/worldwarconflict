@@ -127,6 +127,10 @@ class GameRoom extends Room {
       s.occ = c.occ ? 1 : 0;
       s.shipyard = c.isShipyard ? 1 : 0; s.airport = c.isAirport ? 1 : 0;   // динамические верфи/аэродромы
       s.aa = c.aa | 0;
+      s.queued = Math.min(65535, Math.round(c.queued));                     // ⏳ производство
+      let su = 0, so = 0;                                                    // сильнейший осаждающий пул
+      if (c.siege) for (const o in c.siege) if (c.siege[o].units > su) { su = c.siege[o].units; so = +o; }
+      s.siegeUnits = Math.min(65535, Math.round(su)); s.siegeOwner = so;
     }
     // отряды: добавить новые, обновить движущиеся, удалить дошедшие
     const sq = this.state.squads, live = new Set();

@@ -15,6 +15,9 @@ defineTypes(CityState, {
   tier:  'uint8',
   occ:   'uint8',   // 0/1 оккупирован
   aa:    'uint8',   // 🛡 число зениток
+  queued: 'uint16', // ⏳ солдат в очереди производства
+  siegeUnits: 'uint16', // осаждающая армия (сильнейший пул)
+  siegeOwner: 'uint8',  // чья осада
 });
 
 class SquadState extends Schema {}

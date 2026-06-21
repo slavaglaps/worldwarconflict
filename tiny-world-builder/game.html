@@ -4350,9 +4350,11 @@ function loop(now){
   }
 
   /* ── гость: применить состояние одного города ── */
-  function applyCity(c,owner,units,specId,tier,occ){
+  function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner){
     const spec=ID2SPEC[specId]||null, prevOwner=c.owner, specChanged=(c.spec!==spec||c.tier!==tier);
     c.owner=owner; c.units=units; c.spec=spec; c.tier=tier; c.occ=!!occ;
+    if(queued!==undefined) c.batches = queued>0 ? [{count:queued,time:1,elapsed:0}] : [];               // ⏳ производство в лейбле
+    if(siegeUnits!==undefined) c.siege = siegeUnits>0 ? {[siegeOwner]:{units:siegeUnits,atkMult:1}} : null; // осада → орбы + кольцо боя + тряска
     if(specChanged){ try{c.buildMeshes&&c.buildMeshes();}catch(e){} }
     if(prevOwner!==owner){ try{c.recolor&&c.recolor();}catch(e){} }
   }
@@ -4372,7 +4374,7 @@ function loop(now){
     MP._lastTime=m.time; gameTime=m.time;
     const list=m.c||m.dc;
     if(m.c)MP._synced=true;   // получили полный keyframe → можно судить о победе/поражении
-    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5]); } regionsDirty=true; }
+    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8]); } regionsDirty=true; }
     const g=m.g; for(let i=0;i<g.length;i++){gold[i]=g[i];politPts[i]=m.p[i];manpower[i]=m.m[i];}
     if(m.rel){ relations={}; for(const [k,v] of m.rel)relations[k]=v; warSince={}; for(const [k,v] of m.ws)warSince[k]=+v; warNotify(); }
     // победа/поражение — только после keyframe И если видели партию ИДУЩЕЙ (не врываемся в уже оконченную)
@@ -4595,7 +4597,7 @@ requestAnimationFrame(loop);
   }
 
   function push(state){
-    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ]));
+    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0]));
     const G=state.gold, P=state.politPts, M=state.manpower, g=[], p=[], m=[];
     for(let i=0;i<G.length;i++){ g[i]=Math.round(G[i]||0); p[i]=Math.round((P&&P[i])||0); m[i]=Math.round((M&&M[i])||0); }
     const rel=[]; state.relations.forEach((v,k)=> rel.push([k, v===1?'war':'ally']));
