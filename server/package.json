@@ -12,7 +12,9 @@
     "test:e2e": "node test/e2e.test.js",
     "test:meta": "node test/meta.test.js",
     "test:play3": "node test/play3.test.js",
-    "bench": "node bench-combat.js"
+    "test:db:pg": "node test/db.pg.smoke.js",
+    "bench": "node bench-combat.js",
+    "perf:stress": "node perf-stress.js"
   },
   "dependencies": {
     "@colyseus/tools": "^0.16.20",
