@@ -4579,8 +4579,13 @@ requestAnimationFrame(loop);
     if(typeof Colyseus==='undefined'){ console.warn('[cs] colyseus.js не готов'); return; }
     if(!client) client = new Colyseus.Client(ENDPOINT);
     if(room){ try{ await room.leave(); }catch(e){} room=null; }
-    try{ room = await client.joinOrCreate('game', { faction: fid }); }
-    catch(e){ console.warn('[cs] join failed', e); return; }
+    const rid = params.get('rid');
+    try{
+      if(rid) room = await client.joinById(rid, { faction: fid });                                   // войти в конкретную комнату из лобби
+      else if(params.has('create')) room = await client.create('game', { faction: fid, name: params.get('mp') || 'Игра' }); // создать новую
+      else room = await client.joinOrCreate('game', { faction: fid });                               // прямая ссылка
+    }
+    catch(e){ console.warn('[cs] join failed', e); alert('Не удалось подключиться к комнате: '+e.message); return; }
     MP.on = true;
     room.onMessage('assigned', ()=>{});
     room.onStateChange((state)=> push(state));

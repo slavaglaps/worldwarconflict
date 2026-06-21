@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World War Conflict — Лобби</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#e8eef6;
+    background:radial-gradient(1200px 800px at 50% -10%,#16263c 0%,#0b121c 55%,#070b12 100%)}
+  body{display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;min-height:100%}
+  .wrap{width:100%;max-width:560px}
+  .title{text-align:center;margin-bottom:6px;font-size:34px;font-weight:800;letter-spacing:.5px}
+  .title .ww{color:#ff7a3a} .title .c{color:#7ad0ff}
+  .sub{text-align:center;color:#8ba0b8;font-size:14px;margin-bottom:26px}
+  .card{background:rgba(14,22,34,.82);border:1px solid #243650;border-radius:16px;padding:18px;margin-bottom:18px;
+    box-shadow:0 10px 40px rgba(0,0,0,.45)}
+  .card h2{font-size:15px;color:#cfe0f0;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .row{display:flex;gap:10px}
+  input{flex:1;background:#0e1826;border:1px solid #2c4366;border-radius:10px;color:#e8eef6;
+    padding:12px 14px;font-size:15px;outline:none}
+  input:focus{border-color:#3f7fe2}
+  button{background:#2f6fe0;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap}
+  button:hover{background:#3f86ff}
+  button.ghost{background:#1d2c44;border:1px solid #38507a}
+  button.ghost:hover{background:#27406a}
+  .rooms{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto}
+  .rm{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#0e1826;border:1px solid #233650;
+    border-radius:11px;padding:12px 14px}
+  .rm .nm{font-weight:700;font-size:15px}
+  .rm .meta{color:#8ba0b8;font-size:13px;margin-top:2px}
+  .rm .full{color:#ff7a6a}
+  .empty{color:#7d93ad;text-align:center;padding:22px 8px;font-size:14px}
+  .status{text-align:center;font-size:13px;color:#7d93ad;margin-top:6px}
+  .status.ok{color:#5fd06a} .status.err{color:#ff7a6a}
+  .pill{font-size:12px;background:#13243a;border:1px solid #2c4366;border-radius:20px;padding:3px 10px;color:#9fb3cc}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title"><span class="ww">World War</span> <span class="c">Conflict</span></div>
+  <div class="sub">RTS · Европа · 24 страны · авторитетный сервер</div>
+
+  <div class="card">
+    <h2>➕ Создать комнату</h2>
+    <div class="row">
+      <input id="roomName" placeholder="Название комнаты (напр. Битва за Европу)" maxlength="40">
+      <button id="createBtn">Создать</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🌐 Активные комнаты <span class="pill" id="count">0</span></h2>
+    <div class="rooms" id="rooms"></div>
+    <div class="status" id="status">подключение к серверу…</div>
+  </div>
+</div>
+
+<script src="vendor/colyseus.js"></script>
+<script>
+(function(){
+  // эндпоинт: localhost → локальный :2567, прочее → прод (Colyseus Cloud). ?cs=wss://… → override.
+  const params = new URLSearchParams(location.search);
+  const PROD = 'wss://de-fra-fe578df7.colyseus.cloud';
+  const isLocal = location.hostname==='localhost' || location.hostname==='127.0.0.1';
+  const csVal = params.get('cs');
+  const ENDPOINT = (csVal && /^wss?:\/\//.test(csVal)) ? csVal : (isLocal ? ('ws://'+location.hostname+':2567') : PROD);
+
+  const $ = id => document.getElementById(id);
+  const statusEl = $('status'), roomsEl = $('rooms'), countEl = $('count');
+  const rooms = new Map();   // roomId -> listing
+  let client = null, lobby = null;
+
+  function setStatus(t, cls){ statusEl.textContent = t; statusEl.className = 'status' + (cls?' '+cls:''); }
+
+  // создать комнату → game.html создаёт её с этим именем
+  $('createBtn').onclick = () => {
+    const name = ($('roomName').value || '').trim() || ('Игра-' + Math.random().toString(36).slice(2,6));
+    location.href = 'game.html?cs=1&create=1&mp=' + encodeURIComponent(name);
+  };
+  $('roomName').addEventListener('keydown', e => { if(e.key==='Enter') $('createBtn').click(); });
+
+  function render(){
+    const list = [...rooms.values()].filter(r => r.name === 'game');
+    countEl.textContent = list.length;
+    if(!list.length){ roomsEl.innerHTML = '<div class="empty">Нет активных комнат — создай первую ⬆</div>'; return; }
+    roomsEl.innerHTML = '';
+    list.sort((a,b)=> (b.clients||0)-(a.clients||0));
+    for(const r of list){
+      const nm = (r.metadata && r.metadata.name) || 'Игра';
+      const cur = r.clients||0, max = r.maxClients||24, full = cur>=max;
+      const el = document.createElement('div'); el.className='rm';
+      el.innerHTML = `<div><div class="nm">${escapeHtml(nm)}</div>
+        <div class="meta">👥 <b class="${full?'full':''}">${cur}/${max}</b> игроков${(r.metadata&&r.metadata.over)?' · завершена':''}</div></div>`;
+      const btn = document.createElement('button');
+      btn.className='ghost'; btn.textContent = full ? 'Заполнена' : 'Войти'; btn.disabled = full;
+      btn.onclick = () => { location.href = 'game.html?cs=1&rid=' + encodeURIComponent(r.roomId); };
+      el.appendChild(btn);
+      roomsEl.appendChild(el);
+    }
+  }
+  const escapeHtml = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  async function connect(){
+    try{
+      client = new Colyseus.Client(ENDPOINT);
+      lobby = await client.joinOrCreate('lobby');
+      setStatus('онлайн · обновляется в реальном времени', 'ok');
+      lobby.onMessage('rooms', (all) => { rooms.clear(); all.forEach(r => rooms.set(r.roomId, r)); render(); });
+      lobby.onMessage('+', ([roomId, room]) => { rooms.set(roomId, room); render(); });
+      lobby.onMessage('-', (roomId) => { rooms.delete(roomId); render(); });
+      lobby.onLeave(() => setStatus('соединение потеряно — обнови страницу', 'err'));
+      render();
+    }catch(e){
+      setStatus('сервер недоступен: ' + (e.message||e), 'err');
+      console.error(e);
+    }
+  }
+  connect();
+})();
+</script>
+</body>
+</html>
