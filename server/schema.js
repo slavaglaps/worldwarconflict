@@ -36,6 +36,8 @@ class GameState extends Schema {
   constructor() {
     super();
     this.tick = 0;
+    this.roomName = '';      // имя комнаты (для плашки клиента)
+    this.playerCount = 0;    // живых игроков-людей в комнате
     this.cities = new MapSchema();   // idx(string) -> CityState
     this.squads = new MapSchema();   // id(string)  -> SquadState
     this.ships = new MapSchema();    // id(string)  -> ShipState
@@ -47,7 +49,9 @@ class GameState extends Schema {
   }
 }
 defineTypes(GameState, {
-  tick:      'uint32',
+  tick:        'uint32',
+  roomName:    'string',
+  playerCount: 'uint8',
   cities:    { map: CityState },
   squads:    { map: SquadState },
   ships:     { map: ShipState },

@@ -4472,7 +4472,7 @@ function loop(now){
   }
 
   function connect(){
-    MP._onMsg = onMsg;                       // отдать guest-пайплайн (applySnap/reconcile) мосту Colyseus
+    MP._onMsg = onMsg; MP._pill = pill;      // отдать guest-пайплайн + плашку статуса мосту Colyseus
     if(params.has('cs')) return;             // cs-режим: транспорт через Colyseus, релей не нужен (и ws:// на https запрещён)
     const base=params.get('mphost')||('ws://'+(location.hostname||'localhost')+':3001');
     const url=base+(base.includes('?')?'&':'/?')+'room='+encodeURIComponent(room);
@@ -4608,6 +4608,11 @@ requestAnimationFrame(loop);
     state.ships .forEach((s,id)=> e.push(['sh'+id, 1, s.owner, s.x, WY, s.z, 0]));
     state.planes.forEach((s,id)=> e.push(['pl'+id, 2, s.owner, s.x, PA, s.z, 0]));
     onMsg({ data: JSON.stringify({ t:'ent', e }) });
+    // плашка статуса: реальное имя комнаты + страна + число игроков (с сервера, без путающего «ГОСТЬ»)
+    if(MP._pill){
+      const ctry = (typeof FACTIONS!=='undefined' && FACTIONS[PLAYER]) ? FACTIONS[PLAYER].country : '';
+      MP._pill.innerHTML = `🌐 <b style="color:#7ad0ff">${state.roomName||'Игра'}</b> · ${ctry} · 👥 ${state.playerCount||1}`;
+    }
   }
 
   const sc=document.createElement('script'); sc.src='vendor/colyseus.js';

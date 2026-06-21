@@ -22,6 +22,7 @@ class GameRoom extends Room {
     this.identities = {};                            // sessionId -> {id, username, guest}
     this.setMetadata({ name: (options && options.name) || 'Партия', region: (options && options.region) || 'eu', players: 0, maxPlayers: this.sim.factions, over: false });
     this.setState(new GameState());
+    this.state.roomName = (options && options.name) || 'Партия';
 
     // инициализируем схему из сима (статика + стартовая динамика)
     for (const c of this.sim.cities) {
@@ -90,7 +91,9 @@ class GameRoom extends Room {
 
   _syncMeta() {
     this.sim.humanFactions = new Set(Object.values(this.assigned));   // ИИ не управляет занятыми людьми
-    this.setMetadata({ ...this.metadata, players: Object.keys(this.assigned).length });
+    const n = Object.keys(this.assigned).length;
+    if (this.state) this.state.playerCount = n;
+    this.setMetadata({ ...this.metadata, players: n });
   }
 
   // итоги матча: W/L при выбывании/победе (только зарегистрированным игрокам)
