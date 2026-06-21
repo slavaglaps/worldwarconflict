@@ -32,4 +32,5 @@ module.exports = {
       .map(u => ({ username: u.username, wins: u.wins || 0, losses: u.losses || 0, rating: u.rating || 1000 }));
   },
   _flush: flush,
+  async close() { flush(); },   // на shutdown — досбросить буфер на диск
 };

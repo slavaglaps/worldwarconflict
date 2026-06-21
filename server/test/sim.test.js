@@ -164,6 +164,16 @@ test('союзные корабли не воюют', () => { const s = new Sim(
 test('buildYard: верфь в прибрежном городе + умение строить корабли', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0 && !x.isShipyard && s._isCoastal(x)); assert(c, 'есть прибрежный город'); assert(s.cmdBuildYard(0, c.idx, 'ship')); assert(c.isShipyard); assert(s.techFlag(0, 'ships')); assert(s.cmdBuildShip(0, c.idx)); });
 test('buildYard: аэродром в любом городе + умение строить самолёты', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0 && !x.isAirport); assert(s.cmdBuildYard(0, c.idx, 'air')); assert(c.isAirport); assert(s.techFlag(0, 'planes')); assert(s.cmdBuildPlane(0, c.idx)); });
 test('buildYard: верфь нельзя в неприбрежном городе', () => { const s = new Sim({ map, goldStart: 500 }); const inland = s.cities.find(x => !s._isCoastal(x) && !x.isShipyard); assert(inland, 'есть внутренний город'); eq(s.cmdBuildYard(inland.owner, inland.idx, 'ship'), false); });
+test('хард-кап флота: строит ровно до MAX_SHIPS, дальше отказ', () => {
+  const s = new Sim({ map, goldStart: 1e6 });
+  const c = s.cities.find(x => x.owner === 0 && s._isCoastal(x)); assert(c, 'есть прибрежный город');
+  assert(s.cmdBuildYard(0, c.idx, 'ship'));
+  let ok = 0;
+  for (let i = 0; i < C.MAX_SHIPS + 5; i++) { s.gold[0] += 1000; s.manpower[0] += 1000; if (s.cmdBuildShip(0, c.idx)) ok++; }
+  eq(ok, C.MAX_SHIPS, 'построено ровно до капа');
+  s.gold[0] += 1000; s.manpower[0] += 1000;
+  eq(s.cmdBuildShip(0, c.idx), false, 'сверх капа — отказ');
+});
 
 group('Бой: башни / ПВО / обстрел берега / бомбёжка');
 test('башня atk-города бьёт осаждающих', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.spec = 'atk'; c.tier = 3; c.siege = { 1: { units: 40, atkMult: 1 } }; const b0 = c.siege[1].units; for (let i = 0; i < 30; i++) s.cityTowers(0.1); assert(!c.siege || c.siege[1].units < b0, 'осаждающие потеряли бойцов'); });

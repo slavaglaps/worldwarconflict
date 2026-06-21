@@ -44,6 +44,7 @@ class Sim {
     this._initTech();
     this._buildWorld(opts);
     if (opts.grantNavyTech) for (let f = 0; f < this.factions; f++) { this.techDone[f].add('i1'); this.techDone[f].add('i8'); this.techCache[f] = recomputeTech(this.techDone[f]); }
+    for (let f = 0; f < this.factions; f++) this.factionTimer[f] = this.rng() * 4.5;   // фазовый сдвиг «раздумий» ИИ → нет синхронного спайка тика
   }
 
   _initTech() {
@@ -173,12 +174,14 @@ class Sim {
     const c = this.cities[idx];
     if (!c || c.owner !== fid || c.occ || !c.isShipyard || !this.techFlag(fid, 'ships')) return false;
     if (this.gold[fid] < C.SHIP_COST || (this.manpower[fid] || 0) < C.SHIP_MP) return false;
+    if (this._navalCount(fid) >= C.MAX_SHIPS) return false;   // хард-кап флота на фракцию
     this.gold[fid] -= C.SHIP_COST; this.manpower[fid] -= C.SHIP_MP; c.shipQueue++; return true;
   }
   cmdBuildPlane(fid, idx) {
     const c = this.cities[idx];
     if (!c || c.owner !== fid || c.occ || !c.isAirport || !this.techFlag(fid, 'planes')) return false;
     if (this.gold[fid] < C.PLANE_COST || (this.manpower[fid] || 0) < C.PLANE_MP) return false;
+    if (this._airCount(fid) >= C.MAX_PLANES) return false;   // хард-кап авиации на фракцию
     this.gold[fid] -= C.PLANE_COST; this.manpower[fid] -= C.PLANE_MP; c.planeQueue++; return true;
   }
   cmdShipMove(fid, shipId, x, z) {
@@ -403,6 +406,10 @@ class Sim {
   politRate(fid) { let n = 0, t = 0; for (const c of this.cities) if (c.owner === fid) { n++; t += c.tier; } return Math.min(C.POLIT_RATE_MAX, C.POLIT_RATE_BASE + n * C.POLIT_PER_CITY + t * C.POLIT_PER_TIER); }
   factionStrength(fid) { let s = 0; for (const c of this.cities) if (c.owner === fid) s += c.units + 10; return s; }
   validFaction(fid) { return Number.isInteger(fid) && fid >= 0 && fid < this.factions; }
+  // счётчики сущностей фракции (existing + queued) — для хард-капов
+  _navalCount(fid) { let n = 0; for (const s of this.ships) if (s.owner === fid) n++; for (const c of this.cities) if (c.owner === fid) n += c.shipQueue; return n; }
+  _airCount(fid)   { let n = 0; for (const p of this.planes) if (p.owner === fid) n++; for (const c of this.cities) if (c.owner === fid) n += c.planeQueue; return n; }
+  _squadCount(fid) { let n = 0; for (const s of this.squads) if (s.owner === fid) n++; return n; }
 
   // ── дипломатия ──
   relKey(a, b) { return a < b ? a + '_' + b : b + '_' + a; }
@@ -566,6 +573,7 @@ class Sim {
     if (enemy && !this.warReady(fid, b.owner)) return false;    // нельзя нападать без войны и до конца мобилизации (WAR_PREP)
     const n = Math.floor(a.units * pct); if (n <= 0) return false;
     if (this.map) {                                            // реальная карта: отряд идёт по пути
+      if (this._squadCount(fid) >= C.MAX_SQUADS) return false; // хард-кап отрядов на фракцию
       const path = this.findPath(fromIdx, toIdx, fid); if (!path) return false;
       a.units -= n;
       this.squads.push(new Squad(fid, n, path, this, a.atkMult));

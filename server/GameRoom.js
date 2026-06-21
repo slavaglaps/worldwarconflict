@@ -145,6 +145,11 @@ class GameRoom extends Room {
   }
 
   tick(dt) {
+    // error-boundary: один битый тик логируется (с троттлингом), а не вешает комнату
+    try { this._tick(dt); }
+    catch (e) { if (((this._tickErrs = (this._tickErrs || 0) + 1) % 60) === 1) console.error(`[GameRoom ${this.roomId}] tick error:`, (e && e.stack) || e); }
+  }
+  _tick(dt) {
     this.sim.tick(dt);
     if (this.sim.eliminations.length) this._handleEliminations();
     this.state.tick++;
@@ -153,7 +158,7 @@ class GameRoom extends Room {
     for (const c of this.sim.cities) {
       const s = cs.get(String(c.idx));
       s.owner = c.owner;
-      s.units = Math.round(c.units);
+      s.units = Math.min(65535, Math.round(c.units));
       s.spec = SPEC_ID[c.spec] || 0;
       s.tier = c.tier;
       s.occ = c.occ ? 1 : 0;
@@ -201,12 +206,13 @@ class GameRoom extends Room {
     for (const k of [...ws.keys()]) if (rel[k] !== 'war') ws.delete(k);
     // технологии: активные исследования (id:tДс) + завершённые (id,id) — на фракцию
     const research = this.state.research, tech = this.state.tech;
+    this._techN = this._techN || [];
     for (let f = 0; f < this.sim.factions; f++) {
       const fk = String(f), arr = this.sim.techRes[f];
       const rstr = (arr && arr.length) ? arr.map(r => r.id + ':' + Math.round(r.t * 10)).join(';') : '';
       if (rstr) { if (research.get(fk) !== rstr) research.set(fk, rstr); } else if (research.has(fk)) research.delete(fk);
-      const dstr = [...(this.sim.techDone[f] || [])].join(',');
-      if (tech.get(fk) !== dstr) tech.set(fk, dstr);
+      const done = this.sim.techDone[f], n = done ? done.size : 0;   // techDone только растёт → size = «версия», строку пересобираем лишь при изменении
+      if (this._techN[f] !== n) { this._techN[f] = n; tech.set(fk, [...(done || [])].join(',')); }
     }
   }
 }

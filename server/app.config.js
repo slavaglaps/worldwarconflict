@@ -24,5 +24,11 @@ module.exports = config({
     });
   },
 
-  beforeListen: () => { /* миграции БД и т.п. — сюда */ },
+  beforeListen: () => {
+    // graceful shutdown: закрыть пул БД (без exit — выход делает сам Colyseus)
+    const db = require('./db');
+    const closeDb = () => { Promise.resolve(db.close && db.close()).catch(() => {}); };
+    process.once('SIGTERM', closeDb);
+    process.once('SIGINT', closeDb);
+  },
 });

@@ -4,6 +4,9 @@ module.exports = {
   MAX_TIER: 3,
   SOLDIER_PRICE: 4,
 
+  // хард-капы сущностей на фракцию (анти-абуз/DoS; в обычной игре недостижимо)
+  MAX_SQUADS: 50, MAX_SHIPS: 60, MAX_PLANES: 60,
+
   // 👥 манпауэр (лимит армии от городов)
   MP_BASE: 20, MP_PER_SIZE: 12, MP_PER_TIER: 12,        // потолок на город
   MP_RATE_BASE: 0.4, MP_RATE_PER_SIZE: 0.15, MP_RATE_PER_TIER: 0.2, // регенерация/с
