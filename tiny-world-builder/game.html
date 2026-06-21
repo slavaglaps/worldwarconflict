@@ -4286,8 +4286,8 @@ function loop(now){
  */
 (function mpBoot(){
   const params=new URLSearchParams(location.search);
-  const room=params.get('mp')||params.get('room');
-  if(!room) return;                         // нет ?mp= → обычная одиночная игра
+  const room=params.get('mp')||params.get('room')||(params.has('cs')?'cs':null);
+  if(!room) return;                         // нет ?mp= и нет ?cs= → обычная одиночная игра
   MP.host=params.has('host'); MP.guest=!MP.host;   // роль из URL (?host=1) — устойчиво к перезагрузкам
   const SPEC2ID={prod:1,def:2,atk:3}, ID2SPEC=[null,'prod','def','atk'];
   const labels=document.getElementById('labels');
@@ -4472,6 +4472,8 @@ function loop(now){
   }
 
   function connect(){
+    MP._onMsg = onMsg;                       // отдать guest-пайплайн (applySnap/reconcile) мосту Colyseus
+    if(params.has('cs')) return;             // cs-режим: транспорт через Colyseus, релей не нужен (и ws:// на https запрещён)
     const base=params.get('mphost')||('ws://'+(location.hostname||'localhost')+':3001');
     const url=base+(base.includes('?')?'&':'/?')+'room='+encodeURIComponent(room);
     let s; try{ s=new WebSocket(url); }catch(e){ pill.textContent='🌐 MP: ошибка URL'; return; }
@@ -4530,9 +4532,9 @@ requestAnimationFrame(loop);
   const params = new URLSearchParams(location.search);
   if(!params.has('cs')) return;                                  // без ?cs=1 — обычный режим/релей
   if(typeof MP==='undefined' || !MP.guest){ console.warn('[cs] нужен ?mp=ROOM рядом с ?cs=1'); return; }
-  const onMsg = MP.sock && MP.sock.onmessage;                    // вход в guest-пайплайн (applySnap/reconcile/applyCity)
+  const onMsg = MP._onMsg;                                       // guest-пайплайн (applySnap/reconcile), отдан из connect()
   if(!onMsg){ console.warn('[cs] нет onMsg'); return; }
-  try{ MP.sock.onclose=null; MP.sock.onerror=null; MP.sock.close(); }catch(e){}  // отцепляем релей
+  // релей в cs-режиме не поднимается (connect его пропустил) — отцеплять нечего
 
   // эндпоинт: ?cs=wss://... → явный; иначе localhost → локальный :2567, прочее → прод (Colyseus Cloud)
   const PROD_ENDPOINT = 'wss://de-fra-fe578df7.colyseus.cloud';
