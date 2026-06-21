@@ -29,7 +29,10 @@ const DDL = `
     id      BIGSERIAL PRIMARY KEY,
     ts      BIGINT NOT NULL,
     players JSONB  NOT NULL DEFAULT '[]'
-  );`;
+  );
+  -- RLS вкл. без политик: закрывает публичный REST-API (anon-ключ); наш сервер (роль postgres) RLS обходит
+  ALTER TABLE users   ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE matches ENABLE ROW LEVEL SECURITY;`;
 let schemaP = null;
 function ensureSchema() {
   if (!schemaP) schemaP = pool.query(DDL)
