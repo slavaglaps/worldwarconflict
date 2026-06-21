@@ -17,10 +17,12 @@ const db = require('../db');            // селектор → db.pg (DATABASE_
   assert((await db.getUserByName('ALICE')).id === 'u_alice', 'регистронезависимый поиск по нику');
   assert((await db.getUserById('u_bob')).username === 'Bob', 'поиск по id');
 
-  // 2. ON CONFLICT: дубликат ника не создаёт второй записи и не падает
-  await db.createUser({ id: 'u_alice2', username: 'alice', pass: 'x', wins: 0, losses: 0, rating: 1, created: Date.now() });
+  // 2. ON CONFLICT: дубликат ника → createUser возвращает null, второй записи нет (гонка регистрации закрыта)
+  const dupRet = await db.createUser({ id: 'u_alice2', username: 'alice', pass: 'x', wins: 0, losses: 0, rating: 1, created: Date.now() });
+  assert(dupRet === null, 'createUser на занятый ник возвращает null');
   const dup = (await pool.query("SELECT count(*)::int n FROM users WHERE username_lower='alice'")).rows[0].n;
   assert(dup === 1, 'дубликат ника отклонён (ON CONFLICT)');
+  assert((await db.getUserById('u_alice')).pass === 'salt:hash', 'оригинальный аккаунт НЕ перезаписан');
 
   // 3. updateUser
   alice.rating = 1234; await db.updateUser(alice);

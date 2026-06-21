@@ -13,7 +13,8 @@ function save() { if (timer) return; timer = setTimeout(() => { timer = null; fl
 module.exports = {
   async getUserByName(name) { return data.users[String(name).toLowerCase()] || null; },
   async getUserById(id) { for (const k in data.users) if (data.users[k].id === id) return data.users[k]; return null; },
-  async createUser(u) { data.users[u.username.toLowerCase()] = u; save(); return u; },
+  // не перезаписываем существующий ник (закрывает гонку регистрации) → null, если занят
+  async createUser(u) { const k = u.username.toLowerCase(); if (data.users[k]) return null; data.users[k] = u; save(); return u; },
   async updateUser(u) { data.users[u.username.toLowerCase()] = u; save(); return u; },
   // итог матча: обновляем W/L/рейтинг участников
   async recordMatch(m) {

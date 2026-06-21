@@ -42,6 +42,10 @@ const get = (path) => new Promise(resolve => http.get(`http://localhost:${PORT}$
   });
   await testAsync('короткий пароль → 400', async () => { eq((await post('/auth/register', { username: 'bob', password: 'x' })).status, 400); });
   await testAsync('повторная регистрация → 409', async () => { eq((await post('/auth/register', { username: 'alice', password: 'other' })).status, 409); });
+  await testAsync('createUser на занятый ник → null, аккаунт не перезаписан (гонка)', async () => {
+    eq(await db.createUser({ id: 'racer', username: 'alice', pass: 'evil', wins: 0, losses: 0, rating: 1, created: Date.now() }), null);
+    assert((await db.getUserByName('alice')).pass !== 'evil', 'оригинальная alice цела');
+  });
   await testAsync('вход с верным паролем → токен', async () => { const r = await post('/auth/login', { username: 'alice', password: 'secret' }); eq(r.status, 200); assert(r.body.token); });
   await testAsync('вход с неверным паролем → 401', async () => { eq((await post('/auth/login', { username: 'alice', password: 'wrong' })).status, 401); });
 

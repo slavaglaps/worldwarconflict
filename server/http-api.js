@@ -55,11 +55,11 @@ async function handle(req, res) {
   if (url === '/auth/register' && req.method === 'POST') {
     if (!allowAuth(req)) { json(res, 429, { error: 'слишком много попыток' }); return true; }
     const { username, password } = await body(req);
-    if (!username || !password || String(username).length < 3 || String(password).length < 4) { json(res, 400, { error: 'username≥3 и password≥4' }); return true; }
-    if (await db.getUserByName(username)) { json(res, 409, { error: 'имя занято' }); return true; }
-    const user = { id: generateId(), username, pass: auth.hashPassword(password), wins: 0, losses: 0, rating: 1000, created: Date.now() };
-    await db.createUser(user);
-    json(res, 200, { token: auth.signToken({ id: user.id, username }), user: publicUser(user) }); return true;
+    if (!username || !password || String(username).length < 3 || String(username).length > 24 || String(password).length < 4) { json(res, 400, { error: 'username 3–24 символа, password≥4' }); return true; }
+    if (await db.getUserByName(username)) { json(res, 409, { error: 'имя занято' }); return true; }   // быстрый путь
+    const user = { id: generateId(), username: String(username), pass: auth.hashPassword(password), wins: 0, losses: 0, rating: 1000, created: Date.now() };
+    if (!(await db.createUser(user))) { json(res, 409, { error: 'имя занято' }); return true; }        // атомарный backstop против гонки
+    json(res, 200, { token: auth.signToken({ id: user.id, username: user.username }), user: publicUser(user) }); return true;
   }
 
   if (url === '/auth/login' && req.method === 'POST') {
