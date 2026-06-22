@@ -33,7 +33,9 @@ const PATCH_MS = 80;   // 12.5 Гц рассылки снапшотов (сим 
 
 class GameRoom extends Room {
   onCreate(options) {
-    this.sim = new Sim(GameRoom.simOptions || { map: MAP, ai: true, politStart: 80, goldStart: 200 });   // Европа + ИИ; старт-ресурсы: война (50🏛) доступна сразу
+    const simOpts = { ...(GameRoom.simOptions || { map: MAP, ai: true, politStart: 80, goldStart: 200 }) };   // Европа + ИИ; старт-ресурсы: война (50🏛) доступна сразу
+    if (!simOpts.balance) simOpts.balance = require('./balance-store').current();   // override баланса из Supabase (кэш; фолбэк = код-дефолты), фиксируется на комнату
+    this.sim = new Sim(simOpts);
     this.maxClients = this.sim.factions;
     this.assigned = {};                              // sessionId -> faction
     this.identities = {};                            // sessionId -> {id, username, guest}

@@ -38,10 +38,19 @@ const DDL = `
   );
   CREATE INDEX IF NOT EXISTS match_players_user_idx ON match_players (user_id);
   CREATE INDEX IF NOT EXISTS match_players_match_idx ON match_players (match_id);
+  -- баланс игры: строка id='active', data = JSON-override поверх код-дефолтов (правится в Studio/Directus)
+  CREATE TABLE IF NOT EXISTS balance (
+    id         TEXT PRIMARY KEY,
+    data       JSONB       NOT NULL DEFAULT '{}',
+    version    INTEGER     NOT NULL DEFAULT 1,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  INSERT INTO balance (id, data) VALUES ('active', '{}') ON CONFLICT (id) DO NOTHING;
   -- RLS вкл. без политик: закрывает публичный REST-API (anon-ключ); наш сервер (роль postgres) RLS обходит
-  ALTER TABLE users   ENABLE ROW LEVEL SECURITY;
-  ALTER TABLE matches ENABLE ROW LEVEL SECURITY;
-  ALTER TABLE match_players ENABLE ROW LEVEL SECURITY;`;
+  ALTER TABLE users         ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE matches       ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE match_players ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE balance       ENABLE ROW LEVEL SECURITY;`;
 let schemaP = null;
 function ensureSchema() {
   if (!schemaP) schemaP = pool.query(DDL)
