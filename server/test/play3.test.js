@@ -37,12 +37,14 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
   group('3 ИГРОКА — ВСЕ ФИЧИ (Франция / Германия / Польша)');
 
   const FR = 1, DE = 5, PL = 8;
-  const cFR = new Client(`ws://localhost:${PORT}`); const rFR = await cFR.create('game', { name: 'play3', faction: FR });
-  const cDE = new Client(`ws://localhost:${PORT}`); const rDE = await cDE.joinById(rFR.roomId, { faction: DE });
-  const cPL = new Client(`ws://localhost:${PORT}`); const rPL = await cPL.joinById(rFR.roomId, { faction: PL });
-  // экономика приватна (per-client 'econ'): своя фракция + союзники
-  const capEcon = (r) => { r.__econ = {}; r.onMessage('econ', (m) => { if (m && m.econ) Object.assign(r.__econ, m.econ); }); r.onMessage('balance', () => {}); };
-  capEcon(rFR); capEcon(rDE); capEcon(rPL);
+  // экономика приватна (per-client 'econ'): своя фракция + союзники. balance — разовое сообщение в onJoin,
+  // поэтому хендлер вешаем СРАЗУ после create/join (иначе разовый balance прилетит до подписки и потеряется).
+  const capEcon = (r) => { r.__econ = {}; r.__hero = null; r.__bal = null;
+    r.onMessage('econ', (m) => { if (m && m.econ) Object.assign(r.__econ, m.econ); if (m && m.hero) r.__hero = m.hero; });
+    r.onMessage('balance', (m) => { r.__bal = m; }); return r; };
+  const cFR = new Client(`ws://localhost:${PORT}`); const rFR = capEcon(await cFR.create('game', { name: 'play3', faction: FR }));
+  const cDE = new Client(`ws://localhost:${PORT}`); const rDE = capEcon(await cDE.joinById(rFR.roomId, { faction: DE }));
+  const cPL = new Client(`ws://localhost:${PORT}`); const rPL = capEcon(await cPL.joinById(rFR.roomId, { faction: PL }));
   const eGold = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][0] : 0);
   await sleep(700);
 
@@ -88,14 +90,19 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
   });
 
   await testAsync('АТАКА после войны: отряд идёт на врага + осада', async () => {
-    const p = attackPair(FR, DE); const before = sq(rFR, FR);
+    const p = attackPair(FR, DE);
     rFR.send('buy', { city: p.from, spec: 'max' }); await sleep(3000);
     const enemyUnits0 = rFR.state.cities.get(String(p.to)).units;
+    const before = sq(rFR, FR);
     rFR.send('send', { from: p.from, to: p.to, pct: 0.9 });
-    await sleep(500); gt(sq(rFR, FR), before, 'отряд на врага создан');
-    for (let i = 0; i < 30 && rFR.state.cities.get(String(p.to)).siegeUnits === 0 && rFR.state.cities.get(String(p.to)).units >= enemyUnits0; i++) await sleep(500);
-    const c = rFR.state.cities.get(String(p.to));
-    assert(c.siegeUnits > 0 || c.units < enemyUnits0 || c.owner === FR, 'осада идёт (siegeUnits>0 или гарнизон падает)');
+    // отряд либо в полёте, либо уже прибыл (с геройским speed-пассивом доходит быстро) → ловим ЛЮБОЙ признак атаки за окно
+    let attacked = false;
+    for (let i = 0; i < 30 && !attacked; i++) {
+      await sleep(250);
+      const c = rFR.state.cities.get(String(p.to));
+      if (sq(rFR, FR) > before || c.siegeUnits > 0 || c.units < enemyUnits0 || c.owner === FR) attacked = true;
+    }
+    assert(attacked, 'атака состоялась (отряд создан / осада / падение гарнизона / захват)');
   });
 
   await testAsync('ФЛОТ: верфь в прибрежном городе → корабль строится', async () => {
@@ -156,6 +163,22 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
     rFR.send('sup', { tg: PL });
     await sleep(600);
     gt(eGold(rPL, PL), g0, 'голда переведена Польше (видна получателю)');
+  });
+
+  await testAsync('ГЕРОИ: пул+слоты в balance, активка → кулдаун (+эффект) в econ', async () => {
+    await sleep(300);
+    assert(rFR.__bal && rFR.__bal.heroes, 'balance содержит героев');
+    const pool = rFR.__bal.heroes.pool, slots = rFR.__bal.heroes.slots;
+    assert(Array.isArray(slots) && slots.length > 0, 'у Франции есть герои');
+    let pick = null;   // первая НЕ-airstrike активка (её можно применить без войны)
+    slots.forEach((id, si) => pool[id].abilities.filter(a => a.kind === 'active').forEach((a, ai) => { if (!pick && a.fx.type !== 'airstrike') pick = { si, ai, fx: a.fx }; }));
+    assert(pick, 'есть безопасная активка');
+    const g0 = eGold(rFR, FR);
+    rFR.send('hero', { h: pick.si, ab: pick.ai });
+    await sleep(700);
+    assert(rFR.__hero && rFR.__hero.cd, 'пришло состояние героев в econ');
+    gt(rFR.__hero.cd[pick.si][pick.ai], 0, 'кулдаун активки выставлен');
+    if (pick.fx.type === 'gold') gt(eGold(rFR, FR), g0, '+голда от активки');
   });
 
   await testAsync('ТЕХНОЛОГИИ: исследование тратит голду', async () => {

@@ -79,6 +79,7 @@ class GameRoom extends Room {
     cmd('airorder', (f, m) => this.sim.cmdAirOrder(f, m.recall ? -1 : intOrNull(m.city), finiteOrNull(m.x), finiteOrNull(m.z)));
     cmd('aa',       (f, m) => this.sim.cmdBuildAA(f, intOrNull(m.city)));
     cmd('yard',     (f, m) => this.sim.cmdBuildYard(f, intOrNull(m.city), YARD_KIND[m.kind]));
+    cmd('hero',     (f, m) => this.sim.cmdHeroAbility(f, intOrNull(m.h), intOrNull(m.ab)));   // активка героя (h=индекс слота, ab=индекс активки)
 
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_HZ);
     this.setPatchRate(PATCH_MS);   // реже шлём снапшоты (клиент интерполирует движение) → меньше трафика, сеть — главный лимит
@@ -95,8 +96,15 @@ class GameRoom extends Room {
       const f = this.factionOf(cl); if (f === null) continue;
       const econ = { [f]: snap(f) };
       for (let o = 0; o < sim.factions; o++) if (o !== f && sim.allied(f, o)) econ[o] = snap(o);
-      cl.send('econ', { econ });
+      cl.send('econ', { econ, hero: this._heroState(f) });   // кулдауны/баффы своих героев (приватно)
     }
+  }
+  // состояние героев фракции для клиента: кулдауны по слотам + активные баффы (с остатком времени)
+  _heroState(f) {
+    const sim = this.sim, hs = sim.heroSlots[f] || [];
+    const buffs = [];
+    for (const b of sim.heroBuffs) if (b.fid === f) buffs.push({ key: b.key, add: b.add, t: Math.max(0, b.until - sim.time) });
+    return { cd: hs.map(h => h.cd.map(x => Math.max(0, Math.round(x * 10) / 10))), buffs };
   }
 
   _allowCommand(cl) {
@@ -130,7 +138,9 @@ class GameRoom extends Room {
     cl.send('assigned', { faction: f, you: this.identities[cl.sessionId] });
     // активный баланс комнаты клиенту: глобальные правила (политика/техи) + СВОЯ фракция (без асимметрии врагов)
     const B = this.sim.B;
-    cl.send('balance', { version: B.version, politics: B.politics, tech: B.tech, faction: this.sim.fb[f] });
+    // герои: пул определений (для UI) + РЕЗОЛВНУТЫЕ id героев именно этой страны (после авто-ротации). Чужих героев не шлём.
+    cl.send('balance', { version: B.version, politics: B.politics, tech: B.tech, faction: this.sim.fb[f],
+      heroes: { pool: B.heroes.pool, slots: this.sim.heroSlots[f].map(h => h.id) } });
     this._syncMeta();
   }
 

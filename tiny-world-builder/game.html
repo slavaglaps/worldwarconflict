@@ -1100,6 +1100,12 @@ function activateHeroAbility(fid, h, abIndex){
   const actives=d.abilities.filter(a=>a.kind==='active'); const ai=actives.indexOf(ab);
   if(!h.cd)h.cd=actives.map(()=>0);
   if(h.cd[ai]>0){ toast(`⏳ ${ab.name}: перезарядка ${Math.ceil(h.cd[ai])}с`); return; }
+  if(MP.guest){                            // онлайн: активку применяет СЕРВЕР авторитетно (кулдаун/эффект прилетят в econ)
+    const hi=(heroSlots[fid]||[]).indexOf(h); if(hi<0)return;
+    MP.cmd({cmd:'hero', h:hi, ab:ai});
+    h.cd[ai]=ab.cd;                        // оптимистичный КД; сервер подтвердит/сбросит через econ (или denied)
+    toast(`${ab.icon} ${ab.name}`); refreshHeroBar(); return;
+  }
   if(!runHeroFx(fid, ab.fx))return;        // не применилось (нет цели) → КД не тратим
   h.cd[ai]=ab.cd;
   toast(`${ab.icon} ${ab.name}`);
@@ -3404,7 +3410,7 @@ function buildHeroBar(){
     const av=document.createElement('div'); av.className='av'; av.style.background=d.col; av.textContent=d.face; av.title=d.name;
     slot.appendChild(abrow); slot.appendChild(av); bar.appendChild(slot);
   }
-  if(hs.length<HERO_SLOTS_MAX){
+  if(hs.length<HERO_SLOTS_MAX && !MP.guest){   // онлайн: герои закреплены за страной сервером — слота «+» нет
     const slot=document.createElement('div'); slot.className='heroSlot';
     const sp=document.createElement('div'); sp.className='abrow';
     const av=document.createElement('div'); av.className='av add'; av.textContent='+'; av.title='Призвать героя';
@@ -3440,6 +3446,7 @@ function buildHeroPick(){
   }
 }
 function summonHero(id){
+  if(MP.guest){ toast('🎖 В онлайне герои закреплены за страной'); return; }   // героев назначает сервер
   const hs=heroSlots[PLAYER]; if(hs.length>=HERO_SLOTS_MAX){toast('Все 3 слота героев заняты');return;}
   if(hs.some(h=>h.id===id)){toast('Этот герой уже призван');return;}
   const d=heroDef(id); if(!d)return; if(!politEnough(d.cost))return;
@@ -4568,6 +4575,7 @@ requestAnimationFrame(loop);
       case 'airorder': room.send('airorder', {city:o.cityIdx, x:o.x, z:o.z, recall:o.recall}); break;
       case 'aa':     room.send('aa',    {city:o.c}); break;
       case 'research': room.send('research',{node:o.node}); break;
+      case 'hero':   room.send('hero',  {h:o.h, ab:o.ab}); break;   // активка героя
     } }catch(e){}
   };
   MP.send = ()=>{};                                              // joinInfo и пр. не нужны (фракция в join options)
@@ -4603,15 +4611,29 @@ requestAnimationFrame(loop);
         try{ toast(`${flagOf(PLAYER_COUNTRY)} Сервер назначил: ${PLAYER_COUNTRY}`); }catch(e){}
       }
     });
-    const DENY = { war:'⚔ Война: не хватает политочков (нужно 50🏛) или перемирие', ally:'🤝 Союз отклонён или мало политочков', break:'💔 Разрыв: мало политочков', peace:'🕊 Мир: мало политочков или кулдаун', buy:'Найм: мало голды/манпауэра/места', upg:'Прокачка недоступна (голда/тир/оккупация)', research:'🔬 Мало голды или нет пререквизитов', bship:'⚓ Нужна верфь + tech + голда/манпауэр', bplane:'✈ Нужен аэродром + tech + голда/манпауэр', yard:'🏗 Верфь — в прибрежном городе; нужна голда', aa:'🛡 Мало голды/манпауэра', send:'⏳ Нет пути, война не объявлена, или идёт мобилизация (до 60с)' };
+    const DENY = { war:'⚔ Война: не хватает политочков (нужно 50🏛) или перемирие', ally:'🤝 Союз отклонён или мало политочков', break:'💔 Разрыв: мало политочков', peace:'🕊 Мир: мало политочков или кулдаун', buy:'Найм: мало голды/манпауэра/места', upg:'Прокачка недоступна (голда/тир/оккупация)', research:'🔬 Мало голды или нет пререквизитов', bship:'⚓ Нужна верфь + tech + голда/манпауэр', bplane:'✈ Нужен аэродром + tech + голда/манпауэр', yard:'🏗 Верфь — в прибрежном городе; нужна голда', aa:'🛡 Мало голды/манпауэра', send:'⏳ Нет пути, война не объявлена, или идёт мобилизация (до 60с)', hero:'🎖 Способность на перезарядке или нет цели для удара' };
     room.onMessage('denied', (m)=>{ try{ if(typeof toast==='function') toast(DENY[m&&m.cmd] || '⛔ Действие недоступно'); }catch(e){} });
     // приватная экономика: сервер шлёт голду/манпауэр/политочки только нашей фракции и союзников (врагов не видим)
-    room.onMessage('econ', (m)=>{ try{ if(m&&m.econ) for(const fid in m.econ){ const e=m.econ[fid], i=+fid; gold[i]=e[0]; manpower[i]=e[1]; politPts[i]=e[2]; } }catch(e){} });
+    room.onMessage('econ', (m)=>{ try{ if(m&&m.econ) for(const fid in m.econ){ const e=m.econ[fid], i=+fid; gold[i]=e[0]; manpower[i]=e[1]; politPts[i]=e[2]; }
+      if(m&&m.hero){ const H=m.hero, hs=heroSlots[PLAYER]||[];
+        if(H.cd) H.cd.forEach((cd,i)=>{ if(hs[i]) hs[i].cd=cd.slice(); });   // авторитетные кулдауны активок
+        heroBuffs = heroBuffs.filter(b=>b.fid!==PLAYER).concat((H.buffs||[]).map(b=>({fid:PLAYER,key:b.key,add:b.add,until:gameTime+b.t})));  // активные баффы (для heroAdd/дисплея)
+        if(typeof refreshHeroBar==='function')refreshHeroBar();
+      }
+    }catch(e){} });
     // активный баланс комнаты с сервера: синкаем цены/эффекты узлов дерева на клиентские NODES (дерево покажет серверные числа)
     room.onMessage('balance', (m)=>{ try{ if(!m)return; MP._balance=m;
       if(m.tech&&m.tech.nodes&&typeof NODE!=='undefined'){
         for(const id in m.tech.nodes){ const sn=m.tech.nodes[id], cn=NODE[id]; if(cn) for(const k of ['g','t','a','d','e','p','s','slot','u','v']) if(sn[k]!==undefined) cn[k]=sn[k]; }
         if(typeof buildTechWindow==='function')buildTechWindow();
+      }
+      if(m.heroes){ const P=m.heroes.pool||{};
+        for(const id in P){ const sd=P[id]; let cd=HEROES.find(h=>h.id===id);   // синк пула с сервера в HEROES (Directus может править абилки/КД/эффекты)
+          if(!cd){ cd={id, cost:0}; HEROES.push(cd); }
+          cd.name=sd.name; cd.face=sd.face; cd.col=sd.col; cd.abilities=sd.abilities; }
+        if(Array.isArray(m.heroes.slots))                                       // герои ИМЕННО нашей страны (после авто-ротации сервера)
+          heroSlots[PLAYER]=m.heroes.slots.map(id=>{ const d=HEROES.find(h=>h.id===id); return {id, cd:(d?d.abilities.filter(a=>a.kind==='active'):[]).map(()=>0)}; });
+        if(typeof buildHeroBar==='function')buildHeroBar();
       }
     }catch(e){} });
     room.onStateChange((state)=> push(state));

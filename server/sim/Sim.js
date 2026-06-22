@@ -27,6 +27,17 @@ class Sim {
     for (let f = 0; f < this.factions; f++) this.fb[f] = factionBal(this.B, f);
     this.techNode = this.B.tech.nodes;               // узлы дерева технологий этой комнаты (id → узел, из баланса)
     this.techNodeList = Object.values(this.techNode);
+    // ── ГЕРОИ: пер-фракционный авторитетный движок. heroSlots[fid]=[{id,cd:[кд активок]}]. ──
+    this.heroPool = (this.B.heroes && this.B.heroes.pool) || {};
+    const heroIds = Object.keys(this.heroPool);
+    this.heroSlots = []; this.heroBuffs = []; this.heroMods = [];   // heroMods[fid]={key:сумма} — кэш для O(1) techMul
+    for (let f = 0; f < this.factions; f++) {
+      let ids = this.fb[f].heroes;                  // из баланса; null → авто-ротация из пула по fid (уникально на страну)
+      if (!Array.isArray(ids)) ids = heroIds.length ? [heroIds[(f * 2) % heroIds.length], heroIds[(f * 2 + 1) % heroIds.length]] : [];
+      ids = ids.filter(id => this.heroPool[id]).slice(0, 3);       // только валидные id, максимум 3
+      this.heroSlots[f] = ids.map(id => ({ id, cd: this.heroPool[id].abilities.filter(a => a.kind === 'active').map(() => 0) }));
+      this._recomputeHeroMods(f);
+    }
     this.aiEnabled = opts.ai ?? false;              // ИИ управляет незанятыми фракциями (вкл. для реальной игры)
     this.humanFactions = new Set();                 // обновляется комнатой; ИИ их не трогает
     this.factionTimer = [];                         // таймеры раздумий ИИ
@@ -391,8 +402,8 @@ class Sim {
   }
 
   // ── технологии ──
-  techMul(o, branch) { const c = this.techCache[o], m = this.fb[o] ? (this.fb[o].mods[branch] || 1) : 1; return (1 + (c ? (c.add[branch] || 0) : 0)) * m; }   // atk/def/eco/speed/prod (× фракционный мод)
-  techVal(o, key)    { const c = this.techCache[o]; return 1 + (c ? (c.add[key] || 0) : 0); }       // tr/td/sh/ph/sr/bd/cc
+  techMul(o, branch) { const c = this.techCache[o], m = this.fb[o] ? (this.fb[o].mods[branch] || 1) : 1; return (1 + (c ? (c.add[branch] || 0) : 0) + this.heroAdd(o, branch)) * m; }   // atk/def/eco/speed/prod (тех + герои, × фракционный мод)
+  techVal(o, key)    { const c = this.techCache[o]; return 1 + (c ? (c.add[key] || 0) : 0) + this.heroAdd(o, key); }       // tr/td/sh/ph/sr/bd/cc (тех + герои)
   techFlag(o, flag)  { const c = this.techCache[o]; return !!(c && c.flags.has(flag)); }
   slotCount(o)       { const c = this.techCache[o]; return c ? c.slots : 1; }
   techHas(o, id)     { return this.techDone[o] && this.techDone[o].has(id); }
@@ -413,6 +424,55 @@ class Sim {
     if (this.techRes[fid].length >= this.slotCount(fid)) return false;
     if (this.gold[fid] < n.g) return false;
     this.gold[fid] -= n.g; this.techRes[fid].push({ id: nodeId, t: 0 }); return true;
+  }
+
+  // ── ГЕРОИ ──
+  // heroMods[fid] = {key: суммарный пассив + активные баффы}. Пересчёт только при изменении (init/активка/истечение)
+  // — чтобы techMul/techVal (горячий путь боя) оставались O(1).
+  _recomputeHeroMods(fid) {
+    const m = this.heroMods[fid] = {};
+    const hs = this.heroSlots[fid];
+    if (hs) for (const h of hs) { const d = this.heroPool[h.id]; if (!d) continue;
+      for (const ab of d.abilities) if (ab.kind === 'passive' && ab.pass) for (const p of ab.pass) m[p.key] = (m[p.key] || 0) + p.add; }
+    if (this.heroBuffs.length) for (const b of this.heroBuffs) if (b.fid === fid) m[b.key] = (m[b.key] || 0) + b.add;
+  }
+  heroAdd(fid, key) { const m = this.heroMods[fid]; return m ? (m[key] || 0) : 0; }
+  // активировать активку героя: heroIdx — индекс в heroSlots[fid], abIdx — индекс среди АКТИВНЫХ абилок героя.
+  cmdHeroAbility(fid, heroIdx, abIdx) {
+    if (!this.validFaction(fid)) return false;
+    const hs = this.heroSlots[fid]; if (!hs) return false;
+    const h = hs[heroIdx]; if (!h) return false;
+    const d = this.heroPool[h.id]; if (!d) return false;
+    const ab = d.abilities.filter(a => a.kind === 'active')[abIdx]; if (!ab) return false;
+    if (h.cd[abIdx] > 0) return false;                          // на кулдауне
+    if (!this._runHeroFx(fid, ab.fx)) return false;             // не применилось (нет цели) → КД не тратим
+    h.cd[abIdx] = ab.cd; return true;
+  }
+  _runHeroFx(fid, fx) {
+    if (!fx) return false;
+    if (fx.type === 'buff')     { this.heroBuffs.push({ fid, key: fx.key, add: fx.add, until: this.time + fx.dur }); this._recomputeHeroMods(fid); return true; }
+    if (fx.type === 'gold')     { this.gold[fid] = (this.gold[fid] || 0) + fx.amount; return true; }
+    if (fx.type === 'manpower') { this.manpower[fid] = this.manpowerCap(fid); return true; }
+    if (fx.type === 'garrison') { for (const c of this.cities) if (c.owner === fid) c.units = Math.min(c.capacity, c.units + fx.amount); return true; }
+    if (fx.type === 'airstrike') {
+      let tgt = null; const ord = this.airOrder[fid];
+      if (ord && ord.kind === 'bomb' && ord.cityIdx != null) { const oc = this.cities[ord.cityIdx]; if (oc && oc.owner !== fid && this.atWar(fid, oc.owner)) tgt = oc; }
+      if (!tgt) { const cap = this.cities.find(c => c.owner === fid && c.capital) || this.cities.find(c => c.owner === fid);
+        let bd = Infinity; for (const c of this.cities) { if (c.owner === fid || !this.atWar(fid, c.owner)) continue;
+          const dd = cap ? ((c.gx - cap.gx) ** 2 + (c.gz - cap.gz) ** 2) : 0; if (dd < bd) { bd = dd; tgt = c; } } }
+      if (!tgt) return false;                                   // нет цели — нужна война
+      tgt.units = Math.max(1, tgt.units - fx.amount); return true;
+    }
+    return true;
+  }
+  _tickHeroes(dt) {
+    for (let f = 0; f < this.factions; f++) { const hs = this.heroSlots[f]; if (!hs) continue;
+      for (const h of hs) for (let i = 0; i < h.cd.length; i++) if (h.cd[i] > 0) h.cd[i] = Math.max(0, h.cd[i] - dt); }
+    if (this.heroBuffs.length) {                                // истечение баффов → пересчёт модов затронутых фракций
+      const dirty = new Set();
+      for (let i = this.heroBuffs.length - 1; i >= 0; i--) if (this.time >= this.heroBuffs[i].until) { dirty.add(this.heroBuffs[i].fid); this.heroBuffs.splice(i, 1); }
+      for (const f of dirty) this._recomputeHeroMods(f);
+    }
   }
 
   // ── ресурсные потолки/притоки (учитывают tech 'prod') ──
@@ -520,6 +580,7 @@ class Sim {
   tick(dt) {
     this.time += dt;
     this.advanceResearch(dt);
+    this._tickHeroes(dt);                            // кулдауны активок + истечение баффов
     for (const c of this.cities) {
       const income = c.update(dt);
       if (income) this.gold[c.owner] = (this.gold[c.owner] || 0) + income;

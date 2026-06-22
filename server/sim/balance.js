@@ -31,12 +31,45 @@ const DEFAULTS = {
   // Override правит конкретные узлы (напр. {tech:{nodes:{m1:{g:120}}}}), не трогая остальные.
   tech: { nodes: NODE },
 
+  // ── ГЕРОИ — пул определений (унифиц.); назначение на фракцию — в factionDefault/factions[id].heroes.
+  // Каждый герой: passive[]/active абилки. Сервер применяет авторитетно: пассивки → бонус к бою,
+  // активки → команда с кулдауном (buff/garrison/gold/manpower/airstrike). См. Sim.heroAdd/cmdHeroAbility.
+  heroes: {
+    pool: {
+      sterling: { name: 'Маршал Стерлинг', face: '🪖', col: '#3c6e3c', abilities: [
+        { kind: 'passive', icon: '🛡', name: 'Несокрушимость', desc: '+20% обороне всех городов', pass: [{ key: 'def', add: 0.20 }] },
+        { kind: 'active', icon: '🧱', name: 'Стальная стена', desc: '+120% обороне на 18с', cd: 50, fx: { type: 'buff', key: 'def', add: 1.2, dur: 18 } },
+        { kind: 'active', icon: '🎖', name: 'Окопаться', desc: '+18 гарнизона всем городам', cd: 40, fx: { type: 'garrison', amount: 18 } } ] },
+      hans: { name: 'Генерал Ханс', face: '🎗', col: '#5a6b7a', abilities: [
+        { kind: 'passive', icon: '⚔', name: 'Бронекулак', desc: '+20% атаке армии', pass: [{ key: 'atk', add: 0.20 }] },
+        { kind: 'active', icon: '⚡', name: 'Блицкриг', desc: '+70% атаке на 16с', cd: 55, fx: { type: 'buff', key: 'atk', add: 0.7, dur: 16 } },
+        { kind: 'active', icon: '🛞', name: 'Танковый клин', desc: '+70% скорости на 14с', cd: 45, fx: { type: 'buff', key: 'speed', add: 0.7, dur: 14 } } ] },
+      vance: { name: 'Генерал Вэнс', face: '🪖', col: '#9a8a4a', abilities: [
+        { kind: 'passive', icon: '🏃', name: 'Молниеносность', desc: '+25% скорости армии', pass: [{ key: 'speed', add: 0.25 }] },
+        { kind: 'active', icon: '👟', name: 'Форсированный марш', desc: '+90% скорости на 16с', cd: 45, fx: { type: 'buff', key: 'speed', add: 0.9, dur: 16 } },
+        { kind: 'active', icon: '📣', name: 'Боевой клич', desc: '+50% атаке на 18с', cd: 50, fx: { type: 'buff', key: 'atk', add: 0.5, dur: 18 } } ] },
+      gold: { name: 'Канцлер Гольд', face: '💼', col: '#caa24a', abilities: [
+        { kind: 'passive', icon: '💰', name: 'Золотой век', desc: '+25% дохода голды', pass: [{ key: 'eco', add: 0.25 }] },
+        { kind: 'active', icon: '🪙', name: 'Золотой дождь', desc: '+400 голды', cd: 40, fx: { type: 'gold', amount: 400 } },
+        { kind: 'active', icon: '📈', name: 'Военные облигации', desc: '+120% дохода на 25с', cd: 60, fx: { type: 'buff', key: 'eco', add: 1.2, dur: 25 } } ] },
+      volk: { name: 'Комиссар Вольк', face: '🎖', col: '#8a3f3f', abilities: [
+        { kind: 'passive', icon: '👥', name: 'Народная армия', desc: '+25% манпауэра', pass: [{ key: 'prod', add: 0.25 }] },
+        { kind: 'active', icon: '📢', name: 'Тотальная мобилизация', desc: 'манпауэр до максимума', cd: 50, fx: { type: 'manpower' } },
+        { kind: 'active', icon: '🎖', name: 'Призыв резерва', desc: '+12 гарнизона всем городам', cd: 45, fx: { type: 'garrison', amount: 12 } } ] },
+      storm: { name: 'Маршал Шторм', face: '✈', col: '#3a6fa0', abilities: [
+        { kind: 'passive', icon: '✈', name: 'Господство в воздухе', desc: '+25% урона бомб, +20% прочности самолётов', pass: [{ key: 'bd', add: 0.25 }, { key: 'ph', add: 0.20 }] },
+        { kind: 'active', icon: '💥', name: 'Ковровая бомбардировка', desc: '−40 гарнизона вражескому городу', cd: 80, fx: { type: 'airstrike', amount: 40 } },
+        { kind: 'active', icon: '🛡', name: 'Воздушный щит', desc: '+50% прочности самолётов на 20с', cd: 60, fx: { type: 'buff', key: 'ph', add: 0.5, dur: 20 } } ] },
+    },
+  },
+
   // ── СТАРТ + АСИММЕТРИЯ по фракциям ──
   // factionDefault применяется ко всем странам; factions[id] переопределяет конкретную.
   factionDefault: {
     gold: 60, polit: C.POLIT_START,                        // стартовые ресурсы
     garrisonBase: 8, garrisonPerSize: 4,                   // стартовый гарнизон города = base + size*perSize
     mods: { atk: 1, def: 1, speed: 1, eco: 1, prod: 1 },   // фракционные множители (×1 = симметрия)
+    heroes: null,                                          // null → авто-ротация из пула по fid (уникально на страну); задать массив id (напр. ['hans','gold']) чтобы зафиксировать
   },
   factions: {
     // пример уникального баланса страны:
