@@ -25,6 +25,10 @@ const DEFAULTS = {
     start: C.POLIT_START, max: C.POLIT_MAX,
     rateBase: C.POLIT_RATE_BASE, perCity: C.POLIT_PER_CITY, perTier: C.POLIT_PER_TIER, rateMax: C.POLIT_RATE_MAX,
     costWar: C.POLIT_WAR, costBreak: C.POLIT_BREAK, costAlly: C.POLIT_ALLY, costPeace: C.POLIT_PEACE,
+    allyAcceptProb: 0.5,                                   // шанс принять союз (без общего врага)
+    supportMin: 20, supportMax: 100,                       // мин/макс перевода голды союзнику
+    // шанс принять мир: base + (силаОтн−1)·strengthWeight + оккупации·occBonus − земли·landPenalty − деньги·moneyWeight − репар·reparWeight, кламп [min,max]
+    peace: { base: 0.18, strengthWeight: 0.45, occBonus: 0.10, landPenalty: 0.13, moneyWeight: 0.45, reparWeight: 0.55, min: 0.02, max: 0.97 },
   },
 
   // ── ТЕХНОЛОГИИ — едины для всех стран. nodes[id] = {g:цена, t:время, a/d/e/p/s:эффекты, v:{tr,td,..}, req, u, slot}.
@@ -35,6 +39,8 @@ const DEFAULTS = {
   // Каждый герой: passive[]/active абилки. Сервер применяет авторитетно: пассивки → бонус к бою,
   // активки → команда с кулдауном (buff/garrison/gold/manpower/airstrike). См. Sim.heroAdd/cmdHeroAbility.
   heroes: {
+    perFaction: 2,                          // сколько героев у фракции по умолчанию (авто-ротация из пула по fid)
+    maxSlots: 3,                            // максимум слотов героев на фракцию
     pool: {
       sterling: { name: 'Маршал Стерлинг', face: '🪖', col: '#3c6e3c', abilities: [
         { kind: 'passive', icon: '🛡', name: 'Несокрушимость', desc: '+20% обороне всех городов', pass: [{ key: 'def', add: 0.20 }] },

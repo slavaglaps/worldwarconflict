@@ -30,11 +30,12 @@ class Sim {
     // ── ГЕРОИ: пер-фракционный авторитетный движок. heroSlots[fid]=[{id,cd:[кд активок]}]. ──
     this.heroPool = (this.B.heroes && this.B.heroes.pool) || {};
     const heroIds = Object.keys(this.heroPool);
+    const perF = (this.B.heroes && this.B.heroes.perFaction) || 0, maxS = (this.B.heroes && this.B.heroes.maxSlots) || 3;   // сколько героев на фракцию (авто) + потолок слотов
     this.heroSlots = []; this.heroBuffs = []; this.heroMods = [];   // heroMods[fid]={key:сумма} — кэш для O(1) techMul
     for (let f = 0; f < this.factions; f++) {
       let ids = this.fb[f].heroes;                  // из баланса; null → авто-ротация из пула по fid (уникально на страну)
-      if (!Array.isArray(ids)) ids = heroIds.length ? [heroIds[(f * 2) % heroIds.length], heroIds[(f * 2 + 1) % heroIds.length]] : [];
-      ids = ids.filter(id => this.heroPool[id]).slice(0, 3);       // только валидные id, максимум 3
+      if (!Array.isArray(ids)) { ids = []; for (let i = 0; i < perF && heroIds.length; i++) ids.push(heroIds[(f * perF + i) % heroIds.length]); }
+      ids = ids.filter(id => this.heroPool[id]).slice(0, maxS);    // только валидные id, максимум maxSlots
       this.heroSlots[f] = ids.map(id => ({ id, cd: this.heroPool[id].abilities.filter(a => a.kind === 'active').map(() => 0) }));
       this._recomputeHeroMods(f);
     }
@@ -501,7 +502,7 @@ class Sim {
   setPeaceCD(a, b) { this.peaceCD[this.relKey(a, b)] = this.time + this.B.politics.peaceCd; }
   peaceCDLeft(a, b) { return Math.max(0, (this.peaceCD[this.relKey(a, b)] || 0) - this.time); }
   commonEnemy(a, b) { for (let f = 0; f < this.factions; f++) if (f !== a && f !== b && this.atWar(a, f) && this.atWar(b, f)) return true; return false; }
-  acceptAlliance(fid, vs) { return this.commonEnemy(fid, vs) || this.rng() < 0.5; }
+  acceptAlliance(fid, vs) { return this.commonEnemy(fid, vs) || this.rng() < this.B.politics.allyAcceptProb; }
   occCount(by, from) { let n = 0; for (const c of this.cities) if (c.occ && c.owner === by && c.occFrom === from) n++; return n; }
   warList(fid) { const r = []; for (let f = 0; f < this.factions; f++) if (f !== fid && this.atWar(fid, f)) r.push(f); return r; }
   allyList(fid) { const r = []; for (let f = 0; f < this.factions; f++) if (f !== fid && this.allied(fid, f)) r.push(f); return r; }
@@ -511,13 +512,13 @@ class Sim {
     return dragged;
   }
   peaceAcceptChance(ai, vs, terms) {
-    const strAi = this.factionStrength(ai), strVs = this.factionStrength(vs);
-    let s = 0.18 + (strVs / (strAi + 1) - 1) * 0.45;
-    s += this.occCount(vs, ai) * 0.10;
-    if (terms.land) s -= this.occCount(vs, ai) * 0.13;
-    s -= ((terms.money || 0) / 100) * 0.45;
-    s -= ((terms.repar || 0) / 100) * 0.55;
-    return Math.max(0.02, Math.min(0.97, s));
+    const strAi = this.factionStrength(ai), strVs = this.factionStrength(vs), P = this.B.politics.peace;
+    let s = P.base + (strVs / (strAi + 1) - 1) * P.strengthWeight;
+    s += this.occCount(vs, ai) * P.occBonus;
+    if (terms.land) s -= this.occCount(vs, ai) * P.landPenalty;
+    s -= ((terms.money || 0) / 100) * P.moneyWeight;
+    s -= ((terms.repar || 0) / 100) * P.reparWeight;
+    return Math.max(P.min, Math.min(P.max, s));
   }
   resolveOccupation(a, b, terms) {
     for (const c of this.cities) {
@@ -558,7 +559,7 @@ class Sim {
   }
   cmdSupport(fid, t) {
     if (!this.validFaction(fid) || !this.validFaction(t) || fid === t) return false;
-    const amt = Math.min(100, this.gold[fid] | 0); if (amt < 20) return false;
+    const amt = Math.min(this.B.politics.supportMax, this.gold[fid] | 0); if (amt < this.B.politics.supportMin) return false;
     this.gold[fid] -= amt; this.gold[t] = (this.gold[t] || 0) + amt; return true;
   }
   cmdPeace(fid, t, terms = {}) {
