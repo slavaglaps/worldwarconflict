@@ -45,9 +45,12 @@ module.exports = {
 
   // бой
   FIGHT_RATE: 0.30, SIEGE_ATK: 0.30, SIEGE_DEF: 0.30,
-  SQUAD_SPEED: 4.0, PASS_MULT: 0.5, FERRY_MULT: 0.7, MAX_LINK: 48,
+  SQUAD_SPEED: 4.0,
+  // ⚠ ЗАРЕЗЕРВИРОВАНЫ (механика не реализована на сервере, тюнинг НИ НА ЧТО не влияет):
+  //   PASS_MULT/FERRY_MULT/MAX_LINK — множители движения берутся из данных карты (edge.mult), не отсюда;
+  //   WAR_PATH_PENALTY — findPath ПРОСТО БЛОКИРУЕТ вражеские узлы (canPass), а не штрафует. Не тюнить.
+  PASS_MULT: 0.5, FERRY_MULT: 0.7, MAX_LINK: 48, WAR_PATH_PENALTY: 60,
   FIELD_RANGE: 3.0,        // радиус схождения отрядов в полевом бою
-  WAR_PATH_PENALTY: 60,    // штраф пути через вражеский узел (как в findPath)
   UNIT_MIN: 0.5,           // отряд «жив»/бьёт при fcount ≥ этого (полевой бой/осада)
   SIEGE_POOL_MIN: 0.4,     // пул осады распускается ниже
   CITY_CAPTURE_MIN: 0.4,   // город переходит владельцу при гарнизоне ≤ этого

@@ -69,13 +69,14 @@ const DEFAULTS = {
     },
   },
 
-  // ── ЮНИТЫ / ЭКОНОМИКА / БОЙ — плоский override игровых констант ПО ИМЕНИ (источник дефолтов: sim/constants.js).
-  // Дефолты = код-константы 1:1; override правит точечно, напр. {tune:{SHIP_COST:50, SOLDIER_PRICE:5, MP_RATE_BASE:0.5}}.
-  // Тюнятся: SOLDIER_PRICE · MP_BASE/MP_PER_SIZE/MP_PER_TIER/MP_RATE_BASE/MP_RATE_PER_SIZE/MP_RATE_PER_TIER/MP_CAPITAL ·
-  //   SHIP_* (COST/BUILD_TIME/HP/DMG/SPEED/RANGE/ATTACK_RANGE/MP/MISSILE_DMG/FIRE_CD) · PLANE_* (то же + BOMB_*) ·
-  //   AA_* (COST_BASE/COST_STEP/DMG/RANGE/CD/MAX/MP) · SHIPYARD_BUILD_COST/AIRPORT_BUILD_COST ·
-  //   UPGRADE_COST_BASE/UPGRADE_COST_STEP · FIGHT_RATE/SIEGE_ATK/SIEGE_DEF/SQUAD_SPEED/FIELD_RANGE ·
-  //   TOWER_FIRE_CD/TOWER_DMG_BASE/TOWER_RANGE_BASE/TOWER_RANGE_PER · MAX_SHIPS/MAX_PLANES/MAX_SQUADS.
+  // ── ЮНИТЫ / ЭКОНОМИКА / БОЙ — плоский override игровых констант ПО ИМЕНИ (ПОЛНЫЙ список дефолтов: sim/constants.js).
+  // Дефолты = код-константы 1:1; override правит точечно, напр. {tune:{SHIP_COST:50, SOLDIER_PRICE:5, CITY_BOOST_GOLD:1}}.
+  // Категории: найм/манпауэр (SOLDIER_PRICE/SOLDIER_MP, MP_*) · флот SHIP_* · авиация PLANE_* (+ TURN/AIM) ·
+  //   ПВО AA_* (+ INTERCEPT/KILL_CHANCE — перехват/подавление) · стройка SHIPYARD/AIRPORT · апгрейд UPGRADE_COST_* ·
+  //   город CITY_* (CAP/GOLD_INTERVAL/GOLD_YIELD/TRAIN/спец-тир DEF_CAP/DEF_MULT/ATK_MULT/PROD_GOLD_DECAY/буст BOOST_*/OCCUPY_INCOME) ·
+  //   бой FIGHT_RATE/SIEGE_*/SQUAD_SPEED/FIELD_RANGE/TOWER_*/UNIT_MIN/SIEGE_POOL_MIN/CITY_CAPTURE_MIN/GARRISON_FLOOR/SEND_DEFAULT_PCT ·
+  //   прочее FACTION_STR_CITY_BASE/ANNEX_LOOT · хард-капы MAX_SHIPS/PLANES/SQUADS.
+  // (ИИ — в секции `ai`; формулы дипломатии — в `politics`; герои — в `heroes`.)
   tune: {},
 
   // ── ИИ — поведение незанятых фракций (тайминги/пороги/вероятности/веса). Меняет «характер» ботов.
