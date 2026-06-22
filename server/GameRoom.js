@@ -5,6 +5,8 @@ const { GameState, CityState, SquadState, ShipState, PlaneState, POS_Q } = requi
 const { Sim } = require('./sim/Sim');
 const { verifyToken } = require('./auth');
 const db = require('./db');
+const metrics = require('./metrics');
+const { performance } = require('perf_hooks');
 const MAP = require('./sim/map-data.json');
 
 const RECONNECT_SEC = 30;   // окно реконнекта при обрыве — фракция сохраняется
@@ -57,8 +59,11 @@ class GameRoom extends Room {
     // регистрация команды + фидбэк об отказе (sim вернул false → шлём клиенту 'denied')
     const cmd = (type, fn) => this.onMessage(type, (cl, m) => {
       const f = this.factionOf(cl); if (f === null) return;
-      if (!this._allowCommand(cl)) { cl.send('denied', { cmd: type }); return; }
-      if (fn(f, m) === false) cl.send('denied', { cmd: type });
+      if (!this._allowCommand(cl)) { cl.send('denied', { cmd: type }); metrics.command(true); return; }
+      let ok = true;
+      try { ok = fn(f, m) !== false; } catch (e) { ok = false; metrics.error(`cmd:${type}`, e); }
+      if (!ok) cl.send('denied', { cmd: type });
+      metrics.command(!ok);
     });
     cmd('buy',      (f, m) => this.sim.cmdBuy(f, intOrNull(m.city), String(m.spec ?? m.n ?? 'max')));
     cmd('upg',      (f, m) => this.sim.cmdUpgrade(f, intOrNull(m.city), TRACK[m.track]));
@@ -84,7 +89,10 @@ class GameRoom extends Room {
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_HZ);
     this.setPatchRate(PATCH_MS);   // реже шлём снапшоты (клиент интерполирует движение) → меньше трафика, сеть — главный лимит
     console.log(`[GameRoom ${this.roomId}] sim: ${this.sim.cities.length} cities, ${this.sim.factions} factions`);
+    metrics.roomCreated();
   }
+
+  onDispose() { metrics.roomDisposed(); }
 
   factionOf(cl) { const f = this.assigned[cl.sessionId]; return f === undefined ? null : f; }
 
@@ -128,6 +136,7 @@ class GameRoom extends Room {
   }
 
   onJoin(cl, options) {
+    metrics.join();
     const taken = new Set(Object.values(this.assigned));
     const req = options && Number.isInteger(options.faction) ? options.faction : -1;
     let f;
@@ -148,6 +157,7 @@ class GameRoom extends Room {
   async onLeave(cl, consented) {
     if (!consented) { try { await this.allowReconnection(cl, RECONNECT_SEC); return; } catch (e) { /* не вернулся */ } }
     delete this.assigned[cl.sessionId]; delete this.identities[cl.sessionId]; delete this.cmdBuckets[cl.sessionId];
+    metrics.leave();
     this._syncMeta();
   }
 
@@ -175,9 +185,11 @@ class GameRoom extends Room {
   }
 
   tick(dt) {
-    // error-boundary: один битый тик логируется (с троттлингом), а не вешает комнату
+    // error-boundary: один битый тик логируется (с троттлингом) + считается в метрики, а не вешает комнату
+    const t0 = performance.now();
     try { this._tick(dt); }
-    catch (e) { if (((this._tickErrs = (this._tickErrs || 0) + 1) % 60) === 1) console.error(`[GameRoom ${this.roomId}] tick error:`, (e && e.stack) || e); }
+    catch (e) { metrics.error('tick', e); if (((this._tickErrs = (this._tickErrs || 0) + 1) % 60) === 1) console.error(`[GameRoom ${this.roomId}] tick error:`, (e && e.stack) || e); }
+    metrics.tick(performance.now() - t0);
   }
   _tick(dt) {
     this.sim.tick(dt);

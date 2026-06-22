@@ -26,6 +26,9 @@ module.exports = config({
 
   beforeListen: () => {
     require('./balance-store').startAutoRefresh();   // грузим override баланса из Supabase + периодически обновляем
+    const metrics = require('./metrics');
+    metrics.startHeartbeat();                        // строка [health] в логи раз в минуту
+    metrics.installProcessHandlers();                // unhandledRejection/uncaughtException → метрики + лог
     // graceful shutdown: закрыть пул БД (без exit — выход делает сам Colyseus)
     const db = require('./db');
     const closeDb = () => { Promise.resolve(db.close && db.close()).catch(() => {}); };

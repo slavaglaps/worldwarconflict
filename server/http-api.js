@@ -1,6 +1,7 @@
 // HTTP-эндпоинты (на том же сервере, что и WS): регистрация/вход/здоровье/лидерборд.
 const auth = require('./auth');
 const db = require('./db');
+const metrics = require('./metrics');
 const { generateId } = require('colyseus');
 
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
@@ -50,7 +51,20 @@ async function handle(req, res) {
   const url = (req.url || '').split('?')[0];
   if (req.method === 'OPTIONS') { res.writeHead(204, CORS); res.end(); return true; }
 
-  if (url === '/health') { json(res, 200, { ok: true, ts: Date.now() }); return true; }
+  // здоровье (публично, безопасная сводка) — для аптайм-мониторов/балансировщика
+  if (url === '/health') { const s = metrics.snapshot(); json(res, 200, { ok: true, uptime_s: s.uptime_s, rooms: s.rooms, clients: s.clients, ts: Date.now() }); return true; }
+
+  // метрики: JSON или Prometheus-текст (?format=prom). Стектрейсы ошибок отдаём только с METRICS_TOKEN
+  // (заголовок x-metrics-token или ?token=). Без токена — счётчики/перф без recent_errors.
+  if (url === '/metrics') {
+    const q = new URLSearchParams((req.url || '').split('?')[1] || '');
+    const tok = process.env.METRICS_TOKEN;
+    if (tok && q.get('token') !== tok && req.headers['x-metrics-token'] !== tok) { json(res, 401, { error: 'metrics token required' }); return true; }
+    if (q.get('format') === 'prom') { res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4', ...CORS }); res.end(metrics.prometheus()); return true; }
+    const snap = metrics.snapshot();
+    if (!tok) { delete snap.recent_errors; snap.note = 'set METRICS_TOKEN env to require auth + expose recent_errors'; }
+    json(res, 200, snap); return true;
+  }
 
   if (url === '/auth/register' && req.method === 'POST') {
     if (!allowAuth(req)) { json(res, 429, { error: 'слишком много попыток' }); return true; }
