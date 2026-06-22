@@ -700,10 +700,10 @@ function advanceResearch(dt){
 let gold=[], panelTab='upg', sendPct=.5;
 // 🏛 политические очки: копятся медленно/пассивно, тратятся на дипломатию
 // приток политочков масштабируется от размера империи (база + города + прокачка)
-const POLIT_RATE_BASE=0.2, POLIT_PER_CITY=0.045, POLIT_PER_TIER=0.04, POLIT_RATE_MAX=2.5;
+let POLIT_RATE_BASE=0.2, POLIT_PER_CITY=0.045, POLIT_PER_TIER=0.04, POLIT_RATE_MAX=2.5;
 let POLIT_START=20, POLIT_MAX=120, POLIT_WAR=50, POLIT_BREAK=20, POLIT_ALLY=10, POLIT_PEACE=20;
-const TRUCE_TIME=75;   // перемирие после мира — нельзя сразу снова объявить войну
-const PEACE_CD=18;     // кулдаун между предложениями мира одной стране (анти-спам перебора шанса)
+let TRUCE_TIME=75;   // перемирие после мира — нельзя сразу снова объявить войну
+let PEACE_CD=18;     // кулдаун между предложениями мира одной стране (анти-спам перебора шанса)
 const REPARATION_TIME=60; // репарации: побеждённый платит % своего дохода победителю N секунд
 let reparations=[];    // [{from,to,pct,until}]
 let politPts=[];
@@ -4623,6 +4623,7 @@ requestAnimationFrame(loop);
     }catch(e){} });
     // активный баланс комнаты с сервера: синкаем цены/эффекты узлов дерева на клиентские NODES (дерево покажет серверные числа)
     room.onMessage('balance', (m)=>{ try{ if(!m)return; MP._balance=m;
+      try{ console.log('[cs] balance v'+(m.version!=null?m.version:'?')+(m.updatedAt?(' @'+m.updatedAt):'')); }catch(e){}
       if(m.tech&&m.tech.nodes&&typeof NODE!=='undefined'){
         for(const id in m.tech.nodes){ const sn=m.tech.nodes[id], cn=NODE[id]; if(cn) for(const k of ['g','t','a','d','e','p','s','slot','u','v']) if(sn[k]!==undefined) cn[k]=sn[k]; }
         if(typeof buildTechWindow==='function')buildTechWindow();
@@ -4635,11 +4636,14 @@ requestAnimationFrame(loop);
           heroSlots[PLAYER]=m.heroes.slots.map(id=>{ const d=HEROES.find(h=>h.id===id); return {id, cd:(d?d.abilities.filter(a=>a.kind==='active'):[]).map(()=>0)}; });
         if(typeof buildHeroBar==='function')buildHeroBar();
       }
-      if(m.politics){ const P=m.politics;   // показ стоимостей политики из баланса (кнопки войны/союза/мира, таймер мобилизации)
+      if(m.politics){ const P=m.politics;   // полный синк политики из баланса (кнопки войны/союза/мира, мобилизация, rate/перемирие/кд мира)
         if(P.warPrep!=null)WAR_PREP=P.warPrep;
         if(P.costWar!=null)POLIT_WAR=P.costWar; if(P.costAlly!=null)POLIT_ALLY=P.costAlly;
         if(P.costBreak!=null)POLIT_BREAK=P.costBreak; if(P.costPeace!=null)POLIT_PEACE=P.costPeace;
         if(P.start!=null)POLIT_START=P.start; if(P.max!=null)POLIT_MAX=P.max;
+        if(P.rateBase!=null)POLIT_RATE_BASE=P.rateBase; if(P.perCity!=null)POLIT_PER_CITY=P.perCity;
+        if(P.perTier!=null)POLIT_PER_TIER=P.perTier; if(P.rateMax!=null)POLIT_RATE_MAX=P.rateMax;
+        if(P.truceTime!=null)TRUCE_TIME=P.truceTime; if(P.peaceCd!=null)PEACE_CD=P.peaceCd;
       }
       if(m.prices){ const K=m.prices;        // показ цен юнитов/экономики из баланса (найм/корабли/самолёты/ПВО/верфь/прокачка)
         if(K.SOLDIER_PRICE!=null)SOLDIER_PRICE=K.SOLDIER_PRICE;

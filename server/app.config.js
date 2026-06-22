@@ -24,11 +24,14 @@ module.exports = config({
     });
   },
 
-  beforeListen: () => {
-    require('./balance-store').startAutoRefresh();   // грузим override баланса из Supabase + периодически обновляем
+  beforeListen: async () => {
     const metrics = require('./metrics');
     metrics.startHeartbeat();                        // строка [health] в логи раз в минуту
     metrics.installProcessHandlers();                // unhandledRejection/uncaughtException → метрики + лог
+    // ДОЖДАТЬСЯ первой загрузки override баланса из Supabase (с таймаутом 5с, чтобы не висеть, если БД молчит) —
+    // иначе первая комната после рестарта могла бы стартовать на код-дефолтах, не дождавшись Directus.
+    const withTimeout = (p, ms) => new Promise((res) => { const t = setTimeout(res, ms); if (t.unref) t.unref(); Promise.resolve(p).then(res, res); });
+    await withTimeout(require('./balance-store').startAutoRefresh(), 5000);
     // graceful shutdown: закрыть пул БД (без exit — выход делает сам Colyseus)
     const db = require('./db');
     const closeDb = () => { Promise.resolve(db.close && db.close()).catch(() => {}); };

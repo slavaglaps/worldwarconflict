@@ -3,6 +3,7 @@
 const { Room, ServerError } = require('colyseus');
 const { GameState, CityState, SquadState, ShipState, PlaneState, POS_Q } = require('./schema');
 const { Sim } = require('./sim/Sim');
+const { deepMerge } = require('./sim/balance');
 const { verifyToken } = require('./auth');
 const db = require('./db');
 const metrics = require('./metrics');
@@ -35,8 +36,13 @@ const PATCH_MS = 80;   // 12.5 Гц рассылки снапшотов (сим 
 
 class GameRoom extends Room {
   onCreate(options) {
-    const simOpts = { ...(GameRoom.simOptions || { map: MAP, ai: true, politStart: 80, goldStart: 200 }) };   // Европа + ИИ; старт-ресурсы: война (50🏛) доступна сразу
-    if (!simOpts.balance) simOpts.balance = require('./balance-store').current();   // override баланса из Supabase (кэш; фолбэк = код-дефолты), фиксируется на комнату
+    const simOpts = { ...(GameRoom.simOptions || { map: MAP, ai: true }) };   // Европа + ИИ
+    if (!simOpts.balance) {
+      // прод-старты (gold 200/polit 80 — война 50🏛 доступна сразу) — НИЖНИЙ слой; Directus-override ПОВЕРХ.
+      // (Раньше передавались как goldStart/politStart, и Sim перезаписывал ими баланс → правки стартов из Directus игнорировались. Баг #1.)
+      simOpts.balance = deepMerge({ factionDefault: { gold: 200, polit: 80 } }, require('./balance-store').current());
+    }
+    this.bmeta = require('./balance-store').currentMeta();   // ревизия баланса (version) — фиксируем на комнату, шлём клиенту
     this.sim = new Sim(simOpts);
     this.maxClients = this.sim.factions;
     this.assigned = {};                              // sessionId -> faction
@@ -107,16 +113,13 @@ class GameRoom extends Room {
       cl.send('econ', { econ, hero: this._heroState(f) });   // кулдауны/баффы своих героев (приватно)
     }
   }
-  // эффективные цены/стоимости комнаты (this.K = код-дефолты ⊕ balance.tune) — для показа в клиенте
+  // ПОЛНЫЙ публичный баланс юнитов/экономики/боя: ВСЕ числовые константы комнаты (this.K с учётом balance.tune)
+  // — цены, ХП/урон/радиусы/скорости, ПВО, формулы города и т.д. Клиент берёт нужные для показа, чтобы UI
+  // совпадал с авторитетным сервером (раньше слалась лишь горстка цен → правки SHIP_HP/радиусов/… не доходили).
   _prices() {
-    const K = this.sim.K;
-    return {
-      SOLDIER_PRICE: K.SOLDIER_PRICE,
-      SHIP_COST: K.SHIP_COST, SHIP_MP: K.SHIP_MP, PLANE_COST: K.PLANE_COST, PLANE_MP: K.PLANE_MP,
-      AA_COST_BASE: K.AA_COST_BASE, AA_COST_STEP: K.AA_COST_STEP, AA_MP: K.AA_MP,
-      SHIPYARD_BUILD_COST: K.SHIPYARD_BUILD_COST, AIRPORT_BUILD_COST: K.AIRPORT_BUILD_COST,
-      UPGRADE_COST_BASE: K.UPGRADE_COST_BASE, UPGRADE_COST_STEP: K.UPGRADE_COST_STEP,
-    };
+    const K = this.sim.K, out = {};
+    for (const k in K) if (typeof K[k] === 'number') out[k] = K[k];
+    return out;
   }
   // состояние героев фракции для клиента: кулдауны по слотам + активные баффы (с остатком времени)
   _heroState(f) {
@@ -160,7 +163,8 @@ class GameRoom extends Room {
     const B = this.sim.B;
     // герои: пул определений (для UI) + РЕЗОЛВНУТЫЕ id героев именно этой страны (после авто-ротации). Чужих героев не шлём.
     // prices: эффективные цены/стоимости комнаты (this.K с учётом balance.tune) — клиент показывает их в UI.
-    cl.send('balance', { version: B.version, politics: B.politics, tech: B.tech, faction: this.sim.fb[f],
+    cl.send('balance', { version: (this.bmeta && this.bmeta.version) || B.version, updatedAt: this.bmeta && this.bmeta.updatedAt,
+      politics: B.politics, tech: B.tech, faction: this.sim.fb[f],
       heroes: { pool: B.heroes.pool, slots: this.sim.heroSlots[f].map(h => h.id) }, prices: this._prices() });
     this._syncMeta();
   }

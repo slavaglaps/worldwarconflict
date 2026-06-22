@@ -8,6 +8,7 @@ const { Plane } = require('../sim/Plane');
 const { recomputeTech } = require('../sim/tech');
 const { isWaterAt } = require('../sim/water');
 const C = require('../sim/constants');
+const { sanitizeOverride, deepMerge } = require('../sim/balance');
 const map = require('../sim/map-data.json');
 
 const mkCity = (o) => new City(Object.assign({ idx: 0, gx: 0, gz: 0, country: 0, size: 1, owner: 0 }, o));
@@ -275,6 +276,45 @@ test('tune изолирован между симами и не мутирует
   new Sim({ factions: 2, cities: 2, balance: { tune: { SOLDIER_PRICE: 99 } } });
   eq(new Sim({ factions: 2, cities: 2 }).K.SOLDIER_PRICE, 4, 'другой сим — дефолт');
   eq(C.SOLDIER_PRICE, 4, 'глобальный C цел');
+});
+
+group('Баланс: валидация Directus-override + приоритет стартов (фиксы аудита)');
+test('sanitize: отрицательные/NaN/Infinity/строки-вместо-чисел дропаются или клампятся', () => {
+  const s = sanitizeOverride({
+    tune: { SHIP_COST: -40, SOLDIER_PRICE: NaN, PLANE_HP: 'abc', AA_DMG: Infinity, MP_BASE: 30, SHIPYARD_BUILD_COST: 1e12 },
+    politics: { warPrep: -5, costWar: 9e9 },
+  });
+  eq(s.tune.SHIP_COST, 0, 'отрицательная цена → 0');
+  assert(!('SOLDIER_PRICE' in s.tune), 'NaN дропнут');
+  assert(!('PLANE_HP' in s.tune), 'строка вместо числа дропнута');
+  assert(!('AA_DMG' in s.tune), 'Infinity дропнут');
+  eq(s.tune.MP_BASE, 30, 'валидное число прошло');
+  eq(s.tune.SHIPYARD_BUILD_COST, 1e7, 'огромное значение склампано к 1e7');
+  eq(s.politics.warPrep, 0, 'отриц. warPrep → 0');
+  eq(s.politics.costWar, 1e7, 'огромная стоимость склампана');
+});
+test('sanitize: моды клампятся в [0..100], валидный мод проходит', () => {
+  const s = sanitizeOverride({ factions: { 1: { mods: { atk: 1e6, def: -2, speed: 1.2 } } } });
+  eq(s.factions['1'].mods.atk, 100, 'мод >100 → 100');
+  eq(s.factions['1'].mods.def, 0, 'отриц. мод → 0');
+  eq(s.factions['1'].mods.speed, 1.2, 'валидный мод 1.2 прошёл');
+});
+test('sanitize: не-объект → {}, массивы id героев сохраняются', () => {
+  eq(JSON.stringify(sanitizeOverride(null)), '{}', 'null → {}');
+  eq(JSON.stringify(sanitizeOverride([1, 2])), '{}', 'массив верхнего уровня → {}');
+  const s = sanitizeOverride({ factions: { 1: { heroes: ['hans', 'gold'] } } });
+  assert(Array.isArray(s.factions['1'].heroes) && s.factions['1'].heroes.length === 2, 'массив id героев сохранён');
+});
+test('старты: Directus-override ПОВЕРХ прод-дефолтов (gold из Directus бьёт house 200), и реально применяется в Sim', () => {
+  const layered = deepMerge({ factionDefault: { gold: 200, polit: 80 } }, { factionDefault: { gold: 500 } });
+  eq(layered.factionDefault.gold, 500, 'Directus gold 500 победил house 200');
+  eq(layered.factionDefault.polit, 80, 'polit без override → house 80');
+  const s = new Sim({ map, balance: deepMerge({ factionDefault: { gold: 200, polit: 80 } }, { factionDefault: { gold: 777 } }) });
+  eq(s.gold[0], 777, 'Sim стартует на Directus-голде 777 (а не на 200) — баг #1 закрыт');
+});
+test('balance-store: startAutoRefresh возвращает await-able промис (фикс #2)', () => {
+  const p = require('../balance-store').startAutoRefresh();
+  assert(p && typeof p.then === 'function', 'вернулся промис первой загрузки');
 });
 
 group('Герои: пер-фракционный движок (пассивы/активки/кулдауны/баффы)');

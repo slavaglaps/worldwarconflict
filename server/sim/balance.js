@@ -97,6 +97,39 @@ function deepMerge(base, ov) {
   return out;
 }
 
+// ── ВАЛИДАЦИЯ override из Directus/Supabase (защита от кривого JSON) ──────────
+// Проходим override и сверяем типы с DEFAULTS; чисел требуем КОНЕЧНЫХ и неотрицательных
+// (нет «отрицательных цен»), клампим в разумный диапазон (моды — множители [0..100]).
+// Что не того типа (строка вместо числа, NaN/Infinity, null, функция) — ДРОПАЕМ → фолбэк на дефолт.
+// Динамические секции (factions[id], свои узлы/герои) валидируются как числа/строки обобщённо.
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+function sanitizeNode(node, def, parentKey) {
+  if (Array.isArray(node)) return node.slice();                          // массивы (abilities, ids) — как есть
+  const out = {};
+  for (const k in node) {
+    const v = node[k];
+    const d = (def && typeof def === 'object' && !Array.isArray(def)) ? def[k] : undefined;
+    if (typeof v === 'number') {
+      if (!Number.isFinite(v)) continue;                                 // NaN/Infinity → дроп
+      if (d !== undefined && typeof d !== 'number') continue;            // в дефолте тут НЕ число → тип не тот, дроп
+      out[k] = parentKey === 'mods' ? clamp(v, 0, 100) : clamp(v, 0, 1e7);
+    } else if (typeof v === 'string') {
+      if (d !== undefined && typeof d !== 'string') continue;            // ждали число/объект, пришла строка → дроп
+      out[k] = v;
+    } else if (typeof v === 'boolean') {
+      out[k] = v;
+    } else if (v && typeof v === 'object') {
+      out[k] = sanitizeNode(v, k === 'tune' ? C : d, k);                 // tune валидируем против констант (там всё числа → строки дропаются); прочее против DEFAULTS
+    }
+    // null / undefined / функции → дроп
+  }
+  return out;
+}
+function sanitizeOverride(ov) {
+  if (!ov || typeof ov !== 'object' || Array.isArray(ov)) return {};
+  return sanitizeNode(ov, DEFAULTS, '');
+}
+
 // активный баланс комнаты: дефолты ⊕ override (из Supabase/тестов)
 function makeBalance(override) { return deepMerge(DEFAULTS, override || {}); }
 // игровые константы комнаты: код-дефолты (constants.js) ⊕ плоский override B.tune (по имени).
@@ -105,4 +138,4 @@ function makeConstants(B) { return Object.assign({}, C, (B && B.tune) || {}); }
 // баланс конкретной фракции: factionDefault ⊕ factions[id]
 function factionBal(B, fid) { return deepMerge(B.factionDefault, (B.factions && B.factions[fid]) || {}); }
 
-module.exports = { DEFAULTS, makeBalance, makeConstants, factionBal, deepMerge };
+module.exports = { DEFAULTS, makeBalance, makeConstants, factionBal, deepMerge, sanitizeOverride };

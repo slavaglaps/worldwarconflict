@@ -77,6 +77,8 @@ const findAbil = (bal, type) => { const { pool, slots } = bal.heroes; let r = nu
     assert(b.prices && b.prices.SOLDIER_PRICE > 0 && b.prices.SHIP_COST > 0 && b.prices.UPGRADE_COST_BASE > 0, 'цены юнитов/экономики');
     assert(b.politics && b.politics.warPrep === 3 && b.politics.costWar > 0, 'политика (warPrep=3, costWar)');
     assert(b.tech && b.tech.nodes && Object.keys(b.tech.nodes).length > 10, 'дерево техов');
+    assert(typeof b.version === 'number', 'balance несёт version (ревизию баланса) — фикс #4');
+    assert(b.prices.SHIP_HP > 0 && b.prices.PLANE_DMG > 0 && b.prices.AA_RANGE > 0, 'prices теперь ПОЛНЫЙ (ХП/урон/радиусы, не только цены) — фикс #5');
   });
   await testAsync('АКТ1 · приватность econ: видна СВОЯ экономика, чужую не шлём', async () => {
     assert(gold(rFR, FR) > 0, 'Франция видит свою голду');
@@ -246,6 +248,20 @@ const findAbil = (bal, type) => { const { pool, slots } = bal.heroes; let r = nu
     await until(() => gold(rT, FR) < g0, 5000);
     assert(gold(rT, FR) <= g0 - 5 * 10 + 3, 'списано 5×10=50 (тюненная цена реально заряжена сервером)');
     await rT.leave();
+  });
+
+  // ── АКТ 10: ПРОД-ПУТЬ — старты из Directus реально применяются (фикс #1) ────
+  await testAsync('АКТ10 · прод-путь: старт-золото/политика из Directus применяются (не перезаписываются house 200/80)', async () => {
+    const bs = require('../balance-store'); const orig = bs.current;
+    bs.current = () => ({ factionDefault: { gold: 333, polit: 110 } });   // эмулируем override из Directus
+    GameRoom.simOptions = undefined;                                       // прод-путь (без goldStart/politStart/balance) → срабатывает слоение house⊕Directus
+    try {
+      const cX = new Client(`ws://localhost:${PORT}`); const rX = cap(await cX.create('game', { faction: FR }));
+      await until(() => gold(rX, FR) > 0, 3000);
+      gt(gold(rX, FR), 320, 'старт-голд ≈333 из Directus (а НЕ house 200 — баг #1 закрыт)');
+      gt(polit(rX, FR), 100, 'старт-политика ≈110 из Directus (а НЕ house 80)');
+      await rX.leave();
+    } finally { bs.current = orig; }
   });
 
   await rFR.leave(); await rDE.leave(); await rPL.leave();
