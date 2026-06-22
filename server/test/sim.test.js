@@ -107,6 +107,14 @@ group('Дипломатия (война / мир / союз / поддержка
 test('объявление войны: −50🏛, ставит войну', () => { const s = new Sim({ factions: 2, cities: 2 }); s.politPts[0] = 100; assert(s.cmdWar(0, 1)); assert(s.atWar(0, 1)); eq(s.politPts[0], 50); });
 test('нельзя объявить войну без политочков', () => { const s = new Sim({ factions: 2, cities: 2 }); s.politPts[0] = 10; eq(s.cmdWar(0, 1), false); assert(!s.atWar(0, 1)); });
 test('война имеет мобилизацию WAR_PREP (warReady)', () => { const s = new Sim({ factions: 2, cities: 2 }); s.politPts[0] = 100; s.cmdWar(0, 1); assert(!s.warReady(0, 1)); s.time += C.WAR_PREP + 1; assert(s.warReady(0, 1)); });
+test('повтор объявления уже идущей войны отклонён (нет двойного списания / сброса мобилизации)', () => {
+  const s = new Sim({ factions: 2, cities: 2 }); s.politPts[0] = 100;
+  assert(s.cmdWar(0, 1), 'первое объявление прошло'); const p = s.politPts[0], ws = s.warSince[s.relKey(0, 1)];
+  s.time += 5;
+  eq(s.cmdWar(0, 1), false, 'повтор отклонён');
+  eq(s.politPts[0], p, 'политочки не списаны повторно');
+  eq(s.warSince[s.relKey(0, 1)], ws, 'warSince (отсчёт мобилизации) не сброшен');
+});
 test('союз: при согласии −10🏛', () => { const s = new Sim({ factions: 2, cities: 2, rng: () => 0.1 }); assert(s.cmdAlly(0, 1)); assert(s.allied(0, 1)); eq(s.politPts[0], C.POLIT_START - C.POLIT_ALLY); });
 test('союз отклонён (rng>0.5, нет общего врага)', () => { const s = new Sim({ factions: 2, cities: 2, rng: () => 0.9 }); eq(s.cmdAlly(0, 1), false); assert(!s.allied(0, 1)); });
 test('общий враг → союз принимается всегда', () => { const s = new Sim({ factions: 3, cities: 3, rng: () => 0.99 }); s.setWar(0, 2); s.setWar(1, 2); assert(s.cmdAlly(0, 1)); });

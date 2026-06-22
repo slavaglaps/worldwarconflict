@@ -541,7 +541,9 @@ class Sim {
 
   // ── дипломатические команды (валидируются на сервере) ──
   cmdWar(fid, t) {
-    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || this.truceLeft(fid, t) > 0 || this.politPts[fid] < this.B.politics.costWar) return false;
+    // atWar-гард: повторное объявление уже идущей войны отклоняем — иначе списывались бы политочки повторно
+    // и сбрасывался warSince (а с ним отсчёт мобилизации). UI этого не предлагает, но команда не должна это позволять.
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || this.atWar(fid, t) || this.truceLeft(fid, t) > 0 || this.politPts[fid] < this.B.politics.costWar) return false;
     this.politPts[fid] -= this.B.politics.costWar; this.setWar(fid, t); this.dragAlliesIntoWar(fid, t); return true;
   }
   cmdAlly(fid, t) {
