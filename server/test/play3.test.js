@@ -41,7 +41,7 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
   const cDE = new Client(`ws://localhost:${PORT}`); const rDE = await cDE.joinById(rFR.roomId, { faction: DE });
   const cPL = new Client(`ws://localhost:${PORT}`); const rPL = await cPL.joinById(rFR.roomId, { faction: PL });
   // экономика приватна (per-client 'econ'): своя фракция + союзники
-  const capEcon = (r) => { r.__econ = {}; r.onMessage('econ', (m) => { if (m && m.econ) Object.assign(r.__econ, m.econ); }); };
+  const capEcon = (r) => { r.__econ = {}; r.onMessage('econ', (m) => { if (m && m.econ) Object.assign(r.__econ, m.econ); }); r.onMessage('balance', () => {}); };
   capEcon(rFR); capEcon(rDE); capEcon(rPL);
   const eGold = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][0] : 0);
   await sleep(700);

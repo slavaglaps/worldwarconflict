@@ -9,7 +9,7 @@ const { Ship } = require('./Ship');
 const { Plane } = require('./Plane');
 const { SpatialGrid } = require('./SpatialGrid');
 const { nearestWaterPoint, isWaterAt } = require('./water');
-const { NODES, NODE, recomputeTech, nodeReady } = require('./tech');
+const { recomputeTech, nodeReady } = require('./tech');
 const { makeBalance, factionBal } = require('./balance');
 
 class Sim {
@@ -25,6 +25,8 @@ class Sim {
     this.warPrep = this.B.politics.warPrep;          // секунд мобилизации перед атакой (warCountdown; тесты могут занулить)
     this.fb = [];                                    // баланс на фракцию (factionDefault ⊕ factions[id]) — O(1) доступ
     for (let f = 0; f < this.factions; f++) this.fb[f] = factionBal(this.B, f);
+    this.techNode = this.B.tech.nodes;               // узлы дерева технологий этой комнаты (id → узел, из баланса)
+    this.techNodeList = Object.values(this.techNode);
     this.aiEnabled = opts.ai ?? false;              // ИИ управляет незанятыми фракциями (вкл. для реальной игры)
     this.humanFactions = new Set();                 // обновляется комнатой; ИИ их не трогает
     this.factionTimer = [];                         // таймеры раздумий ИИ
@@ -50,12 +52,12 @@ class Sim {
     this.techDone = []; this.techRes = []; this.techCache = [];
     this._initTech();
     this._buildWorld(opts);
-    if (opts.grantNavyTech) for (let f = 0; f < this.factions; f++) { this.techDone[f].add('i1'); this.techDone[f].add('i8'); this.techCache[f] = recomputeTech(this.techDone[f]); }
+    if (opts.grantNavyTech) for (let f = 0; f < this.factions; f++) { this.techDone[f].add('i1'); this.techDone[f].add('i8'); this.techCache[f] = recomputeTech(this.techDone[f], this.techNode); }
     for (let f = 0; f < this.factions; f++) this.factionTimer[f] = this.rng() * 4.5;   // фазовый сдвиг «раздумий» ИИ → нет синхронного спайка тика
   }
 
   _initTech() {
-    for (let f = 0; f < this.factions; f++) { this.techDone[f] = new Set(); this.techRes[f] = []; this.techCache[f] = recomputeTech(this.techDone[f]); }
+    for (let f = 0; f < this.factions; f++) { this.techDone[f] = new Set(); this.techRes[f] = []; this.techCache[f] = recomputeTech(this.techDone[f], this.techNode); }
   }
 
   _buildWorld(opts) {
@@ -292,13 +294,13 @@ class Sim {
     if (kind === 'ship') {
       if (c.isShipyard || !this._isCoastal(c) || this.gold[fid] < C.SHIPYARD_BUILD_COST) return false;
       this.gold[fid] -= C.SHIPYARD_BUILD_COST; c.isShipyard = true;
-      this.techDone[fid].add('i1'); this.techCache[fid] = recomputeTech(this.techDone[fid]);   // верфь → умение строить корабли
+      this.techDone[fid].add('i1'); this.techCache[fid] = recomputeTech(this.techDone[fid], this.techNode);   // верфь → умение строить корабли
       return true;
     }
     if (kind === 'air') {
       if (c.isAirport || this.gold[fid] < C.AIRPORT_BUILD_COST) return false;
       this.gold[fid] -= C.AIRPORT_BUILD_COST; c.isAirport = true;
-      this.techDone[fid].add('i8'); this.techCache[fid] = recomputeTech(this.techDone[fid]);   // аэродром → умение строить самолёты
+      this.techDone[fid].add('i8'); this.techCache[fid] = recomputeTech(this.techDone[fid], this.techNode);   // аэродром → умение строить самолёты
       return true;
     }
     return false;
@@ -341,7 +343,7 @@ class Sim {
     }
     // исследования: занять слоты (приоритет — слоты/анлоки/дёшево)
     if (this.techRes[fid].length < this.slotCount(fid)) {
-      const avail = NODES.filter(n => !this.techHas(fid, n.id) && !this.techRes[fid].some(r => r.id === n.id) && nodeReady(this.techDone[fid], n) && this.gold[fid] >= n.g);
+      const avail = this.techNodeList.filter(n => !this.techHas(fid, n.id) && !this.techRes[fid].some(r => r.id === n.id) && nodeReady(this.techDone[fid], n) && this.gold[fid] >= n.g);
       if (avail.length && rng() < 0.5) {
         const prio = n => (n.slot ? 3 : 0) + (n.u ? 2 : 0);
         avail.sort((a, b) => prio(b) - prio(a) || a.g - b.g);
@@ -398,14 +400,14 @@ class Sim {
     for (let f = 0; f < this.factions; f++) {
       const rs = this.techRes[f]; if (!rs || !rs.length) continue;
       for (let i = rs.length - 1; i >= 0; i--) {
-        const n = NODE[rs[i].id]; if (!n) { rs.splice(i, 1); continue; }
+        const n = this.techNode[rs[i].id]; if (!n) { rs.splice(i, 1); continue; }
         rs[i].t += dt;
-        if (rs[i].t >= n.t) { this.techDone[f].add(n.id); this.techCache[f] = recomputeTech(this.techDone[f]); rs.splice(i, 1); }
+        if (rs[i].t >= n.t) { this.techDone[f].add(n.id); this.techCache[f] = recomputeTech(this.techDone[f], this.techNode); rs.splice(i, 1); }
       }
     }
   }
   cmdResearch(fid, nodeId) {
-    const n = NODE[nodeId]; if (!n) return false;
+    const n = this.techNode[nodeId]; if (!n) return false;
     if (this.techHas(fid, nodeId) || this.techRes[fid].some(r => r.id === nodeId)) return false;
     if (!nodeReady(this.techDone[fid], n)) return false;
     if (this.techRes[fid].length >= this.slotCount(fid)) return false;

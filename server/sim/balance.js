@@ -10,6 +10,7 @@
 //     сперва серверного пер-фракционного геройского движка (отдельная под-фаза).
 // ────────────────────────────────────────────────────────────────────────────
 const C = require('./constants');
+const { NODE } = require('./tech-data');   // дерево технологий (узлы по id) — дефолт баланса техов
 
 // Дефолты подобраны 1:1 под текущее поведение (старый goldStart по умолчанию был 60,
 // politStart = C.POLIT_START, стартовый гарнизон города = 8 + size*4). GameRoom/тесты,
@@ -25,6 +26,10 @@ const DEFAULTS = {
     rateBase: C.POLIT_RATE_BASE, perCity: C.POLIT_PER_CITY, perTier: C.POLIT_PER_TIER, rateMax: C.POLIT_RATE_MAX,
     costWar: C.POLIT_WAR, costBreak: C.POLIT_BREAK, costAlly: C.POLIT_ALLY, costPeace: C.POLIT_PEACE,
   },
+
+  // ── ТЕХНОЛОГИИ — едины для всех стран. nodes[id] = {g:цена, t:время, a/d/e/p/s:эффекты, v:{tr,td,..}, req, u, slot}.
+  // Override правит конкретные узлы (напр. {tech:{nodes:{m1:{g:120}}}}), не трогая остальные.
+  tech: { nodes: NODE },
 
   // ── СТАРТ + АСИММЕТРИЯ по фракциям ──
   // factionDefault применяется ко всем странам; factions[id] переопределяет конкретную.

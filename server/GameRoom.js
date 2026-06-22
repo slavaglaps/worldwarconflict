@@ -126,6 +126,9 @@ class GameRoom extends Room {
     this.assigned[cl.sessionId] = f;
     this.identities[cl.sessionId] = cl.auth || { guest: true, username: 'Гость' };
     cl.send('assigned', { faction: f, you: this.identities[cl.sessionId] });
+    // активный баланс комнаты клиенту: глобальные правила (политика/техи) + СВОЯ фракция (без асимметрии врагов)
+    const B = this.sim.B;
+    cl.send('balance', { version: B.version, politics: B.politics, tech: B.tech, faction: this.sim.fb[f] });
     this._syncMeta();
   }
 

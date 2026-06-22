@@ -28,9 +28,10 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
   const c1 = new Client(`ws://localhost:${PORT}`);
   const r1 = await c1.create('game');
   let f1 = null; r1.onMessage('assigned', m => f1 = m.faction); capEcon(r1);
+  let bal1 = null; r1.onMessage('balance', m => bal1 = m);
   const c2 = new Client(`ws://localhost:${PORT}`);
   const r2 = await c2.joinById(r1.roomId);
-  let f2 = null; r2.onMessage('assigned', m => f2 = m.faction); capEcon(r2);
+  let f2 = null; r2.onMessage('assigned', m => f2 = m.faction); capEcon(r2); r2.onMessage('balance', () => {});
   await sleep(500);
 
   await testAsync('два клиента → разные фракции', async () => {
@@ -41,6 +42,12 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
   });
   await testAsync('анти-чит: экономика ЧУЖОЙ фракции клиенту не видна', async () => {
     assert(r1.__econ[f2] === undefined, `f1 НЕ видит экономику f2 (${JSON.stringify(r1.__econ[f2])})`);
+  });
+  await testAsync('баланс комнаты синкается клиенту (политика + техи + своя фракция)', async () => {
+    assert(bal1, 'клиент получил сообщение balance');
+    assert(bal1.politics && bal1.tech && bal1.tech.nodes && bal1.faction, 'есть политика/техи/своя фракция');
+    eq(bal1.politics.warPrep, 0, 'warPrep из simOptions виден клиенту');
+    assert(bal1.tech.nodes.m1 && bal1.tech.nodes.m1.g > 0, 'узел m1 дерева с ценой пришёл');
   });
 
   await testAsync('upg через сеть применяется авторитетно', async () => {
@@ -119,10 +126,10 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
   // ── фаза 2: реальная карта Европы + движение отрядов + флот/авиация ──
   GameRoom.simOptions = { map: require('../sim/map-data.json'), goldStart: 500, politStart: 300, rng: () => 0.01, grantNavyTech: true };
   const c3 = new Client(`ws://localhost:${PORT}`);
-  const r3 = await c3.create('game'); r3.onMessage('econ', () => {});
+  const r3 = await c3.create('game'); r3.onMessage('econ', () => {}); r3.onMessage('balance', () => {});
   let f3 = null; r3.onMessage('assigned', m => f3 = m.faction);
   const c4 = new Client(`ws://localhost:${PORT}`);
-  const r4 = await c4.joinById(r3.roomId); r4.onMessage('econ', () => {});
+  const r4 = await c4.joinById(r3.roomId); r4.onMessage('econ', () => {}); r4.onMessage('balance', () => {});
   let f4 = null; r4.onMessage('assigned', m => f4 = m.faction);
   await sleep(500);
 

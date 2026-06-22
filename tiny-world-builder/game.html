@@ -4607,6 +4607,13 @@ requestAnimationFrame(loop);
     room.onMessage('denied', (m)=>{ try{ if(typeof toast==='function') toast(DENY[m&&m.cmd] || '⛔ Действие недоступно'); }catch(e){} });
     // приватная экономика: сервер шлёт голду/манпауэр/политочки только нашей фракции и союзников (врагов не видим)
     room.onMessage('econ', (m)=>{ try{ if(m&&m.econ) for(const fid in m.econ){ const e=m.econ[fid], i=+fid; gold[i]=e[0]; manpower[i]=e[1]; politPts[i]=e[2]; } }catch(e){} });
+    // активный баланс комнаты с сервера: синкаем цены/эффекты узлов дерева на клиентские NODES (дерево покажет серверные числа)
+    room.onMessage('balance', (m)=>{ try{ if(!m)return; MP._balance=m;
+      if(m.tech&&m.tech.nodes&&typeof NODE!=='undefined'){
+        for(const id in m.tech.nodes){ const sn=m.tech.nodes[id], cn=NODE[id]; if(cn) for(const k of ['g','t','a','d','e','p','s','slot','u','v']) if(sn[k]!==undefined) cn[k]=sn[k]; }
+        if(typeof buildTechWindow==='function')buildTechWindow();
+      }
+    }catch(e){} });
     room.onStateChange((state)=> push(state));
     console.log('[cs] joined room', room.roomId, 'as faction', fid);
   }
