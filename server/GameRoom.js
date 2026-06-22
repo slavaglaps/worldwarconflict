@@ -107,6 +107,17 @@ class GameRoom extends Room {
       cl.send('econ', { econ, hero: this._heroState(f) });   // кулдауны/баффы своих героев (приватно)
     }
   }
+  // эффективные цены/стоимости комнаты (this.K = код-дефолты ⊕ balance.tune) — для показа в клиенте
+  _prices() {
+    const K = this.sim.K;
+    return {
+      SOLDIER_PRICE: K.SOLDIER_PRICE,
+      SHIP_COST: K.SHIP_COST, SHIP_MP: K.SHIP_MP, PLANE_COST: K.PLANE_COST, PLANE_MP: K.PLANE_MP,
+      AA_COST_BASE: K.AA_COST_BASE, AA_COST_STEP: K.AA_COST_STEP, AA_MP: K.AA_MP,
+      SHIPYARD_BUILD_COST: K.SHIPYARD_BUILD_COST, AIRPORT_BUILD_COST: K.AIRPORT_BUILD_COST,
+      UPGRADE_COST_BASE: K.UPGRADE_COST_BASE, UPGRADE_COST_STEP: K.UPGRADE_COST_STEP,
+    };
+  }
   // состояние героев фракции для клиента: кулдауны по слотам + активные баффы (с остатком времени)
   _heroState(f) {
     const sim = this.sim, hs = sim.heroSlots[f] || [];
@@ -148,8 +159,9 @@ class GameRoom extends Room {
     // активный баланс комнаты клиенту: глобальные правила (политика/техи) + СВОЯ фракция (без асимметрии врагов)
     const B = this.sim.B;
     // герои: пул определений (для UI) + РЕЗОЛВНУТЫЕ id героев именно этой страны (после авто-ротации). Чужих героев не шлём.
+    // prices: эффективные цены/стоимости комнаты (this.K с учётом balance.tune) — клиент показывает их в UI.
     cl.send('balance', { version: B.version, politics: B.politics, tech: B.tech, faction: this.sim.fb[f],
-      heroes: { pool: B.heroes.pool, slots: this.sim.heroSlots[f].map(h => h.id) } });
+      heroes: { pool: B.heroes.pool, slots: this.sim.heroSlots[f].map(h => h.id) }, prices: this._prices() });
     this._syncMeta();
   }
 

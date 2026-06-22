@@ -168,6 +168,7 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
   await testAsync('ГЕРОИ: пул+слоты в balance, активка → кулдаун (+эффект) в econ', async () => {
     await sleep(300);
     assert(rFR.__bal && rFR.__bal.heroes, 'balance содержит героев');
+    assert(rFR.__bal.prices && rFR.__bal.prices.SOLDIER_PRICE > 0 && rFR.__bal.prices.SHIP_COST > 0, 'balance содержит prices (цены юнитов/экономики для показа)');
     const pool = rFR.__bal.heroes.pool, slots = rFR.__bal.heroes.slots;
     assert(Array.isArray(slots) && slots.length > 0, 'у Франции есть герои');
     let pick = null;   // первая НЕ-airstrike активка (её можно применить без войны)
