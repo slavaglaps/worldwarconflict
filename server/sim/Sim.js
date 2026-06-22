@@ -65,7 +65,11 @@ class Sim {
     this._initTech();
     this._buildWorld(opts);
     if (opts.grantNavyTech) for (let f = 0; f < this.factions; f++) { this.techDone[f].add('i1'); this.techDone[f].add('i8'); this.techCache[f] = recomputeTech(this.techDone[f], this.techNode); }
-    for (let f = 0; f < this.factions; f++) this.factionTimer[f] = this.rng() * 4.5;   // фазовый сдвиг «раздумий» ИИ → нет синхронного спайка тика
+    // карта «страна → индексы городов» (для бонуса контроля страны) + начальный расчёт буста
+    this.countryCities = new Map();
+    for (let i = 0; i < this.cities.length; i++) { const cc = this.cities[i].country; if (!this.countryCities.has(cc)) this.countryCities.set(cc, []); this.countryCities.get(cc).push(i); }
+    this._updateCountryBoost();
+    for (let f = 0; f < this.factions; f++) this.factionTimer[f] = this.rng() * this.B.ai.thinkInterval;   // фазовый сдвиг «раздумий» ИИ → нет синхронного спайка тика
   }
 
   _initTech() {
@@ -281,8 +285,10 @@ class Sim {
       for (const q of this.squads) { if (!this.atWar(s.owner, q.owner)) continue; const dx = s.x - q.x, dz = s.z - q.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = q; city = false; } }
       if (!best) continue;
       s.fireTimer = 0;
-      if (city) best.units = Math.max(this.K.GARRISON_FLOOR, best.units - this.K.SHIP_MISSILE_DMG);
-      else best.fcount -= this.K.SHIP_MISSILE_DMG;
+      if (city) {
+        if (this._aaIntercepts(best, s.owner)) continue;   // ПВО города сбила ракету → промах
+        best.units = Math.max(this.K.GARRISON_FLOOR, best.units - this.K.SHIP_MISSILE_DMG); this._suppressAA(best);   // попадание может выбить зенитку
+      } else best.fcount -= this.K.SHIP_MISSILE_DMG;
     }
   }
   // 💣 бомбёжка: самолёт по приказу bomb, в радиусе цели, бьёт гарнизон (tech planeBomb)
@@ -295,7 +301,24 @@ class Sim {
       const dx = p.x - c.gx, dz = p.z - c.gz;
       if (dx * dx + dz * dz > this.K.PLANE_BOMB_RANGE * this.K.PLANE_BOMB_RANGE) continue;
       p.bombTimer += dt; if (p.bombTimer < this.K.PLANE_BOMB_CD) continue;
-      p.bombTimer = 0; c.units = Math.max(this.K.GARRISON_FLOOR, c.units - this.K.PLANE_BOMB_DMG * this.techVal(p.owner, 'bd'));
+      p.bombTimer = 0;
+      if (this._aaIntercepts(c, p.owner)) continue;        // ПВО города сбила бомбу → промах
+      c.units = Math.max(this.K.GARRISON_FLOOR, c.units - this.K.PLANE_BOMB_DMG * this.techVal(p.owner, 'bd')); this._suppressAA(c);   // попадание может выбить зенитку
+    }
+  }
+  // ── ПВО против ракет/бомб (порт из клиента — в MP раньше не работало) ──
+  _aaIntercepts(city, owner) {   // шанс ПВО цели сбить входящую ракету/бомбу (растёт с числом зениток)
+    if (!city || city.owner === owner || (city.aa | 0) <= 0 || !this.atWar(owner, city.owner)) return false;
+    return this.rng() < 1 - Math.pow(1 - this.K.AA_INTERCEPT, city.aa);
+  }
+  _suppressAA(c) { if (c && c.aa > 0 && this.rng() < this.K.AA_KILL_CHANCE) c.aa = Math.max(0, c.aa - 1); }   // попадание может выбить 1 зенитку
+  // ── бонус контроля страны: вся страна у одной фракции → её города boosted (порт из клиента) ──
+  _updateCountryBoost() {
+    if (!this.countryCities) return;
+    for (const idxs of this.countryCities.values()) {
+      const o = this.cities[idxs[0]].owner;
+      let uniform = true; for (const i of idxs) if (this.cities[i].owner !== o) { uniform = false; break; }
+      for (const i of idxs) this.cities[i].boosted = uniform;
     }
   }
 
@@ -462,7 +485,7 @@ class Sim {
         let bd = Infinity; for (const c of this.cities) { if (c.owner === fid || !this.atWar(fid, c.owner)) continue;
           const dd = cap ? ((c.gx - cap.gx) ** 2 + (c.gz - cap.gz) ** 2) : 0; if (dd < bd) { bd = dd; tgt = c; } } }
       if (!tgt) return false;                                   // нет цели — нужна война
-      tgt.units = Math.max(this.K.GARRISON_FLOOR, tgt.units - fx.amount); return true;
+      tgt.units = Math.max(this.K.GARRISON_FLOOR, tgt.units - fx.amount); this._suppressAA(tgt); this._suppressAA(tgt); return true;   // ковровая бомбёжка может выбить зенитки (как в клиенте)
     }
     return true;
   }
@@ -585,11 +608,13 @@ class Sim {
     this.time += dt;
     this.advanceResearch(dt);
     this._tickHeroes(dt);                            // кулдауны активок + истечение баффов
+    let captured = false;
     for (const c of this.cities) {
       const income = c.update(dt);
       if (income) this.gold[c.owner] = (this.gold[c.owner] || 0) + income;
-      if (c._captured !== undefined) { const prev = c._captured; c._captured = undefined; if (prev != null && !this.cities.some(x => x.owner === prev)) this.permanentAnnex(prev, c.owner); }
+      if (c._captured !== undefined) { const prev = c._captured; c._captured = undefined; captured = true; if (prev != null && !this.cities.some(x => x.owner === prev)) this.permanentAnnex(prev, c.owner); }
     }
+    if (captured) this._updateCountryBoost();           // смена владельца → пересчёт бонуса контроля страны
     if (this.aiEnabled) this.aiUpdate(dt);          // ИИ незанятых фракций
     // отряды: движение → прибытие, затем полевой бой, затем уборка павших
     for (let i = this.squads.length - 1; i >= 0; i--) if (this.squads[i].update(dt)) { this.resolveArrival(this.squads[i]); this.squads.splice(i, 1); }

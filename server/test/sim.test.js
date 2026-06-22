@@ -265,8 +265,9 @@ test('UPGRADE_COST_* из tune → цена прокачки', () => {
   s.gold[0] = 200; assert(s.cmdUpgrade(0, 0, 'prod')); eq(s.gold[0], 100, '100 за тир1');
 });
 test('CITY_GOLD_INTERVAL из tune → интервал дохода города', () => {
-  const s = new Sim({ factions: 2, cities: 2, balance: { tune: { CITY_GOLD_INTERVAL: 2 }, factionDefault: { heroes: [] } } });
-  near(s.cities[0].goldInterval, 2, 1e-9, 'интервал = 2 (eco×1)');
+  // CITY_BOOST_GOLD:1 нейтрализует бонус контроля страны (город сейчас boosted, т.к. вся страна у одной фракции) — изолируем интервал
+  const s = new Sim({ factions: 2, cities: 2, balance: { tune: { CITY_GOLD_INTERVAL: 2, CITY_BOOST_GOLD: 1 }, factionDefault: { heroes: [] } } });
+  near(s.cities[0].goldInterval, 2, 1e-9, 'интервал = 2 (eco×1, буст нейтрализован)');
 });
 test('tune доходит до сущностей: Ship читает sim.K', () => {
   const s = new Sim({ factions: 2, cities: 2, balance: { tune: { SHIP_HP: 99 } } });
@@ -373,6 +374,28 @@ test('невалидные аргументы → false', () => {
   eq(s.cmdHeroAbility(9, 0, 0), false, 'невалидная фракция');
   eq(s.cmdHeroAbility(0, 9, 0), false, 'нет слота героя');
   eq(s.cmdHeroAbility(0, 0, 9), false, 'нет такой активки');
+});
+
+group('MP-паритет: порт механик из клиента (ПВО-перехват/подавление + контроль страны)');
+test('ПВО перехватывает бомбу/ракету (раньше в MP не работало); шанс растёт с числом зениток', () => {
+  const s = new Sim({ factions: 2, cities: 2 }); s.setWar(0, 1);
+  const enemy = s.cities.find(c => c.owner === 1); enemy.aa = 2;
+  s.rng = () => 0;   assert(s._aaIntercepts(enemy, 0), 'rng=0 < шанс → перехват');
+  s.rng = () => 0.999; eq(s._aaIntercepts(enemy, 0), false, 'rng≈1 → нет перехвата');
+  enemy.aa = 0; s.rng = () => 0; eq(s._aaIntercepts(enemy, 0), false, 'без ПВО → нет перехвата');
+  enemy.aa = 5; eq(s._aaIntercepts(s.cities.find(c => c.owner === 0), 0), false, 'свой город не перехватывает свои снаряды');
+});
+test('бомбёжка/обстрел может выбить зенитку (подавление ПВО)', () => {
+  const s = new Sim({ factions: 2, cities: 2 }); const c = s.cities[0]; c.aa = 3;
+  s.rng = () => 0;   s._suppressAA(c); eq(c.aa, 2, 'rng<шанс → −1 зенитка');
+  s.rng = () => 0.9; s._suppressAA(c); eq(c.aa, 2, 'rng>шанс → зенитка цела');
+});
+test('бонус контроля страны: вся страна у фракции → boosted; фрагментация → нет', () => {
+  const s = new Sim({ factions: 2, cities: 4 });
+  const c0 = s.cities.filter(c => c.country === 0);
+  assert(c0.length >= 2 && c0.every(c => c.boosted), 'вся страна у одной фракции → все её города boosted');
+  c0[1].owner = (c0[1].owner + 1) % 2; s._updateCountryBoost();
+  assert(c0.some(c => !c.boosted), 'фрагментированная страна → буст снят');
 });
 
 summary('SERVER (sim)');
