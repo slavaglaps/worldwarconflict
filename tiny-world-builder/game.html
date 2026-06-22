@@ -4384,7 +4384,7 @@ function loop(now){
     const list=m.c||m.dc;
     if(m.c)MP._synced=true;   // получили полный keyframe → можно судить о победе/поражении
     if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14]); } regionsDirty=true; }
-    const g=m.g; for(let i=0;i<g.length;i++){gold[i]=g[i];politPts[i]=m.p[i];manpower[i]=m.m[i];}
+    if(m.g){ const g=m.g; for(let i=0;i<g.length;i++){gold[i]=g[i];politPts[i]=m.p[i];manpower[i]=m.m[i];} }  // в cs-режиме экономика идёт через 'econ'; в relay — здесь
     if(m.rel){ relations={}; for(const [k,v] of m.rel)relations[k]=v; warSince={}; for(const [k,v] of m.ws)warSince[k]=+v; warNotify(); }
     // победа/поражение — только после keyframe И если видели партию ИДУЩЕЙ (не врываемся в уже оконченную)
     const mine=cities.some(c=>c.owner===PLAYER);
@@ -4605,17 +4605,17 @@ requestAnimationFrame(loop);
     });
     const DENY = { war:'⚔ Война: не хватает политочков (нужно 50🏛) или перемирие', ally:'🤝 Союз отклонён или мало политочков', break:'💔 Разрыв: мало политочков', peace:'🕊 Мир: мало политочков или кулдаун', buy:'Найм: мало голды/манпауэра/места', upg:'Прокачка недоступна (голда/тир/оккупация)', research:'🔬 Мало голды или нет пререквизитов', bship:'⚓ Нужна верфь + tech + голда/манпауэр', bplane:'✈ Нужен аэродром + tech + голда/манпауэр', yard:'🏗 Верфь — в прибрежном городе; нужна голда', aa:'🛡 Мало голды/манпауэра', send:'⏳ Нет пути, война не объявлена, или идёт мобилизация (до 60с)' };
     room.onMessage('denied', (m)=>{ try{ if(typeof toast==='function') toast(DENY[m&&m.cmd] || '⛔ Действие недоступно'); }catch(e){} });
+    // приватная экономика: сервер шлёт голду/манпауэр/политочки только нашей фракции и союзников (врагов не видим)
+    room.onMessage('econ', (m)=>{ try{ if(m&&m.econ) for(const fid in m.econ){ const e=m.econ[fid], i=+fid; gold[i]=e[0]; manpower[i]=e[1]; politPts[i]=e[2]; } }catch(e){} });
     room.onStateChange((state)=> push(state));
     console.log('[cs] joined room', room.roomId, 'as faction', fid);
   }
 
   function push(state){
     const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0]));
-    const G=state.gold, P=state.politPts, M=state.manpower, g=[], p=[], m=[];
-    for(let i=0;i<G.length;i++){ g[i]=Math.round(G[i]||0); p[i]=Math.round((P&&P[i])||0); m[i]=Math.round((M&&M[i])||0); }
     const rel=[]; state.relations.forEach((v,k)=> rel.push([k, v===1?'war':'ally']));
     const ws=[]; if(state.warStart) state.warStart.forEach((v,k)=> ws.push([k, v]));   // время начала каждой войны → отсчёт мобилизации (60с)
-    onMsg({ data: JSON.stringify({ t:'snap', time:+state.clock||0, over:0, g, p, m, c, rel, ws }) });   // time = sim.time (сек), не tick!
+    onMsg({ data: JSON.stringify({ t:'snap', time:+state.clock||0, over:0, c, rel, ws }) });   // экономика идёт отдельным сообщением 'econ' (приватно)
     // 🔬 технологии: активные исследования игрока (прогресс таймера) + завершённые техи всех фракций (разблокировки)
     if(typeof techRes!=='undefined' && state.research){
       const mine = state.research.get(String(PLAYER)); const arr=[];

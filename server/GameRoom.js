@@ -50,7 +50,7 @@ class GameRoom extends Room {
       cs.owner = c.owner; cs.units = Math.round(c.units); cs.spec = 0; cs.tier = 0; cs.occ = 0;
       this.state.cities.set(String(c.idx), cs);
     }
-    for (let f = 0; f < this.sim.factions; f++) { this.state.gold.push(this.sim.gold[f]); this.state.manpower.push(this.sim.manpower[f]); this.state.politPts.push(this.sim.politPts[f]); }
+    // экономика (gold/manpower/politPts) НЕ в broadcast-стейте — шлётся per-client в _sendEcon()
 
     // регистрация команды + фидбэк об отказе (sim вернул false → шлём клиенту 'denied')
     const cmd = (type, fn) => this.onMessage(type, (cl, m) => {
@@ -84,6 +84,18 @@ class GameRoom extends Room {
   }
 
   factionOf(cl) { const f = this.assigned[cl.sessionId]; return f === undefined ? null : f; }
+
+  // экономика приватна: каждый клиент получает голду/манпауэр/политочки ТОЛЬКО своей фракции и союзников
+  // (анти-чит — нельзя подсмотреть экономику врага через стейт). Враги в econ не попадают.
+  _sendEcon() {
+    const sim = this.sim, snap = (o) => [Math.round(sim.gold[o] || 0), Math.round(sim.manpower[o] || 0), Math.round(sim.politPts[o] || 0)];
+    for (const cl of this.clients) {
+      const f = this.factionOf(cl); if (f === null) continue;
+      const econ = { [f]: snap(f) };
+      for (let o = 0; o < sim.factions; o++) if (o !== f && sim.allied(f, o)) econ[o] = snap(o);
+      cl.send('econ', { econ });
+    }
+  }
 
   _allowCommand(cl) {
     const now = Date.now() / 1000;
@@ -197,7 +209,7 @@ class GameRoom extends Room {
     const pl = this.state.planes, plive = new Set();
     for (const p of this.sim.planes) { const k = String(p.id); plive.add(k); let ps = pl.get(k); if (!ps) { ps = new PlaneState(); ps.owner = p.owner; pl.set(k, ps); } ps.x = QPOS(p.x); ps.z = QPOS(p.z); ps.hp = Math.max(0, Math.round(p.hp)); ps.fighting = p.foe ? 1 : 0; }
     for (const k of [...pl.keys()]) if (!plive.has(k)) pl.delete(k);
-    for (let f = 0; f < this.sim.factions; f++) { this.state.gold[f] = this.sim.gold[f]; this.state.manpower[f] = this.sim.manpower[f]; this.state.politPts[f] = this.sim.politPts[f]; }
+    if ((this.state.tick & 1) === 0) this._sendEcon();   // экономика per-client (own+allies) ~7.5 Гц — без утечки чужой голды
     // дипломатия: добавить/обновить активные отношения, удалить ставшие нейтральными
     const rel = this.sim.relations, sr = this.state.relations;
     for (const k in rel) { const v = RELN[rel[k]] || 0; if (v && sr.get(k) !== v) sr.set(k, v); }

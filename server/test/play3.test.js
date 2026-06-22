@@ -40,6 +40,10 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
   const cFR = new Client(`ws://localhost:${PORT}`); const rFR = await cFR.create('game', { name: 'play3', faction: FR });
   const cDE = new Client(`ws://localhost:${PORT}`); const rDE = await cDE.joinById(rFR.roomId, { faction: DE });
   const cPL = new Client(`ws://localhost:${PORT}`); const rPL = await cPL.joinById(rFR.roomId, { faction: PL });
+  // экономика приватна (per-client 'econ'): своя фракция + союзники
+  const capEcon = (r) => { r.__econ = {}; r.onMessage('econ', (m) => { if (m && m.econ) Object.assign(r.__econ, m.econ); }); };
+  capEcon(rFR); capEcon(rDE); capEcon(rPL);
+  const eGold = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][0] : 0);
   await sleep(700);
 
   await testAsync('3 игрока в одной комнате, playerCount=3', async () => { eq(rDE.roomId, rFR.roomId); eq(rPL.roomId, rFR.roomId); eq(rFR.state.playerCount, 3); });
@@ -148,17 +152,17 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
   });
 
   await testAsync('ДИПЛОМАТИЯ: поддержка голдой', async () => {
-    const g0 = rFR.state.gold[PL];
+    const g0 = eGold(rPL, PL);   // получатель видит СВОЮ голду (приватность: чужую не отдаём)
     rFR.send('sup', { tg: PL });
     await sleep(600);
-    gt(rFR.state.gold[PL], g0, 'голда переведена Польше');
+    gt(eGold(rPL, PL), g0, 'голда переведена Польше (видна получателю)');
   });
 
   await testAsync('ТЕХНОЛОГИИ: исследование тратит голду', async () => {
-    const g0 = rFR.state.gold[FR];
+    const g0 = eGold(rFR, FR);
     rFR.send('research', { node: 'm1' });
     await sleep(600);
-    lt(rFR.state.gold[FR], g0, 'голда на исследование списана');
+    lt(eGold(rFR, FR), g0, 'голда на исследование списана');
   });
 
   await testAsync('ОСАДА синкается клиенту (siegeUnits/owner для визуала)', async () => {

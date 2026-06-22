@@ -58,9 +58,8 @@ class GameState extends Schema {
     this.squads = new MapSchema();   // id(string)  -> SquadState
     this.ships = new MapSchema();    // id(string)  -> ShipState
     this.planes = new MapSchema();   // id(string)  -> PlaneState
-    this.gold = new ArraySchema();   // голда по фракциям
-    this.manpower = new ArraySchema();
-    this.politPts = new ArraySchema();
+    // gold/manpower/politPts НЕ в broadcast-стейте: экономика приватна (анти-чит) — шлётся per-client
+    // сообщением 'econ' только владельцу и его союзникам. См. GameRoom._sendEcon / мост game.html.
     this.relations = new MapSchema(); // "a_b" -> 1=война, 2=союз (нейтрал = нет ключа)
     this.clock = 0;                   // sim.time (сек) — отсчёт мобилизации на клиенте
     this.warStart = new MapSchema();  // "a_b" -> sim.time начала войны (для warCountdown)
@@ -76,9 +75,6 @@ defineTypes(GameState, {
   squads:    { map: SquadState },
   ships:     { map: ShipState },
   planes:    { map: PlaneState },
-  gold:      ['number'],
-  manpower:  ['number'],
-  politPts:  ['number'],
   relations: { map: 'uint8' },
   clock:     'float32',
   warStart:  { map: 'float32' },

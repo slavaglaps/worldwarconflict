@@ -51,7 +51,7 @@ const upkeep = () => {
 // ── ТЕКУЩАЯ схема (реальная) ──
 const A = new GameState();
 for (const c of sim.cities) { const cs = new CityState(); cs.gx = c.gx; cs.gz = c.gz; cs.size = c.size; cs.country = c.country; A.cities.set(String(c.idx), cs); }
-for (let f = 0; f < F; f++) { A.gold.push(0); A.manpower.push(0); A.politPts.push(0); }
+// экономика не в broadcast-стейте (приватна) — в замере дельты не участвует
 A._techN = [];
 function projectA() {
   A.tick++;
@@ -59,7 +59,6 @@ function projectA() {
   const sq = A.squads, live = new Set(); for (const s of sim.squads) { const k = String(s.id); live.add(k); let ss = sq.get(k); if (!ss) { ss = new SquadState(); ss.owner = s.owner; sq.set(k, ss); } ss.count = Math.round(s.fcount); ss.x = s.x; ss.z = s.z; ss.fighting = s.foe ? 1 : 0; } for (const k of [...sq.keys()]) if (!live.has(k)) sq.delete(k);
   const sh = A.ships, sl = new Set(); for (const s of sim.ships) { const k = String(s.id); sl.add(k); let ss = sh.get(k); if (!ss) { ss = new ShipState(); ss.owner = s.owner; sh.set(k, ss); } ss.x = s.x; ss.z = s.z; ss.hp = Math.min(65535, Math.max(0, Math.round(s.hp))); ss.fighting = s.foe ? 1 : 0; } for (const k of [...sh.keys()]) if (!sl.has(k)) sh.delete(k);
   const pl = A.planes, pli = new Set(); for (const p of sim.planes) { const k = String(p.id); pli.add(k); let ps = pl.get(k); if (!ps) { ps = new PlaneState(); ps.owner = p.owner; pl.set(k, ps); } ps.x = p.x; ps.z = p.z; ps.hp = Math.min(65535, Math.max(0, Math.round(p.hp))); ps.fighting = p.foe ? 1 : 0; } for (const k of [...pl.keys()]) if (!pli.has(k)) pl.delete(k);
-  for (let f = 0; f < F; f++) { A.gold[f] = sim.gold[f]; A.manpower[f] = sim.manpower[f]; A.politPts[f] = sim.politPts[f]; }
   A.clock = sim.time;
 }
 
@@ -79,7 +78,6 @@ function projectB() {
   const sq = B.squads, live = new Set(); for (const s of sim.squads) { const k = String(s.id); live.add(k); let ss = sq.get(k); if (!ss) { ss = new SquadO(); ss.owner = s.owner; sq.set(k, ss); } ss.count = Math.round(s.fcount); ss.x = q(s.x); ss.z = q(s.z); ss.fighting = s.foe ? 1 : 0; } for (const k of [...sq.keys()]) if (!live.has(k)) sq.delete(k);
   const sh = B.ships, sl = new Set(); for (const s of sim.ships) { const k = String(s.id); sl.add(k); let ss = sh.get(k); if (!ss) { ss = new ShipO(); ss.owner = s.owner; sh.set(k, ss); } ss.x = q(s.x); ss.z = q(s.z); ss.hp = Math.min(65535, Math.max(0, Math.round(s.hp))); ss.fighting = s.foe ? 1 : 0; } for (const k of [...sh.keys()]) if (!sl.has(k)) sh.delete(k);
   const pl = B.planes, pli = new Set(); for (const p of sim.planes) { const k = String(p.id); pli.add(k); let ps = pl.get(k); if (!ps) { ps = new PlaneO(); ps.owner = p.owner; pl.set(k, ps); } ps.x = q(p.x); ps.z = q(p.z); ps.hp = Math.min(65535, Math.max(0, Math.round(p.hp))); ps.fighting = p.foe ? 1 : 0; } for (const k of [...pl.keys()]) if (!pli.has(k)) pl.delete(k);
-  for (let f = 0; f < F; f++) { B.gold[f] = sim.gold[f]; B.manpower[f] = sim.manpower[f]; B.politPts[f] = sim.politPts[f]; }
 }
 
 // ── энкодеры ──

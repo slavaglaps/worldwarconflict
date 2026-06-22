@@ -72,7 +72,7 @@ const keepPlanesAlive = () => { for (const p of sim.planes) p.hp = PLANE_HP; };
 // ── проекция sim→схема Colyseus (зеркало GameRoom.tick — меряем реальную стоимость дельт) ──
 const state = new GameState();
 for (const c of sim.cities) { const cs = new CityState(); cs.gx = c.gx; cs.gz = c.gz; cs.size = c.size; cs.country = c.country; cs.owner = c.owner; state.cities.set(String(c.idx), cs); }
-for (let f = 0; f < F; f++) { state.gold.push(0); state.manpower.push(0); state.politPts.push(0); }
+// экономика не в broadcast-стейте (приватна, per-client) — в проекции/замере не участвует
 state._techN = [];
 function project() {
   state.tick++;
@@ -97,7 +97,6 @@ function project() {
   const pl = state.planes, pli = new Set();
   for (const p of sim.planes) { const k = String(p.id); pli.add(k); let ps = pl.get(k); if (!ps) { ps = new PlaneState(); ps.owner = p.owner; pl.set(k, ps); } ps.x = p.x; ps.z = p.z; ps.hp = Math.min(65535, Math.max(0, Math.round(p.hp))); ps.fighting = p.foe ? 1 : 0; }
   for (const k of [...pl.keys()]) if (!pli.has(k)) pl.delete(k);
-  for (let f = 0; f < F; f++) { state.gold[f] = sim.gold[f]; state.manpower[f] = sim.manpower[f]; state.politPts[f] = sim.politPts[f]; }
   state.clock = sim.time;
 }
 
