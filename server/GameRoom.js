@@ -1,7 +1,7 @@
 // Авторитетная комната: крутит чистый Sim и проецирует его в схему Colyseus.
 // Клиент только рисует state и шлёт команды; вся логика и валидация — здесь.
 const { Room, ServerError } = require('colyseus');
-const { GameState, CityState, SquadState, ShipState, PlaneState } = require('./schema');
+const { GameState, CityState, SquadState, ShipState, PlaneState, POS_Q } = require('./schema');
 const { Sim } = require('./sim/Sim');
 const { verifyToken } = require('./auth');
 const db = require('./db');
@@ -28,6 +28,8 @@ const pctOrNull = (v) => {
   const n = finiteOrNull(v);
   return n > 0 && n <= 1 ? n : null;
 };
+const QPOS = (v) => Math.min(65535, Math.max(0, Math.round(v * POS_Q)));   // позиция → fixed-point uint16 (вдвое меньше трафика, чем float32)
+const PATCH_MS = 80;   // 12.5 Гц рассылки снапшотов (сим тикает 15 Гц; клиент интерполирует) → −37% трафика vs дефолт 50мс
 
 class GameRoom extends Room {
   onCreate(options) {
@@ -77,6 +79,7 @@ class GameRoom extends Room {
     cmd('yard',     (f, m) => this.sim.cmdBuildYard(f, intOrNull(m.city), YARD_KIND[m.kind]));
 
     this.setSimulationInterval((dtMs) => this.tick(dtMs / 1000), 1000 / TICK_HZ);
+    this.setPatchRate(PATCH_MS);   // реже шлём снапшоты (клиент интерполирует движение) → меньше трафика, сеть — главный лимит
     console.log(`[GameRoom ${this.roomId}] sim: ${this.sim.cities.length} cities, ${this.sim.factions} factions`);
   }
 
@@ -183,16 +186,16 @@ class GameRoom extends Room {
       const key = String(s.id); live.add(key);
       let ss = sq.get(key);
       if (!ss) { ss = new SquadState(); ss.owner = s.owner; sq.set(key, ss); }
-      ss.count = Math.round(s.fcount); ss.x = s.x; ss.z = s.z; ss.fighting = s.foe ? 1 : 0;
+      ss.count = Math.round(s.fcount); ss.x = QPOS(s.x); ss.z = QPOS(s.z); ss.fighting = s.foe ? 1 : 0;
     }
     for (const k of [...sq.keys()]) if (!live.has(k)) sq.delete(k);
     // флот
     const shp = this.state.ships, slive = new Set();
-    for (const s of this.sim.ships) { const k = String(s.id); slive.add(k); let ss = shp.get(k); if (!ss) { ss = new ShipState(); ss.owner = s.owner; shp.set(k, ss); } ss.x = s.x; ss.z = s.z; ss.hp = Math.max(0, Math.round(s.hp)); ss.fighting = s.foe ? 1 : 0; }
+    for (const s of this.sim.ships) { const k = String(s.id); slive.add(k); let ss = shp.get(k); if (!ss) { ss = new ShipState(); ss.owner = s.owner; shp.set(k, ss); } ss.x = QPOS(s.x); ss.z = QPOS(s.z); ss.hp = Math.max(0, Math.round(s.hp)); ss.fighting = s.foe ? 1 : 0; }
     for (const k of [...shp.keys()]) if (!slive.has(k)) shp.delete(k);
     // авиация
     const pl = this.state.planes, plive = new Set();
-    for (const p of this.sim.planes) { const k = String(p.id); plive.add(k); let ps = pl.get(k); if (!ps) { ps = new PlaneState(); ps.owner = p.owner; pl.set(k, ps); } ps.x = p.x; ps.z = p.z; ps.hp = Math.max(0, Math.round(p.hp)); ps.fighting = p.foe ? 1 : 0; }
+    for (const p of this.sim.planes) { const k = String(p.id); plive.add(k); let ps = pl.get(k); if (!ps) { ps = new PlaneState(); ps.owner = p.owner; pl.set(k, ps); } ps.x = QPOS(p.x); ps.z = QPOS(p.z); ps.hp = Math.max(0, Math.round(p.hp)); ps.fighting = p.foe ? 1 : 0; }
     for (const k of [...pl.keys()]) if (!plive.has(k)) pl.delete(k);
     for (let f = 0; f < this.sim.factions; f++) { this.state.gold[f] = this.sim.gold[f]; this.state.manpower[f] = this.sim.manpower[f]; this.state.politPts[f] = this.sim.politPts[f]; }
     // дипломатия: добавить/обновить активные отношения, удалить ставшие нейтральными

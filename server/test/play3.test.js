@@ -108,7 +108,7 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
   await testAsync('ФЛОТ: корабль движется по команде', async () => {
     const s = [...rFR.state.ships.entries()].find(([, v]) => v.owner === FR);
     assert(s, 'есть корабль'); const [id, ss] = s; const x0 = ss.x;
-    rFR.send('shipmove', { id: Number(id), x: ss.x - 20, z: ss.z });
+    rFR.send('shipmove', { id: Number(id), x: ss.x / 64 - 20, z: ss.z / 64 });   // позиции — fixed-point ×64, цель в мировых коорд.
     await sleep(2500);
     assert(rFR.state.ships.get(id) && rFR.state.ships.get(id).x !== x0, 'корабль сдвинулся');
   });

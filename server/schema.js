@@ -29,20 +29,24 @@ defineTypes(CityState, {
   planeT:      'uint16', // таймер текущего самолёта
 });
 
+// Позиции — fixed-point uint16 (×POS_Q): карта 0..256 → ~0.016 ед. точности, вдвое меньше трафика, чем float32.
+// Клиент делит на POS_Q. Главная статья трафика — это позиции движущихся юнитов.
+const POS_Q = 64;
+
 class SquadState extends Schema {}
 defineTypes(SquadState, {
   owner:    'uint8',
   count:    'uint16',
-  x:        'float32',
-  z:        'float32',
+  x:        'uint16',  // ×POS_Q
+  z:        'uint16',  // ×POS_Q
   fighting: 'uint8',   // 0/1 в полевом бою
 });
 
 class ShipState extends Schema {}
-defineTypes(ShipState, { owner: 'uint8', x: 'float32', z: 'float32', hp: 'uint16', fighting: 'uint8' });
+defineTypes(ShipState, { owner: 'uint8', x: 'uint16', z: 'uint16', hp: 'uint16', fighting: 'uint8' });
 
 class PlaneState extends Schema {}
-defineTypes(PlaneState, { owner: 'uint8', x: 'float32', z: 'float32', hp: 'uint16', fighting: 'uint8' });
+defineTypes(PlaneState, { owner: 'uint8', x: 'uint16', z: 'uint16', hp: 'uint16', fighting: 'uint8' });
 
 class GameState extends Schema {
   constructor() {
@@ -82,4 +86,4 @@ defineTypes(GameState, {
   tech:      { map: 'string' },
 });
 
-module.exports = { CityState, SquadState, ShipState, PlaneState, GameState };
+module.exports = { CityState, SquadState, ShipState, PlaneState, GameState, POS_Q };

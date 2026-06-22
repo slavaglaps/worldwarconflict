@@ -14,7 +14,8 @@
     "test:play3": "node test/play3.test.js",
     "test:db:pg": "node test/db.pg.smoke.js",
     "bench": "node bench-combat.js",
-    "perf:stress": "node perf-stress.js"
+    "perf:stress": "node perf-stress.js",
+    "perf:net": "node perf-net.js"
   },
   "dependencies": {
     "@colyseus/tools": "^0.16.20",

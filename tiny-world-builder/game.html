@@ -4630,10 +4630,10 @@ requestAnimationFrame(loop);
     // синк динамических верфей/аэродромов на локальные города (чтобы появился UI постройки)
     if(!push._by || push._n!==cities.length){ push._by={}; for(const cc of cities)push._by[cc.idx]=cc; push._n=cities.length; }
     state.cities.forEach((cc,key)=>{ const lc=push._by[Number(key)]; if(lc){ lc.isShipyard=!!cc.shipyard; lc.isAirport=!!cc.airport; lc.aa=cc.aa|0; } });
-    const e=[];
-    state.squads.forEach((s,id)=> e.push(['sq'+id, 0, s.owner, s.x, gy(s.x,s.z)+0.2, s.z, s.count]));
-    state.ships .forEach((s,id)=> e.push(['sh'+id, 1, s.owner, s.x, WY, s.z, 0]));
-    state.planes.forEach((s,id)=> e.push(['pl'+id, 2, s.owner, s.x, PA, s.z, 0]));
+    const e=[], DQ=1/64;   // позиции пришли как fixed-point uint16 (×64 на сервере) — делим обратно
+    state.squads.forEach((s,id)=>{ const x=s.x*DQ, z=s.z*DQ; e.push(['sq'+id, 0, s.owner, x, gy(x,z)+0.2, z, s.count]); });
+    state.ships .forEach((s,id)=> e.push(['sh'+id, 1, s.owner, s.x*DQ, WY, s.z*DQ, 0]));
+    state.planes.forEach((s,id)=> e.push(['pl'+id, 2, s.owner, s.x*DQ, PA, s.z*DQ, 0]));
     onMsg({ data: JSON.stringify({ t:'ent', e }) });
     // плашка статуса: реальное имя комнаты + страна + число игроков (с сервера, без путающего «ГОСТЬ»)
     if(MP._pill){
