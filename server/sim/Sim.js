@@ -138,7 +138,7 @@ class Sim {
     for (const s of this.squads) this.squadGrid.insert(s, s.x, s.z);
     const R2 = this.K.FIELD_RANGE * this.K.FIELD_RANGE;
     for (const s of this.squads) {
-      if (s.foe && s.foe.fcount < 0.5) s.foe = null;
+      if (s.foe && s.foe.fcount < this.K.UNIT_MIN) s.foe = null;
       if (s.foe) continue;
       let best = null, bd = R2;                                   // ближайший враг в радиусе (раньше — первый в массиве)
       this.squadGrid.queryWithin(s.x, s.z, this.K.FIELD_RANGE, (o) => {
@@ -241,13 +241,13 @@ class Sim {
         for (const o in c.siege) { if (+o === c.owner || !this.atWar(c.owner, +o)) continue; if (c.siege[o].units > bu) { bu = c.siege[o].units; pool = c.siege[o]; } }
         if (pool) {
           c.fireTimer = 0; pool.units = Math.max(0, pool.units - c.fireDmg);
-          for (const o in c.siege) if (c.siege[o] === pool && c.siege[o].units < 0.4) delete c.siege[o];
+          for (const o in c.siege) if (c.siege[o] === pool && c.siege[o].units < this.K.SIEGE_POOL_MIN) delete c.siege[o];
           if (c.siege && Object.keys(c.siege).length === 0) c.siege = null;
           continue;
         }
       }
       let best = null, bd = range * range, kind = null;
-      for (const s of this.squads) { if (s.fcount < 0.5 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 's'; } }
+      for (const s of this.squads) { if (s.fcount < this.K.UNIT_MIN || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 's'; } }
       for (const s of this.ships) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } }
       for (const s of this.planes) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } }
       if (!best) for (const o of this.cities) { if (o === c || o.owner === c.owner || !this.atWar(c.owner, o.owner)) continue; const dx = c.gx - o.gx, dz = c.gz - o.gz, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = o; kind = 'c'; } }
@@ -255,7 +255,7 @@ class Sim {
       c.fireTimer = 0;
       if (kind === 's') best.fcount -= c.fireDmg;
       else if (kind === 'h') best.hp -= c.fireDmg;
-      else if (kind === 'c') best.units = Math.max(1, best.units - c.fireDmg);
+      else if (kind === 'c') best.units = Math.max(this.K.GARRISON_FLOOR, best.units - c.fireDmg);
     }
   }
   // 🛡 ПВО: город с зенитками бьёт ближайший вражеский самолёт
@@ -280,7 +280,7 @@ class Sim {
       for (const q of this.squads) { if (!this.atWar(s.owner, q.owner)) continue; const dx = s.x - q.x, dz = s.z - q.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = q; city = false; } }
       if (!best) continue;
       s.fireTimer = 0;
-      if (city) best.units = Math.max(1, best.units - this.K.SHIP_MISSILE_DMG);
+      if (city) best.units = Math.max(this.K.GARRISON_FLOOR, best.units - this.K.SHIP_MISSILE_DMG);
       else best.fcount -= this.K.SHIP_MISSILE_DMG;
     }
   }
@@ -294,7 +294,7 @@ class Sim {
       const dx = p.x - c.gx, dz = p.z - c.gz;
       if (dx * dx + dz * dz > this.K.PLANE_BOMB_RANGE * this.K.PLANE_BOMB_RANGE) continue;
       p.bombTimer += dt; if (p.bombTimer < this.K.PLANE_BOMB_CD) continue;
-      p.bombTimer = 0; c.units = Math.max(1, c.units - this.K.PLANE_BOMB_DMG * this.techVal(p.owner, 'bd'));
+      p.bombTimer = 0; c.units = Math.max(this.K.GARRISON_FLOOR, c.units - this.K.PLANE_BOMB_DMG * this.techVal(p.owner, 'bd'));
     }
   }
 
@@ -461,7 +461,7 @@ class Sim {
         let bd = Infinity; for (const c of this.cities) { if (c.owner === fid || !this.atWar(fid, c.owner)) continue;
           const dd = cap ? ((c.gx - cap.gx) ** 2 + (c.gz - cap.gz) ** 2) : 0; if (dd < bd) { bd = dd; tgt = c; } } }
       if (!tgt) return false;                                   // нет цели — нужна война
-      tgt.units = Math.max(1, tgt.units - fx.amount); return true;
+      tgt.units = Math.max(this.K.GARRISON_FLOOR, tgt.units - fx.amount); return true;
     }
     return true;
   }
@@ -479,7 +479,7 @@ class Sim {
   manpowerCap(fid) { let m = 0; for (const c of this.cities) if (c.owner === fid) m += (this.K.MP_BASE + c.size * this.K.MP_PER_SIZE + c.tier * this.K.MP_PER_TIER) * (c.capital ? this.K.MP_CAPITAL : 1); return m * this.techMul(fid, 'prod'); }
   manpowerRate(fid) { let r = 0; for (const c of this.cities) if (c.owner === fid) r += (this.K.MP_RATE_BASE + c.size * this.K.MP_RATE_PER_SIZE + c.tier * this.K.MP_RATE_PER_TIER) * (c.capital ? this.K.MP_CAPITAL : 1); return r * this.techMul(fid, 'prod'); }
   politRate(fid) { let n = 0, t = 0; for (const c of this.cities) if (c.owner === fid) { n++; t += c.tier; } const P = this.B.politics; return Math.min(P.rateMax, P.rateBase + n * P.perCity + t * P.perTier); }
-  factionStrength(fid) { let s = 0; for (const c of this.cities) if (c.owner === fid) s += c.units + 10; return s; }
+  factionStrength(fid) { let s = 0; for (const c of this.cities) if (c.owner === fid) s += c.units + this.K.FACTION_STR_CITY_BASE; return s; }
   validFaction(fid) { return Number.isInteger(fid) && fid >= 0 && fid < this.factions; }
   // счётчики сущностей фракции (existing + queued) — для хард-капов
   _navalCount(fid) { let n = 0; for (const s of this.ships) if (s.owner === fid) n++; for (const c of this.cities) if (c.owner === fid) n += c.shipQueue; return n; }
@@ -524,14 +524,15 @@ class Sim {
       if (!c.occ) continue;
       if (!((c.owner === a && c.occFrom === b) || (c.owner === b && c.occFrom === a))) continue;
       if (terms === 'keep') { c.occ = false; c.occFrom = null; }
-      else { c.owner = c.occFrom; c.occ = false; c.occFrom = null; c.units = Math.max(1, c.units); c.goldTimer = 0; c.batches = []; }
+      else { c.owner = c.occFrom; c.occ = false; c.occFrom = null; c.units = Math.max(this.K.GARRISON_FLOOR, c.units); c.goldTimer = 0; c.batches = []; }
     }
   }
   permanentAnnex(deadFid, byFid) {
     this.eliminations.push({ dead: deadFid, by: byFid });   // комната запишет итог
     for (const c of this.cities) if (c.occFrom === deadFid) { c.occ = false; c.occFrom = null; }
     if (byFid != null && byFid !== deadFid) {
-      const g = Math.floor(this.gold[deadFid] || 0), pp = Math.floor(this.politPts[deadFid] || 0), mp = Math.floor(this.manpower[deadFid] || 0);
+      const loot = this.K.ANNEX_LOOT;   // доля казны/политы/манпауэра выбывшего → победителю
+      const g = Math.floor((this.gold[deadFid] || 0) * loot), pp = Math.floor((this.politPts[deadFid] || 0) * loot), mp = Math.floor((this.manpower[deadFid] || 0) * loot);
       this.gold[byFid] = (this.gold[byFid] || 0) + g;
       this.politPts[byFid] = Math.min(this.B.politics.max, (this.politPts[byFid] || 0) + pp);
       this.manpower[byFid] = Math.min(this.manpowerCap(byFid), (this.manpower[byFid] || 0) + mp);
@@ -592,7 +593,7 @@ class Sim {
     // отряды: движение → прибытие, затем полевой бой, затем уборка павших
     for (let i = this.squads.length - 1; i >= 0; i--) if (this.squads[i].update(dt)) { this.resolveArrival(this.squads[i]); this.squads.splice(i, 1); }
     this.fieldBattles(dt);
-    for (let i = this.squads.length - 1; i >= 0; i--) if (this.squads[i].fcount < 0.5) { const s = this.squads[i]; for (const o of this.squads) if (o.foe === s) o.foe = null; this.squads.splice(i, 1); }
+    for (let i = this.squads.length - 1; i >= 0; i--) if (this.squads[i].fcount < this.K.UNIT_MIN) { const s = this.squads[i]; for (const o of this.squads) if (o.foe === s) o.foe = null; this.squads.splice(i, 1); }
     // флот/авиация: постройка → движение → бой (грид) → уборка павших
     this.advanceBuildQueues(dt);
     for (const s of this.ships) s.update(dt);
@@ -621,14 +622,14 @@ class Sim {
   // ── команды городов (валидируются на сервере) ──
   buyAmount(c, spec) {
     const space = Math.floor(c.capacity - c.units - c.queued); if (space <= 0) return 0;
-    const cap = Math.min(space, Math.floor(this.gold[c.owner] / this.K.SOLDIER_PRICE), Math.floor(this.manpower[c.owner] || 0));
+    const cap = Math.min(space, Math.floor(this.gold[c.owner] / this.K.SOLDIER_PRICE), Math.floor((this.manpower[c.owner] || 0) / this.K.SOLDIER_MP));
     if (spec === 'max') return Math.max(0, cap);
     return Math.min(parseInt(spec, 10) || 0, cap);
   }
   cmdBuy(fid, idx, spec) {
     const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ) return false;
     const amt = this.buyAmount(c, spec); if (amt <= 0) return false;
-    this.gold[fid] -= amt * this.K.SOLDIER_PRICE; this.manpower[fid] -= amt;
+    this.gold[fid] -= amt * this.K.SOLDIER_PRICE; this.manpower[fid] -= amt * this.K.SOLDIER_MP;
     c.batches.push({ count: amt, time: amt * c.trainPer, elapsed: 0 });
     return true;
   }
@@ -643,7 +644,7 @@ class Sim {
   }
   // Отправка войск. Реальная карта → движущийся отряд по графу (Squad); toy-мир → мгновенная осада.
   // Атаковать чужой город можно только в состоянии войны.
-  cmdSend(fid, fromIdx, toIdx, pct = 0.5) {
+  cmdSend(fid, fromIdx, toIdx, pct = this.K.SEND_DEFAULT_PCT) {
     const a = this.cities[fromIdx], b = this.cities[toIdx];
     if (!a || !b || a === b || a.owner !== fid) return false;
     if (!Number.isFinite(pct) || pct <= 0 || pct > 1) return false;

@@ -18,7 +18,7 @@ class Ship {
   update(dt) {
     if (this.foe) return;              // в морском бою стоим
     const dx = this.tx - this.x, dz = this.tz - this.z, d = Math.hypot(dx, dz);
-    if (d > 0.1) {
+    if (d > this.K.SHIP_ARRIVE) {
       const step = Math.min(d, this.K.SHIP_SPEED * dt);
       const nx = this.x + dx / d * step, nz = this.z + dz / d * step;
       if (isWaterAt(nx, nz)) { this.x = nx; this.z = nz; this.heading = Math.atan2(dz, dx); }

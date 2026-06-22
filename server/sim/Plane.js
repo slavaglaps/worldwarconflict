@@ -19,13 +19,13 @@ class Plane {
     if (ord && ord.kind === 'bomb') {
       const c = this.sim.cities[ord.cityIdx];
       if (c && c.owner !== this.owner && this.sim.atWar(this.owner, c.owner)) { aimx = c.gx; aimz = c.gz; }
-      else { aimx = this.x + Math.cos(this.heading) * 10; aimz = this.z + Math.sin(this.heading) * 10; }
+      else { aimx = this.x + Math.cos(this.heading) * this.K.PLANE_AIM; aimz = this.z + Math.sin(this.heading) * this.K.PLANE_AIM; }
     } else if (ord && ord.kind === 'patrol') { aimx = ord.x; aimz = ord.z; }
-    else { aimx = this.x + Math.cos(this.heading) * 10; aimz = this.z + Math.sin(this.heading) * 10; }
+    else { aimx = this.x + Math.cos(this.heading) * this.K.PLANE_AIM; aimz = this.z + Math.sin(this.heading) * this.K.PLANE_AIM; }
     let dh = Math.atan2(aimz - this.z, aimx - this.x) - this.heading;
     while (dh > Math.PI) dh -= 2 * Math.PI;
     while (dh < -Math.PI) dh += 2 * Math.PI;
-    const TURN = 1.35;
+    const TURN = this.K.PLANE_TURN;
     this.heading += Math.max(-TURN * dt, Math.min(TURN * dt, dh));
     this.x += Math.cos(this.heading) * this.K.PLANE_SPEED * dt;
     this.z += Math.sin(this.heading) * this.K.PLANE_SPEED * dt;
