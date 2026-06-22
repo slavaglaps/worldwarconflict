@@ -63,6 +63,15 @@ const DEFAULTS = {
     },
   },
 
+  // ── ЮНИТЫ / ЭКОНОМИКА / БОЙ — плоский override игровых констант ПО ИМЕНИ (источник дефолтов: sim/constants.js).
+  // Дефолты = код-константы 1:1; override правит точечно, напр. {tune:{SHIP_COST:50, SOLDIER_PRICE:5, MP_RATE_BASE:0.5}}.
+  // Тюнятся: SOLDIER_PRICE · MP_BASE/MP_PER_SIZE/MP_PER_TIER/MP_RATE_BASE/MP_RATE_PER_SIZE/MP_RATE_PER_TIER/MP_CAPITAL ·
+  //   SHIP_* (COST/BUILD_TIME/HP/DMG/SPEED/RANGE/ATTACK_RANGE/MP/MISSILE_DMG/FIRE_CD) · PLANE_* (то же + BOMB_*) ·
+  //   AA_* (COST_BASE/COST_STEP/DMG/RANGE/CD/MAX/MP) · SHIPYARD_BUILD_COST/AIRPORT_BUILD_COST ·
+  //   UPGRADE_COST_BASE/UPGRADE_COST_STEP · FIGHT_RATE/SIEGE_ATK/SIEGE_DEF/SQUAD_SPEED/FIELD_RANGE ·
+  //   TOWER_FIRE_CD/TOWER_DMG_BASE/TOWER_RANGE_BASE/TOWER_RANGE_PER · MAX_SHIPS/MAX_PLANES/MAX_SQUADS.
+  tune: {},
+
   // ── СТАРТ + АСИММЕТРИЯ по фракциям ──
   // factionDefault применяется ко всем странам; factions[id] переопределяет конкретную.
   factionDefault: {
@@ -90,7 +99,10 @@ function deepMerge(base, ov) {
 
 // активный баланс комнаты: дефолты ⊕ override (из Supabase/тестов)
 function makeBalance(override) { return deepMerge(DEFAULTS, override || {}); }
+// игровые константы комнаты: код-дефолты (constants.js) ⊕ плоский override B.tune (по имени).
+// Возвращает НОВЫЙ объект (мутация this.K не трогает глобальный C). Функции C (aaCost/upgradeCost) переносятся как есть.
+function makeConstants(B) { return Object.assign({}, C, (B && B.tune) || {}); }
 // баланс конкретной фракции: factionDefault ⊕ factions[id]
 function factionBal(B, fid) { return deepMerge(B.factionDefault, (B.factions && B.factions[fid]) || {}); }
 
-module.exports = { DEFAULTS, makeBalance, factionBal, deepMerge };
+module.exports = { DEFAULTS, makeBalance, makeConstants, factionBal, deepMerge };

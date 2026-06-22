@@ -1,6 +1,5 @@
 // Чистый отряд: движется по пути из городов (граф), стоит в полевом бою.
 // Позиция — линейная интерполяция вдоль ребра (клиент может рисовать по полилинии).
-const C = require('./constants');
 
 let _sid = 1;
 
@@ -13,7 +12,7 @@ class Squad {
     this.hop = 0;                 // индекс текущего сегмента (ребро path[hop]→path[hop+1])
     this.prog = 0;                // пройдено по текущему ребру (в ед. длины)
     this.foe = null;              // полевой бой
-    this.sim = sim;
+    this.sim = sim; this.K = sim.K;
     this.atkMult = atkMult || 1;
     this.x = 0; this.z = 0;
     this._setPos();
@@ -33,7 +32,7 @@ class Squad {
   // true → отряд дошёл/упёрся (Sim вызовет resolveArrival и удалит)
   update(dt) {
     if (this.foe) return false;                              // дерёмся — стоим
-    let move = C.SQUAD_SPEED * this.sim.techMul(this.owner, 'speed') * dt;
+    let move = this.K.SQUAD_SPEED * this.sim.techMul(this.owner, 'speed') * dt;
     let guard = 0;
     while (move > 1e-9 && guard++ < 64) {
       const a = this.path[this.hop], b = this.path[this.hop + 1];

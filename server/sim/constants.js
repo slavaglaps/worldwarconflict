@@ -29,13 +29,19 @@ module.exports = {
   AA_RANGE: 15, AA_CD: 0.9, AA_DMG: 3, AA_MAX: 8, AA_COST_BASE: 30, AA_COST_STEP: 10, AA_MP: 4,
   aaCost: (aa) => 30 + (aa || 0) * 10,
 
+  // 🏙 город: вместимость = CAP_BASE + size*CAP_PER_SIZE; голда каждые GOLD_INTERVAL/eco сек (×size);
+  //    время найма бойца = (TRAIN_BASE − size*TRAIN_PER_SIZE)/prod. Тюнятся через balance.tune.
+  CITY_CAP_BASE: 32, CITY_CAP_PER_SIZE: 24,
+  CITY_GOLD_INTERVAL: 4, CITY_TRAIN_BASE: 0.5, CITY_TRAIN_PER_SIZE: 0.07,
+
   // бой
   FIGHT_RATE: 0.30, SIEGE_ATK: 0.30, SIEGE_DEF: 0.30,
   SQUAD_SPEED: 4.0, PASS_MULT: 0.5, FERRY_MULT: 0.7, MAX_LINK: 48,
   FIELD_RANGE: 3.0,        // радиус схождения отрядов в полевом бою
   WAR_PATH_PENALTY: 60,    // штраф пути через вражеский узел (как в findPath)
 
-  // прокачка города: 50 / 100 / 150 голды
+  // прокачка города: base + tier*step (50 / 100 / 150 голды). Коэффициенты тюнятся через balance.tune.
+  UPGRADE_COST_BASE: 50, UPGRADE_COST_STEP: 50,
   upgradeCost: (t) => 50 + t * 50,
 
   // 🏛 дипломатия / политические очки

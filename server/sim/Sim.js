@@ -2,7 +2,6 @@
 // Фаза 1a: экономика + производство + манпауэр + осада/захват/оккупация.
 // Пункт 1 (1b): дипломатия (война/мир/союз/поддержка), политочки, древо технологий.
 // Фаза 1b далее: реальная карта-граф, движение отрядов, флот/авиация + spatial-grid.
-const C = require('./constants');
 const { City } = require('./City');
 const { Squad } = require('./Squad');
 const { Ship } = require('./Ship');
@@ -10,7 +9,7 @@ const { Plane } = require('./Plane');
 const { SpatialGrid } = require('./SpatialGrid');
 const { nearestWaterPoint, isWaterAt } = require('./water');
 const { recomputeTech, nodeReady } = require('./tech');
-const { makeBalance, factionBal } = require('./balance');
+const { makeBalance, makeConstants, factionBal } = require('./balance');
 
 class Sim {
   constructor(opts = {}) {
@@ -23,6 +22,7 @@ class Sim {
     if (opts.politStart != null) this.B.factionDefault.polit = opts.politStart;
     if (opts.warPrep != null) this.B.politics.warPrep = opts.warPrep;
     this.warPrep = this.B.politics.warPrep;          // секунд мобилизации перед атакой (warCountdown; тесты могут занулить)
+    this.K = makeConstants(this.B);                  // игровые константы комнаты: код-дефолты ⊕ balance.tune (юниты/экономика/бой)
     this.fb = [];                                    // баланс на фракцию (factionDefault ⊕ factions[id]) — O(1) доступ
     for (let f = 0; f < this.factions; f++) this.fb[f] = factionBal(this.B, f);
     this.techNode = this.B.tech.nodes;               // узлы дерева технологий этой комнаты (id → узел, из баланса)
@@ -46,9 +46,9 @@ class Sim {
     this.ships = [];
     this.planes = [];
     this.airOrder = [];                              // [fid]: {kind:'bomb',cityIdx} | {kind:'patrol',x,z} | null
-    this.navalGrid = new SpatialGrid(C.SHIP_RANGE);  // O(n) морской бой
-    this.airGrid = new SpatialGrid(C.PLANE_RANGE);   // O(n) воздушный бой
-    this.squadGrid = new SpatialGrid(C.FIELD_RANGE); // O(n) полевой бой
+    this.navalGrid = new SpatialGrid(this.K.SHIP_RANGE);  // O(n) морской бой
+    this.airGrid = new SpatialGrid(this.K.PLANE_RANGE);   // O(n) воздушный бой
+    this.squadGrid = new SpatialGrid(this.K.FIELD_RANGE); // O(n) полевой бой
     this.adj = new Map();                            // idx -> [{to, edge}]
     this.edgeKey = new Map();                        // "a_b" -> {a,b,type,len,mult}
     this.gold = [];
@@ -77,14 +77,14 @@ class Sim {
       const cid = {}; this.map.factions.forEach(f => cid[f.country] = f.id);   // имя страны → числовой id
       for (const cd of this.map.cities) this.cities.push(new City({
         idx: cd.idx, gx: cd.gx, gz: cd.gz, country: cid[cd.country] ?? 0, size: cd.size, owner: cd.owner,
-        capital: cd.capital, isShipyard: cd.shipyard, isAirport: cd.airport, tm, tv,
+        capital: cd.capital, isShipyard: cd.shipyard, isAirport: cd.airport, tm, tv, K: this.K,
       }));
       this._buildGraph(this.map.edges);
     } else {
       const N = opts.cities || 18;
       for (let i = 0; i < N; i++) this.cities.push(new City({
-        idx: i, gx: (i * 7) % C.GRID, gz: (i * 13) % C.GRID,
-        country: i % this.factions, size: 1 + (i % 3), owner: i % this.factions, capital: i < this.factions, tm, tv,
+        idx: i, gx: (i * 7) % this.K.GRID, gz: (i * 13) % this.K.GRID,
+        country: i % this.factions, size: 1 + (i % 3), owner: i % this.factions, capital: i < this.factions, tm, tv, K: this.K,
       }));
     }
     for (let f = 0; f < this.factions; f++) { this.gold[f] = this.fb[f].gold; this.politPts[f] = this.fb[f].polit; }
@@ -118,7 +118,7 @@ class Sim {
       if (u === toIdx) break;
       for (const { to, edge } of (this.adj.get(u) || [])) {
         if (to !== toIdx && !this.canPass(owner, this.cities[to].owner)) continue;
-        const nd = d + edge.len / (C.SQUAD_SPEED * edge.mult);
+        const nd = d + edge.len / (this.K.SQUAD_SPEED * edge.mult);
         if (nd < (dist.get(to) ?? Infinity)) { dist.set(to, nd); prev.set(to, u); pq.push([nd, to]); }
       }
     }
@@ -136,19 +136,19 @@ class Sim {
   fieldBattles(dt) {
     this.squadGrid.clear();
     for (const s of this.squads) this.squadGrid.insert(s, s.x, s.z);
-    const R2 = C.FIELD_RANGE * C.FIELD_RANGE;
+    const R2 = this.K.FIELD_RANGE * this.K.FIELD_RANGE;
     for (const s of this.squads) {
       if (s.foe && s.foe.fcount < 0.5) s.foe = null;
       if (s.foe) continue;
       let best = null, bd = R2;                                   // ближайший враг в радиусе (раньше — первый в массиве)
-      this.squadGrid.queryWithin(s.x, s.z, C.FIELD_RANGE, (o) => {
+      this.squadGrid.queryWithin(s.x, s.z, this.K.FIELD_RANGE, (o) => {
         if (o === s || o.owner === s.owner || this.allied(s.owner, o.owner) || !this.atWar(s.owner, o.owner)) return;
         const dx = s.x - o.x, dz = s.z - o.z, dd = dx * dx + dz * dz;
         if (dd < bd) { bd = dd; best = o; }
       });
       if (best) { s.foe = best; if (!best.foe) best.foe = s; }
     }
-    for (const s of this.squads) if (s.foe && s.foe.fcount >= 0.5 && s.fcount >= 0.5) s.foe.fcount -= s.fcount * s.atkMult * C.FIGHT_RATE * dt;
+    for (const s of this.squads) if (s.foe && s.foe.fcount >= 0.5 && s.fcount >= 0.5) s.foe.fcount -= s.fcount * s.atkMult * this.K.FIGHT_RATE * dt;
   }
 
   // ── флот / авиация ──
@@ -156,59 +156,59 @@ class Sim {
   spawnPlane(city) { this.planes.push(new Plane(city.owner, city.gx, city.gz, this)); }
   advanceBuildQueues(dt) {
     for (const c of this.cities) {
-      if (c.isShipyard && c.shipQueue > 0) { c.shipTimer += dt; if (c.shipTimer >= C.SHIP_BUILD_TIME) { c.shipTimer = 0; c.shipQueue--; this.spawnShip(c); } }
-      if (c.isAirport && c.planeQueue > 0) { c.planeTimer += dt; if (c.planeTimer >= C.PLANE_BUILD_TIME) { c.planeTimer = 0; c.planeQueue--; this.spawnPlane(c); } }
+      if (c.isShipyard && c.shipQueue > 0) { c.shipTimer += dt; if (c.shipTimer >= this.K.SHIP_BUILD_TIME) { c.shipTimer = 0; c.shipQueue--; this.spawnShip(c); } }
+      if (c.isAirport && c.planeQueue > 0) { c.planeTimer += dt; if (c.planeTimer >= this.K.PLANE_BUILD_TIME) { c.planeTimer = 0; c.planeQueue--; this.spawnPlane(c); } }
     }
   }
   // морской бой через spatial-grid: O(n) вместо O(n²)
   navalBattles(dt) {
     this.navalGrid.clear();
     for (const s of this.ships) if (s.hp > 0) this.navalGrid.insert(s, s.x, s.z);
-    const R2 = C.SHIP_RANGE * C.SHIP_RANGE;
+    const R2 = this.K.SHIP_RANGE * this.K.SHIP_RANGE;
     for (const s of this.ships) {
       if (s.foe && s.foe.hp <= 0) s.foe = null;
       if (s.foe) continue;
       let best = null, bd = R2;
-      this.navalGrid.queryWithin(s.x, s.z, C.SHIP_RANGE, (o) => {
+      this.navalGrid.queryWithin(s.x, s.z, this.K.SHIP_RANGE, (o) => {
         if (o === s || o.hp <= 0 || !this.atWar(s.owner, o.owner)) return;
         const dx = s.x - o.x, dz = s.z - o.z, dd = dx * dx + dz * dz;
         if (dd < bd) { bd = dd; best = o; }
       });
       if (best) { s.foe = best; if (!best.foe) best.foe = s; }
     }
-    for (const s of this.ships) if (s.foe && s.foe.hp > 0) s.foe.hp -= C.SHIP_DMG * dt;
+    for (const s of this.ships) if (s.foe && s.foe.hp > 0) s.foe.hp -= this.K.SHIP_DMG * dt;
   }
   // воздушный бой через spatial-grid: O(n)
   airBattles(dt) {
     this.airGrid.clear();
     for (const p of this.planes) if (p.hp > 0) this.airGrid.insert(p, p.x, p.z);
-    const R2 = C.PLANE_RANGE * C.PLANE_RANGE;
+    const R2 = this.K.PLANE_RANGE * this.K.PLANE_RANGE;
     for (const s of this.planes) {
       if (s.foe && s.foe.hp <= 0) s.foe = null;
       if (s.foe) continue;
       let best = null, bd = R2;
-      this.airGrid.queryWithin(s.x, s.z, C.PLANE_RANGE, (o) => {
+      this.airGrid.queryWithin(s.x, s.z, this.K.PLANE_RANGE, (o) => {
         if (o === s || o.hp <= 0 || !this.atWar(s.owner, o.owner)) return;
         const dx = s.x - o.x, dz = s.z - o.z, dd = dx * dx + dz * dz;
         if (dd < bd) { bd = dd; best = o; }
       });
       if (best) { s.foe = best; if (!best.foe) best.foe = s; }
     }
-    for (const s of this.planes) if (s.foe && s.foe.hp > 0) s.foe.hp -= C.PLANE_DMG * dt;
+    for (const s of this.planes) if (s.foe && s.foe.hp > 0) s.foe.hp -= this.K.PLANE_DMG * dt;
   }
   cmdBuildShip(fid, idx) {
     const c = this.cities[idx];
     if (!c || c.owner !== fid || c.occ || !c.isShipyard || !this.techFlag(fid, 'ships')) return false;
-    if (this.gold[fid] < C.SHIP_COST || (this.manpower[fid] || 0) < C.SHIP_MP) return false;
-    if (this._navalCount(fid) >= C.MAX_SHIPS) return false;   // хард-кап флота на фракцию
-    this.gold[fid] -= C.SHIP_COST; this.manpower[fid] -= C.SHIP_MP; c.shipQueue++; return true;
+    if (this.gold[fid] < this.K.SHIP_COST || (this.manpower[fid] || 0) < this.K.SHIP_MP) return false;
+    if (this._navalCount(fid) >= this.K.MAX_SHIPS) return false;   // хард-кап флота на фракцию
+    this.gold[fid] -= this.K.SHIP_COST; this.manpower[fid] -= this.K.SHIP_MP; c.shipQueue++; return true;
   }
   cmdBuildPlane(fid, idx) {
     const c = this.cities[idx];
     if (!c || c.owner !== fid || c.occ || !c.isAirport || !this.techFlag(fid, 'planes')) return false;
-    if (this.gold[fid] < C.PLANE_COST || (this.manpower[fid] || 0) < C.PLANE_MP) return false;
-    if (this._airCount(fid) >= C.MAX_PLANES) return false;   // хард-кап авиации на фракцию
-    this.gold[fid] -= C.PLANE_COST; this.manpower[fid] -= C.PLANE_MP; c.planeQueue++; return true;
+    if (this.gold[fid] < this.K.PLANE_COST || (this.manpower[fid] || 0) < this.K.PLANE_MP) return false;
+    if (this._airCount(fid) >= this.K.MAX_PLANES) return false;   // хард-кап авиации на фракцию
+    this.gold[fid] -= this.K.PLANE_COST; this.manpower[fid] -= this.K.PLANE_MP; c.planeQueue++; return true;
   }
   cmdShipMove(fid, shipId, x, z) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
@@ -225,17 +225,17 @@ class Sim {
     this.airOrder[fid] = null; return true;                               // отзыв
   }
   cmdBuildAA(fid, idx) {
-    const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ || (c.aa | 0) >= C.AA_MAX) return false;
-    const cost = C.aaCost(c.aa);
-    if (this.gold[fid] < cost || (this.manpower[fid] || 0) < C.AA_MP) return false;
-    this.gold[fid] -= cost; this.manpower[fid] -= C.AA_MP; c.aa = (c.aa | 0) + 1; return true;
+    const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ || (c.aa | 0) >= this.K.AA_MAX) return false;
+    const cost = (this.K.AA_COST_BASE + (c.aa | 0) * this.K.AA_COST_STEP);
+    if (this.gold[fid] < cost || (this.manpower[fid] || 0) < this.K.AA_MP) return false;
+    this.gold[fid] -= cost; this.manpower[fid] -= this.K.AA_MP; c.aa = (c.aa | 0) + 1; return true;
   }
 
   // ⚔ башни atk-городов: бьют осаждающих (приоритет), иначе ближайшего врага/город в радиусе
   cityTowers(dt) {
     for (const c of this.cities) {
       const range = c.fireRange; if (range <= 0) continue;
-      c.fireTimer += dt; if (c.fireTimer < C.TOWER_FIRE_CD) continue;
+      c.fireTimer += dt; if (c.fireTimer < this.K.TOWER_FIRE_CD) continue;
       if (c.siege) {
         let pool = null, bu = 0;
         for (const o in c.siege) { if (+o === c.owner || !this.atWar(c.owner, +o)) continue; if (c.siege[o].units > bu) { bu = c.siege[o].units; pool = c.siege[o]; } }
@@ -262,26 +262,26 @@ class Sim {
   cityAA(dt) {
     for (const c of this.cities) {
       if ((c.aa | 0) <= 0) continue;
-      c.aaTimer += dt; if (c.aaTimer < C.AA_CD) continue;
-      let best = null, bd = C.AA_RANGE * C.AA_RANGE;
+      c.aaTimer += dt; if (c.aaTimer < this.K.AA_CD) continue;
+      let best = null, bd = this.K.AA_RANGE * this.K.AA_RANGE;
       for (const s of this.planes) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; } }
       if (!best) continue;
-      c.aaTimer = 0; best.hp -= C.AA_DMG * c.aa;
+      c.aaTimer = 0; best.hp -= this.K.AA_DMG * c.aa;
     }
   }
   // 🚀 обстрел берега: корабль с tech shipMissile бьёт ближайший вражеский город/отряд в радиусе
   shipBombard(dt) {
     for (const s of this.ships) {
       if (s.hp <= 0 || !this.techFlag(s.owner, 'shipMissile')) continue;
-      s.fireTimer += dt; if (s.fireTimer < C.SHIP_FIRE_CD) continue;
-      const R = C.SHIP_ATTACK_RANGE * this.techVal(s.owner, 'sr'), R2 = R * R;
+      s.fireTimer += dt; if (s.fireTimer < this.K.SHIP_FIRE_CD) continue;
+      const R = this.K.SHIP_ATTACK_RANGE * this.techVal(s.owner, 'sr'), R2 = R * R;
       let best = null, bd = R2, city = false;
       for (const c of this.cities) { if (c.owner === s.owner || !this.atWar(s.owner, c.owner)) continue; const dx = s.x - c.gx, dz = s.z - c.gz, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = c; city = true; } }
       for (const q of this.squads) { if (!this.atWar(s.owner, q.owner)) continue; const dx = s.x - q.x, dz = s.z - q.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = q; city = false; } }
       if (!best) continue;
       s.fireTimer = 0;
-      if (city) best.units = Math.max(1, best.units - C.SHIP_MISSILE_DMG);
-      else best.fcount -= C.SHIP_MISSILE_DMG;
+      if (city) best.units = Math.max(1, best.units - this.K.SHIP_MISSILE_DMG);
+      else best.fcount -= this.K.SHIP_MISSILE_DMG;
     }
   }
   // 💣 бомбёжка: самолёт по приказу bomb, в радиусе цели, бьёт гарнизон (tech planeBomb)
@@ -292,9 +292,9 @@ class Sim {
       const c = this.cities[ord.cityIdx];
       if (!c || c.owner === p.owner || !this.atWar(p.owner, c.owner) || !this.techFlag(p.owner, 'planeBomb')) continue;
       const dx = p.x - c.gx, dz = p.z - c.gz;
-      if (dx * dx + dz * dz > C.PLANE_BOMB_RANGE * C.PLANE_BOMB_RANGE) continue;
-      p.bombTimer += dt; if (p.bombTimer < C.PLANE_BOMB_CD) continue;
-      p.bombTimer = 0; c.units = Math.max(1, c.units - C.PLANE_BOMB_DMG * this.techVal(p.owner, 'bd'));
+      if (dx * dx + dz * dz > this.K.PLANE_BOMB_RANGE * this.K.PLANE_BOMB_RANGE) continue;
+      p.bombTimer += dt; if (p.bombTimer < this.K.PLANE_BOMB_CD) continue;
+      p.bombTimer = 0; c.units = Math.max(1, c.units - this.K.PLANE_BOMB_DMG * this.techVal(p.owner, 'bd'));
     }
   }
 
@@ -303,14 +303,14 @@ class Sim {
   cmdBuildYard(fid, idx, kind) {
     const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ) return false;
     if (kind === 'ship') {
-      if (c.isShipyard || !this._isCoastal(c) || this.gold[fid] < C.SHIPYARD_BUILD_COST) return false;
-      this.gold[fid] -= C.SHIPYARD_BUILD_COST; c.isShipyard = true;
+      if (c.isShipyard || !this._isCoastal(c) || this.gold[fid] < this.K.SHIPYARD_BUILD_COST) return false;
+      this.gold[fid] -= this.K.SHIPYARD_BUILD_COST; c.isShipyard = true;
       this.techDone[fid].add('i1'); this.techCache[fid] = recomputeTech(this.techDone[fid], this.techNode);   // верфь → умение строить корабли
       return true;
     }
     if (kind === 'air') {
-      if (c.isAirport || this.gold[fid] < C.AIRPORT_BUILD_COST) return false;
-      this.gold[fid] -= C.AIRPORT_BUILD_COST; c.isAirport = true;
+      if (c.isAirport || this.gold[fid] < this.K.AIRPORT_BUILD_COST) return false;
+      this.gold[fid] -= this.K.AIRPORT_BUILD_COST; c.isAirport = true;
       this.techDone[fid].add('i8'); this.techCache[fid] = recomputeTech(this.techDone[fid], this.techNode);   // аэродром → умение строить самолёты
       return true;
     }
@@ -364,7 +364,7 @@ class Sim {
     }
     // ПВО: если воюет — иногда ставит зенитку (контра вражеской авиации)
     if (rng() < 0.25 && this.warList(fid).length > 0) {
-      const aac = mine.filter(c => (c.aa | 0) < C.AA_MAX && this.gold[fid] >= C.aaCost(c.aa) + 10);
+      const aac = mine.filter(c => (c.aa | 0) < this.K.AA_MAX && this.gold[fid] >= (this.K.AA_COST_BASE + (c.aa | 0) * this.K.AA_COST_STEP) + 10);
       if (aac.length) this.cmdBuildAA(fid, aac[(rng() * aac.length) | 0].idx);
     }
     // армия: набор, прокачка, отправка на лучшую цель
@@ -372,7 +372,7 @@ class Sim {
     const buildable = mine.filter(c => !c.occ); if (!buildable.length) return;
     const src = buildable.reduce((a, b) => b.units > a.units ? b : a);
     this.cmdBuy(fid, src.idx, 'max');
-    if (src.tier < C.MAX_TIER && this.gold[fid] >= C.upgradeCost(src.tier) + 20 && rng() < 0.4) {
+    if (src.tier < this.K.MAX_TIER && this.gold[fid] >= (this.K.UPGRADE_COST_BASE + src.tier * this.K.UPGRADE_COST_STEP) + 20 && rng() < 0.4) {
       const near = this.cities.some(c => c.owner !== fid && (c.gx - src.gx) ** 2 + (c.gz - src.gz) ** 2 < 30);
       this.cmdUpgrade(fid, src.idx, src.spec || (near ? 'atk' : 'prod')); return;
     }
@@ -476,8 +476,8 @@ class Sim {
   }
 
   // ── ресурсные потолки/притоки (учитывают tech 'prod') ──
-  manpowerCap(fid) { let m = 0; for (const c of this.cities) if (c.owner === fid) m += (C.MP_BASE + c.size * C.MP_PER_SIZE + c.tier * C.MP_PER_TIER) * (c.capital ? C.MP_CAPITAL : 1); return m * this.techMul(fid, 'prod'); }
-  manpowerRate(fid) { let r = 0; for (const c of this.cities) if (c.owner === fid) r += (C.MP_RATE_BASE + c.size * C.MP_RATE_PER_SIZE + c.tier * C.MP_RATE_PER_TIER) * (c.capital ? C.MP_CAPITAL : 1); return r * this.techMul(fid, 'prod'); }
+  manpowerCap(fid) { let m = 0; for (const c of this.cities) if (c.owner === fid) m += (this.K.MP_BASE + c.size * this.K.MP_PER_SIZE + c.tier * this.K.MP_PER_TIER) * (c.capital ? this.K.MP_CAPITAL : 1); return m * this.techMul(fid, 'prod'); }
+  manpowerRate(fid) { let r = 0; for (const c of this.cities) if (c.owner === fid) r += (this.K.MP_RATE_BASE + c.size * this.K.MP_RATE_PER_SIZE + c.tier * this.K.MP_RATE_PER_TIER) * (c.capital ? this.K.MP_CAPITAL : 1); return r * this.techMul(fid, 'prod'); }
   politRate(fid) { let n = 0, t = 0; for (const c of this.cities) if (c.owner === fid) { n++; t += c.tier; } const P = this.B.politics; return Math.min(P.rateMax, P.rateBase + n * P.perCity + t * P.perTier); }
   factionStrength(fid) { let s = 0; for (const c of this.cities) if (c.owner === fid) s += c.units + 10; return s; }
   validFaction(fid) { return Number.isInteger(fid) && fid >= 0 && fid < this.factions; }
@@ -619,22 +619,22 @@ class Sim {
   // ── команды городов (валидируются на сервере) ──
   buyAmount(c, spec) {
     const space = Math.floor(c.capacity - c.units - c.queued); if (space <= 0) return 0;
-    const cap = Math.min(space, Math.floor(this.gold[c.owner] / C.SOLDIER_PRICE), Math.floor(this.manpower[c.owner] || 0));
+    const cap = Math.min(space, Math.floor(this.gold[c.owner] / this.K.SOLDIER_PRICE), Math.floor(this.manpower[c.owner] || 0));
     if (spec === 'max') return Math.max(0, cap);
     return Math.min(parseInt(spec, 10) || 0, cap);
   }
   cmdBuy(fid, idx, spec) {
     const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ) return false;
     const amt = this.buyAmount(c, spec); if (amt <= 0) return false;
-    this.gold[fid] -= amt * C.SOLDIER_PRICE; this.manpower[fid] -= amt;
+    this.gold[fid] -= amt * this.K.SOLDIER_PRICE; this.manpower[fid] -= amt;
     c.batches.push({ count: amt, time: amt * c.trainPer, elapsed: 0 });
     return true;
   }
   cmdUpgrade(fid, idx, track) {
-    const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ || c.tier >= C.MAX_TIER) return false;
+    const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ || c.tier >= this.K.MAX_TIER) return false;
     if (!['prod', 'def', 'atk'].includes(track)) return false;
     if (c.spec && c.spec !== track) return false;
-    const cost = C.upgradeCost(c.tier);
+    const cost = this.K.UPGRADE_COST_BASE + c.tier * this.K.UPGRADE_COST_STEP;
     if (this.gold[fid] < cost) return false;
     this.gold[fid] -= cost; c.spec = track; c.tier++;
     return true;
@@ -649,7 +649,7 @@ class Sim {
     if (enemy && !this.warReady(fid, b.owner)) return false;    // нельзя нападать без войны и до конца мобилизации (WAR_PREP)
     const n = Math.floor(a.units * pct); if (n <= 0) return false;
     if (this.map) {                                            // реальная карта: отряд идёт по пути
-      if (this._squadCount(fid) >= C.MAX_SQUADS) return false; // хард-кап отрядов на фракцию
+      if (this._squadCount(fid) >= this.K.MAX_SQUADS) return false; // хард-кап отрядов на фракцию
       const path = this.findPath(fromIdx, toIdx, fid); if (!path) return false;
       a.units -= n;
       this.squads.push(new Squad(fid, n, path, this, a.atkMult));

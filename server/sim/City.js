@@ -31,17 +31,18 @@ class City {
     // tech-акксессоры внедряет Sim; по умолчанию ×1
     this.tm = o.tm || ONE;              // techMul(owner, branch)
     this.tv = o.tv || ONE;              // techVal(owner, key)
+    this.K = o.K || C;                  // константы комнаты (balance.tune); фолбэк — код-дефолты
   }
 
-  get capacity()    { let c = 32 + this.size * 24; if (this.spec === 'def') c *= 1 + 0.22 * this.tier; if (this.boosted) c *= 1.25; return c * this.tv(this.owner, 'cc'); }
-  get goldInterval(){ let g = 4; if (this.spec === 'prod') g *= Math.pow(0.68, this.tier); if (this.boosted) g *= 0.75; return g / this.tm(this.owner, 'eco'); }
-  get trainPer()    { let t = 0.5 - this.size * 0.07; if (this.boosted) t *= 0.8; return t / this.tm(this.owner, 'prod'); }
+  get capacity()    { let c = this.K.CITY_CAP_BASE + this.size * this.K.CITY_CAP_PER_SIZE; if (this.spec === 'def') c *= 1 + 0.22 * this.tier; if (this.boosted) c *= 1.25; return c * this.tv(this.owner, 'cc'); }
+  get goldInterval(){ let g = this.K.CITY_GOLD_INTERVAL; if (this.spec === 'prod') g *= Math.pow(0.68, this.tier); if (this.boosted) g *= 0.75; return g / this.tm(this.owner, 'eco'); }
+  get trainPer()    { let t = this.K.CITY_TRAIN_BASE - this.size * this.K.CITY_TRAIN_PER_SIZE; if (this.boosted) t *= 0.8; return t / this.tm(this.owner, 'prod'); }
   get queued()      { return this.batches.reduce((s, b) => s + b.count, 0); }
   get defMult()     { return (1 + (this.spec === 'def' ? 0.32 * this.tier : 0)) * this.tm(this.owner, 'def'); }
   get atkMult()     { return (1 + (this.spec === 'atk' ? 0.28 * this.tier : 0)) * this.tm(this.owner, 'atk'); }
   // ⚔ башня: atk-город бьёт по врагам в радиусе (радиус/урон растут с тиром и tech)
-  get fireRange()   { return this.spec === 'atk' ? (C.TOWER_RANGE_BASE + C.TOWER_RANGE_PER * this.tier) * this.tv(this.owner, 'tr') : 0; }
-  get fireDmg()     { return (C.TOWER_DMG_BASE + this.tier) * this.tm(this.owner, 'atk') * this.tv(this.owner, 'td'); }
+  get fireRange()   { return this.spec === 'atk' ? (this.K.TOWER_RANGE_BASE + this.K.TOWER_RANGE_PER * this.tier) * this.tv(this.owner, 'tr') : 0; }
+  get fireDmg()     { return (this.K.TOWER_DMG_BASE + this.tier) * this.tm(this.owner, 'atk') * this.tv(this.owner, 'td'); }
 
   // Возвращает заработанную за тик голду (Sim начисляет владельцу).
   update(dt) {
@@ -52,8 +53,8 @@ class City {
       if (totalAtk < 0.5) { this.siege = null; }
       else {
         let dmgToCity = 0;
-        for (const p of pools) dmgToCity += p.units * p.atkMult * C.SIEGE_ATK;
-        const defDps = this.units * this.defMult * C.SIEGE_DEF;
+        for (const p of pools) dmgToCity += p.units * p.atkMult * this.K.SIEGE_ATK;
+        const defDps = this.units * this.defMult * this.K.SIEGE_DEF;
         for (const p of pools) p.units -= defDps * (p.units / totalAtk) * dt;
         this.units = Math.max(0, this.units - dmgToCity * dt);
         for (const o of Object.keys(this.siege)) if (this.siege[o].units < 0.4) delete this.siege[o];

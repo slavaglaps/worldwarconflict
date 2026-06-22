@@ -1,13 +1,12 @@
 // Чистый самолёт: летит по приказу фракции (sim.airOrder), воздушный бой (грид), бомбит по приказу.
-const C = require('./constants');
 
 let _pid = 1;
 
 class Plane {
   constructor(owner, x, z, sim) {
     this.id = _pid++;
-    this.owner = owner; this.sim = sim;
-    this.hp = C.PLANE_HP * sim.techVal(owner, 'ph');
+    this.owner = owner; this.sim = sim; this.K = sim.K;   // константы комнаты (balance.tune)
+    this.hp = this.K.PLANE_HP * sim.techVal(owner, 'ph');
     this.foe = null;
     this.x = x; this.z = z;
     this.heading = (sim.rng ? sim.rng() : 0.5) * Math.PI * 2;
@@ -28,12 +27,12 @@ class Plane {
     while (dh < -Math.PI) dh += 2 * Math.PI;
     const TURN = 1.35;
     this.heading += Math.max(-TURN * dt, Math.min(TURN * dt, dh));
-    this.x += Math.cos(this.heading) * C.PLANE_SPEED * dt;
-    this.z += Math.sin(this.heading) * C.PLANE_SPEED * dt;
+    this.x += Math.cos(this.heading) * this.K.PLANE_SPEED * dt;
+    this.z += Math.sin(this.heading) * this.K.PLANE_SPEED * dt;
     if (this.x < 0) { this.x = 0; this.heading = Math.PI - this.heading; }
-    if (this.x > C.GRID) { this.x = C.GRID; this.heading = Math.PI - this.heading; }
+    if (this.x > this.K.GRID) { this.x = this.K.GRID; this.heading = Math.PI - this.heading; }
     if (this.z < 0) { this.z = 0; this.heading = -this.heading; }
-    if (this.z > C.GRID) { this.z = C.GRID; this.heading = -this.heading; }
+    if (this.z > this.K.GRID) { this.z = this.K.GRID; this.heading = -this.heading; }
   }
 }
 
