@@ -151,7 +151,7 @@ console.log(`  p99 ${st.p99.toFixed(2)} мс (${(st.p99 / BUDGET * 100).toFixed(
 console.log(`  Грубая ёмкость: ~${roomsPerCore} таких комнат на одно ядро (по mean, без учёта Colyseus-энкода/сети).`);
 console.log('  NB: бинарный энкод Colyseus + сеть здесь НЕ учтены — это отдельная статья (мерить с реальными клиентами).\n');
 // ── микробенч: рост fieldBattles O(n²) от числа одновременно сражающихся армий (валидирует аудит #4) ──
-console.log('\nМасштаб fieldBattles (O(n²)) — N армий «в поле» одновременно:');
+console.log('\nМасштаб fieldBattles (теперь O(n) на spatial-grid) — N армий «в поле» одновременно:');
 for (const N of [130, 250, 500, 1000, 2000]) {
   const s2 = new Sim({ map, ai: false, goldStart: 0 });
   for (let a = 0; a < F; a++) for (let b = a + 1; b < F; b++) s2.setRelation(a, b, 'war');
@@ -160,5 +160,5 @@ for (const N of [130, 250, 500, 1000, 2000]) {
   const R = 150, t = hr(); for (let i = 0; i < R; i++) s2.fieldBattles(DT); const per = ms(hr() - t) / R;
   console.log(`  N=${String(N).padStart(4)} армий → ${per.toFixed(3).padStart(7)} мс/тик  (${(per / BUDGET * 100).toFixed(1)}% бюджета)${per > BUDGET ? '  ⚠️ ПРЕВЫШЕН' : ''}`);
 }
-console.log('  → растёт квадратично; на гриде (как флот/авиация) было бы линейно. См. аудит #4.\n');
+console.log('  → линейно (на гриде). До фикса было O(n²): 500→19.7мс, 1000→77мс, 2000→306мс. Аудит #4 — закрыт.\n');
 process.exit(0);

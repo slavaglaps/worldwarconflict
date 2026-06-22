@@ -8,7 +8,7 @@ const db = require('../db');            // селектор → db.pg (DATABASE_
 (async () => {
   const pool = db._pool;
   await db.getUserByName('warmup');     // дождаться авто-миграции схемы
-  await pool.query('TRUNCATE users, matches');   // чистый старт
+  await pool.query('TRUNCATE match_players, matches, users RESTART IDENTITY');   // чистый старт
 
   // 1. createUser + регистронезависимый поиск
   const alice = { id: 'u_alice', username: 'Alice', pass: 'salt:hash', wins: 0, losses: 0, rating: 1000, created: Date.now() };
@@ -35,6 +35,8 @@ const db = require('../db');            // селектор → db.pg (DATABASE_
   assert(b2.losses === 1 && b2.rating === 0, `проигравший с полом 0: losses=${b2.losses} rating=${b2.rating}`);  // 10-15 → max(0,-5)=0
   const matchN = (await pool.query('SELECT count(*)::int n FROM matches')).rows[0].n;
   assert(matchN === 1, 'матч записан (JSONB players)');
+  const mpN = (await pool.query('SELECT count(*)::int n FROM match_players')).rows[0].n;
+  assert(mpN === 2, 'участники матча записаны в match_players');
 
   // 5. leaderboard: сортировка по рейтингу
   const lb = await db.leaderboard(10);

@@ -30,9 +30,18 @@ const DDL = `
     ts      BIGINT NOT NULL,
     players JSONB  NOT NULL DEFAULT '[]'
   );
+  CREATE TABLE IF NOT EXISTS match_players (
+    id       BIGSERIAL PRIMARY KEY,
+    match_id BIGINT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    won      BOOLEAN NOT NULL DEFAULT false
+  );
+  CREATE INDEX IF NOT EXISTS match_players_user_idx ON match_players (user_id);
+  CREATE INDEX IF NOT EXISTS match_players_match_idx ON match_players (match_id);
   -- RLS вкл. без политик: закрывает публичный REST-API (anon-ключ); наш сервер (роль postgres) RLS обходит
   ALTER TABLE users   ENABLE ROW LEVEL SECURITY;
-  ALTER TABLE matches ENABLE ROW LEVEL SECURITY;`;
+  ALTER TABLE matches ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE match_players ENABLE ROW LEVEL SECURITY;`;
 let schemaP = null;
 function ensureSchema() {
   if (!schemaP) schemaP = pool.query(DDL)
@@ -77,8 +86,10 @@ module.exports = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('INSERT INTO matches (ts, players) VALUES ($1, $2)', [m.ts || Date.now(), JSON.stringify(m.players || [])]);
+      const match = await client.query('INSERT INTO matches (ts, players) VALUES ($1, $2) RETURNING id', [m.ts || Date.now(), JSON.stringify(m.players || [])]);
+      const matchId = match.rows[0].id;
       for (const p of (m.players || [])) {
+        await client.query('INSERT INTO match_players (match_id, user_id, won) VALUES ($1, $2, $3)', [matchId, p.id, !!p.won]);
         if (p.won) await client.query('UPDATE users SET wins=wins+1, rating=rating+20 WHERE id=$1', [p.id]);
         else await client.query('UPDATE users SET losses=losses+1, rating=GREATEST(0, rating-15) WHERE id=$1', [p.id]);
       }

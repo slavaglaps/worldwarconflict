@@ -29,6 +29,7 @@ class Sim {
     this.airOrder = [];                              // [fid]: {kind:'bomb',cityIdx} | {kind:'patrol',x,z} | null
     this.navalGrid = new SpatialGrid(C.SHIP_RANGE);  // O(n) морской бой
     this.airGrid = new SpatialGrid(C.PLANE_RANGE);   // O(n) воздушный бой
+    this.squadGrid = new SpatialGrid(C.FIELD_RANGE); // O(n) полевой бой
     this.adj = new Map();                            // idx -> [{to, edge}]
     this.edgeKey = new Map();                        // "a_b" -> {a,b,type,len,mult}
     this.gold = [];
@@ -111,16 +112,21 @@ class Sim {
     if (c.owner === s.owner || this.allied(s.owner, c.owner)) c.units = Math.min(c.capacity, c.units + s.fcount);
     else { c.siege = c.siege || {}; const p = c.siege[s.owner] || (c.siege[s.owner] = { units: 0, atkMult: s.atkMult }); p.units += s.fcount; p.atkMult = s.atkMult; }
   }
+  // полевой бой через spatial-grid: O(n) вместо O(n²) (как navalBattles/airBattles)
   fieldBattles(dt) {
+    this.squadGrid.clear();
+    for (const s of this.squads) this.squadGrid.insert(s, s.x, s.z);
     const R2 = C.FIELD_RANGE * C.FIELD_RANGE;
     for (const s of this.squads) {
       if (s.foe && s.foe.fcount < 0.5) s.foe = null;
       if (s.foe) continue;
-      for (const o of this.squads) {
-        if (o === s || o.owner === s.owner || this.allied(s.owner, o.owner) || !this.atWar(s.owner, o.owner)) continue;
-        const dx = s.x - o.x, dz = s.z - o.z;
-        if (dx * dx + dz * dz < R2) { s.foe = o; if (!o.foe) o.foe = s; break; }
-      }
+      let best = null, bd = R2;                                   // ближайший враг в радиусе (раньше — первый в массиве)
+      this.squadGrid.queryWithin(s.x, s.z, C.FIELD_RANGE, (o) => {
+        if (o === s || o.owner === s.owner || this.allied(s.owner, o.owner) || !this.atWar(s.owner, o.owner)) return;
+        const dx = s.x - o.x, dz = s.z - o.z, dd = dx * dx + dz * dz;
+        if (dd < bd) { bd = dd; best = o; }
+      });
+      if (best) { s.foe = best; if (!best.foe) best.foe = s; }
     }
     for (const s of this.squads) if (s.foe && s.foe.fcount >= 0.5 && s.fcount >= 0.5) s.foe.fcount -= s.fcount * s.atkMult * C.FIGHT_RATE * dt;
   }

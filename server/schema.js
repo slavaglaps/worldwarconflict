@@ -1,7 +1,9 @@
 // Состояние матча (синхронизируется Colyseus автоматически бинарными дельтами).
 // Статичные поля города (gx/gz/size/country/capital) ставятся один раз → 0 трафика/тик.
 // Динамика (owner/units/spec/tier/occ) сериализуется только при изменении.
-const { Schema, MapSchema, ArraySchema, defineTypes } = require('@colyseus/schema');
+const { Schema, MapSchema, ArraySchema, defineTypes, Encoder } = require('@colyseus/schema');
+
+Encoder.BUFFER_SIZE = Number(process.env.COLYSEUS_SCHEMA_BUFFER_SIZE || 64 * 1024);
 
 class CityState extends Schema {}
 defineTypes(CityState, {
