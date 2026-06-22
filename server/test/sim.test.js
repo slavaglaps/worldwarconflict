@@ -212,4 +212,25 @@ test('warPrep:0 → атака сразу после объявления вой
   assert(s.cmdSend(0, a.idx, b.idx, 0.5), 'атака проходит сразу');
 });
 
+group('Баланс: инъекция + пер-фракционная асимметрия');
+test('override баланса: политика + пер-фракционные старты/гарнизон/моды', () => {
+  const s = new Sim({ map, balance: {
+    politics: { warPrep: 0, costWar: 10 },
+    factionDefault: { gold: 100 },
+    factions: { 0: { gold: 999, garrisonBase: 20, mods: { atk: 2 } } },
+  } });
+  eq(s.warPrep, 0, 'warPrep из баланса');
+  eq(s.B.politics.costWar, 10, 'стоимость войны из баланса');
+  eq(s.gold[0], 999, 'фракция 0: свой стартовый голд');
+  eq(s.gold[1], 100, 'фракция 1: factionDefault голд');
+  const c0 = s.cities.find(c => c.owner === 0); assert(c0, 'у фракции 0 есть город');
+  eq(Math.round(c0.units), 20 + c0.size * 4, 'фракция 0: стартовый гарнизон по своему base');
+  near(s.techMul(0, 'atk'), 2, 0.001, 'фракция 0: атака ×2 (фракционный мод)');
+  near(s.techMul(1, 'atk'), 1, 0.001, 'фракция 1: атака ×1 (симметрия)');
+});
+test('дефолты баланса не мутируются между симами (deep-merge)', () => {
+  new Sim({ map, balance: { politics: { warPrep: 0 } } });   // если бы мутировал DEFAULTS — следующий сим сломался бы
+  eq(new Sim({ map }).warPrep, C.WAR_PREP, 'дефолтный warPrep цел');
+});
+
 summary('SERVER (sim)');

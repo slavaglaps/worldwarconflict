@@ -10,15 +10,21 @@ const { Plane } = require('./Plane');
 const { SpatialGrid } = require('./SpatialGrid');
 const { nearestWaterPoint, isWaterAt } = require('./water');
 const { NODES, NODE, recomputeTech, nodeReady } = require('./tech');
+const { makeBalance, factionBal } = require('./balance');
 
 class Sim {
   constructor(opts = {}) {
     this.map = opts.map || null;                     // реальная карта (map-data.json) или toy-мир
     this.factions = this.map ? this.map.factions.length : (opts.factions || 6);
     this.rng = opts.rng || Math.random;             // инъекция для детерминированных тестов
-    this.politStart = opts.politStart ?? C.POLIT_START;
-    this.goldStart = opts.goldStart ?? 60;
-    this.warPrep = opts.warPrep ?? C.WAR_PREP;       // секунд мобилизации перед атакой (тесты могут занулить)
+    // ── баланс: дефолты ⊕ override (opts.balance). Старые opts goldStart/politStart/warPrep — совместимы. ──
+    this.B = makeBalance(opts.balance);
+    if (opts.goldStart != null) this.B.factionDefault.gold = opts.goldStart;
+    if (opts.politStart != null) this.B.factionDefault.polit = opts.politStart;
+    if (opts.warPrep != null) this.B.politics.warPrep = opts.warPrep;
+    this.warPrep = this.B.politics.warPrep;          // секунд мобилизации перед атакой (warCountdown; тесты могут занулить)
+    this.fb = [];                                    // баланс на фракцию (factionDefault ⊕ factions[id]) — O(1) доступ
+    for (let f = 0; f < this.factions; f++) this.fb[f] = factionBal(this.B, f);
     this.aiEnabled = opts.ai ?? false;              // ИИ управляет незанятыми фракциями (вкл. для реальной игры)
     this.humanFactions = new Set();                 // обновляется комнатой; ИИ их не трогает
     this.factionTimer = [];                         // таймеры раздумий ИИ
@@ -68,7 +74,8 @@ class Sim {
         country: i % this.factions, size: 1 + (i % 3), owner: i % this.factions, capital: i < this.factions, tm, tv,
       }));
     }
-    for (let f = 0; f < this.factions; f++) { this.gold[f] = this.goldStart; this.politPts[f] = this.politStart; }
+    for (let f = 0; f < this.factions; f++) { this.gold[f] = this.fb[f].gold; this.politPts[f] = this.fb[f].polit; }
+    for (const c of this.cities) c.units = this.fb[c.owner].garrisonBase + c.size * this.fb[c.owner].garrisonPerSize;  // пер-фракционный стартовый гарнизон
     for (let f = 0; f < this.factions; f++) this.manpower[f] = this.manpowerCap(f);
   }
 
@@ -382,7 +389,7 @@ class Sim {
   }
 
   // ── технологии ──
-  techMul(o, branch) { const c = this.techCache[o]; return 1 + (c ? (c.add[branch] || 0) : 0); }   // atk/def/eco/speed/prod
+  techMul(o, branch) { const c = this.techCache[o], m = this.fb[o] ? (this.fb[o].mods[branch] || 1) : 1; return (1 + (c ? (c.add[branch] || 0) : 0)) * m; }   // atk/def/eco/speed/prod (× фракционный мод)
   techVal(o, key)    { const c = this.techCache[o]; return 1 + (c ? (c.add[key] || 0) : 0); }       // tr/td/sh/ph/sr/bd/cc
   techFlag(o, flag)  { const c = this.techCache[o]; return !!(c && c.flags.has(flag)); }
   slotCount(o)       { const c = this.techCache[o]; return c ? c.slots : 1; }
@@ -409,7 +416,7 @@ class Sim {
   // ── ресурсные потолки/притоки (учитывают tech 'prod') ──
   manpowerCap(fid) { let m = 0; for (const c of this.cities) if (c.owner === fid) m += (C.MP_BASE + c.size * C.MP_PER_SIZE + c.tier * C.MP_PER_TIER) * (c.capital ? C.MP_CAPITAL : 1); return m * this.techMul(fid, 'prod'); }
   manpowerRate(fid) { let r = 0; for (const c of this.cities) if (c.owner === fid) r += (C.MP_RATE_BASE + c.size * C.MP_RATE_PER_SIZE + c.tier * C.MP_RATE_PER_TIER) * (c.capital ? C.MP_CAPITAL : 1); return r * this.techMul(fid, 'prod'); }
-  politRate(fid) { let n = 0, t = 0; for (const c of this.cities) if (c.owner === fid) { n++; t += c.tier; } return Math.min(C.POLIT_RATE_MAX, C.POLIT_RATE_BASE + n * C.POLIT_PER_CITY + t * C.POLIT_PER_TIER); }
+  politRate(fid) { let n = 0, t = 0; for (const c of this.cities) if (c.owner === fid) { n++; t += c.tier; } const P = this.B.politics; return Math.min(P.rateMax, P.rateBase + n * P.perCity + t * P.perTier); }
   factionStrength(fid) { let s = 0; for (const c of this.cities) if (c.owner === fid) s += c.units + 10; return s; }
   validFaction(fid) { return Number.isInteger(fid) && fid >= 0 && fid < this.factions; }
   // счётчики сущностей фракции (existing + queued) — для хард-капов
@@ -427,9 +434,9 @@ class Sim {
   warCountdown(a, b) { return Math.max(0, this.warPrep - (this.time - (this.warSince[this.relKey(a, b)] || 0))); }
   warReady(a, b) { return this.atWar(a, b) && this.warCountdown(a, b) <= 0; }
   canPass(o, no) { return o === no || this.allied(o, no); }
-  setTruce(a, b) { this.truceUntil[this.relKey(a, b)] = this.time + C.TRUCE_TIME; }
+  setTruce(a, b) { this.truceUntil[this.relKey(a, b)] = this.time + this.B.politics.truceTime; }
   truceLeft(a, b) { return Math.max(0, (this.truceUntil[this.relKey(a, b)] || 0) - this.time); }
-  setPeaceCD(a, b) { this.peaceCD[this.relKey(a, b)] = this.time + C.PEACE_CD; }
+  setPeaceCD(a, b) { this.peaceCD[this.relKey(a, b)] = this.time + this.B.politics.peaceCd; }
   peaceCDLeft(a, b) { return Math.max(0, (this.peaceCD[this.relKey(a, b)] || 0) - this.time); }
   commonEnemy(a, b) { for (let f = 0; f < this.factions; f++) if (f !== a && f !== b && this.atWar(a, f) && this.atWar(b, f)) return true; return false; }
   acceptAlliance(fid, vs) { return this.commonEnemy(fid, vs) || this.rng() < 0.5; }
@@ -464,7 +471,7 @@ class Sim {
     if (byFid != null && byFid !== deadFid) {
       const g = Math.floor(this.gold[deadFid] || 0), pp = Math.floor(this.politPts[deadFid] || 0), mp = Math.floor(this.manpower[deadFid] || 0);
       this.gold[byFid] = (this.gold[byFid] || 0) + g;
-      this.politPts[byFid] = Math.min(C.POLIT_MAX, (this.politPts[byFid] || 0) + pp);
+      this.politPts[byFid] = Math.min(this.B.politics.max, (this.politPts[byFid] || 0) + pp);
       this.manpower[byFid] = Math.min(this.manpowerCap(byFid), (this.manpower[byFid] || 0) + mp);
       this.gold[deadFid] = 0; this.politPts[deadFid] = 0; this.manpower[deadFid] = 0;
     }
@@ -472,17 +479,17 @@ class Sim {
 
   // ── дипломатические команды (валидируются на сервере) ──
   cmdWar(fid, t) {
-    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || this.truceLeft(fid, t) > 0 || this.politPts[fid] < C.POLIT_WAR) return false;
-    this.politPts[fid] -= C.POLIT_WAR; this.setWar(fid, t); this.dragAlliesIntoWar(fid, t); return true;
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || this.truceLeft(fid, t) > 0 || this.politPts[fid] < this.B.politics.costWar) return false;
+    this.politPts[fid] -= this.B.politics.costWar; this.setWar(fid, t); this.dragAlliesIntoWar(fid, t); return true;
   }
   cmdAlly(fid, t) {
-    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || this.atWar(fid, t) || this.allied(fid, t) || this.politPts[fid] < C.POLIT_ALLY) return false;
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || this.atWar(fid, t) || this.allied(fid, t) || this.politPts[fid] < this.B.politics.costAlly) return false;
     if (!this.acceptAlliance(t, fid)) return false;
-    this.politPts[fid] -= C.POLIT_ALLY; this.setRelation(fid, t, 'ally'); return true;
+    this.politPts[fid] -= this.B.politics.costAlly; this.setRelation(fid, t, 'ally'); return true;
   }
   cmdBreak(fid, t) {
-    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || !this.allied(fid, t) || this.politPts[fid] < C.POLIT_BREAK) return false;
-    this.politPts[fid] -= C.POLIT_BREAK; this.setRelation(fid, t, 'neutral'); return true;
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || !this.allied(fid, t) || this.politPts[fid] < this.B.politics.costBreak) return false;
+    this.politPts[fid] -= this.B.politics.costBreak; this.setRelation(fid, t, 'neutral'); return true;
   }
   cmdSupport(fid, t) {
     if (!this.validFaction(fid) || !this.validFaction(t) || fid === t) return false;
@@ -490,17 +497,17 @@ class Sim {
     this.gold[fid] -= amt; this.gold[t] = (this.gold[t] || 0) + amt; return true;
   }
   cmdPeace(fid, t, terms = {}) {
-    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || !this.atWar(fid, t) || this.peaceCDLeft(fid, t) > 0 || this.politPts[fid] < C.POLIT_PEACE) return { ok: false };
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || !this.atWar(fid, t) || this.peaceCDLeft(fid, t) > 0 || this.politPts[fid] < this.B.politics.costPeace) return { ok: false };
     const occ = this.occCount(fid, t);
     const money = Math.max(0, Math.min(100, Number.isFinite(Number(terms.money)) ? Number(terms.money) : 0));
     const repar = Math.max(0, Math.min(100, Number.isFinite(Number(terms.repar)) ? Number(terms.repar) : 0));
     const T = { land: !!terms.land && occ > 0, money, repar, occ };
     this.setPeaceCD(fid, t);
     if (this.rng() < this.peaceAcceptChance(t, fid, T)) {
-      this.politPts[fid] -= C.POLIT_PEACE;
+      this.politPts[fid] -= this.B.politics.costPeace;
       this.resolveOccupation(fid, t, T.land ? 'keep' : 'white');
       let grab = 0; if (T.money > 0) { grab = Math.floor((this.gold[t] | 0) * T.money / 100); this.gold[t] -= grab; this.gold[fid] += grab; }
-      if (T.repar > 0) this.reparations.push({ from: t, to: fid, pct: T.repar / 100, until: this.time + C.REPARATION_TIME });
+      if (T.repar > 0) this.reparations.push({ from: t, to: fid, pct: T.repar / 100, until: this.time + this.B.politics.reparationTime });
       this.setRelation(fid, t, 'neutral'); this.setTruce(fid, t);
       return { ok: true, accepted: true, grab };
     }
@@ -534,7 +541,7 @@ class Sim {
     if (this.ships.some(s => s.hp <= 0)) this.ships = this.ships.filter(s => s.hp > 0);
     if (this.planes.some(p => p.hp <= 0)) this.planes = this.planes.filter(p => p.hp > 0);
     for (let f = 0; f < this.factions; f++) {
-      this.politPts[f] = Math.min(C.POLIT_MAX, (this.politPts[f] || 0) + this.politRate(f) * dt);
+      this.politPts[f] = Math.min(this.B.politics.max, (this.politPts[f] || 0) + this.politRate(f) * dt);
       const cap = this.manpowerCap(f);
       this.manpower[f] = Math.min(cap, (this.manpower[f] || 0) + this.manpowerRate(f) * dt);
     }
