@@ -115,8 +115,8 @@ const DEFAULTS = {
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
 // ГЛУБОКИЙ мёрж-клон: out полностью независим от base (иначе мутация this.B портит глобальный DEFAULTS).
 function deepMerge(base, ov) {
-  ov = ov || {};
   if (Array.isArray(base)) return Array.isArray(ov) ? ov.slice() : base.slice();   // массив: override заменяет целиком, иначе клон
+  if (!isObj(ov)) ov = {};                                                          // мисматч типов (примитив/массив/null где ждали объект) → игнор override, берём base (без падения на `in`)
   const out = {};
   for (const k in base) out[k] = isObj(base[k]) ? deepMerge(base[k], ov[k]) : (k in ov ? ov[k] : base[k]);
   for (const k in ov) if (!(k in base)) out[k] = ov[k];                            // новые ключи из override
@@ -124,11 +124,24 @@ function deepMerge(base, ov) {
 }
 
 // ── ВАЛИДАЦИЯ override из Directus/Supabase (защита от кривого JSON) ──────────
-// Проходим override и сверяем типы с DEFAULTS; чисел требуем КОНЕЧНЫХ и неотрицательных
-// (нет «отрицательных цен»), клампим в разумный диапазон (моды — множители [0..100]).
-// Что не того типа (строка вместо числа, NaN/Infinity, null, функция) — ДРОПАЕМ → фолбэк на дефолт.
-// Динамические секции (factions[id], свои узлы/герои) валидируются как числа/строки обобщённо.
+// Проходим override и сверяем типы со СХЕМОЙ; чисел требуем КОНЕЧНЫХ и неотрицательных
+// (нет «отрицательных цен»), клампим (моды — множители [0..100]). Не того типа (строка
+// вместо числа, NaN/Infinity, null, функция) — ДРОПАЕМ → фолбэк на дефолт.
+// Динамические секции валидируются по РЕПРЕЗЕНТАТИВНОЙ схеме (иначе строка в factions[id].mods.atk
+// или heroes.pool[*].abilities проскакивала и давала NaN в бою):
+//   tune → константы C · factions[id] → factionDefault · tech.nodes[*] → дефолт-узел/репрезентативный
+//   · heroes.pool[*] → дефолт-герой/репрезентативный.
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const REP_NODE = Object.values(DEFAULTS.tech.nodes)[0] || {};          // репрезентативный узел дерева (для кастомных узлов)
+const REP_HERO = Object.values(DEFAULTS.heroes.pool)[0] || {};         // репрезентативный герой (для кастомных героев)
+// схема для дочернего объекта по контексту (parentKey — ключ контейнера, k — ключ ребёнка)
+function childSchema(k, parentKey, d) {
+  if (k === 'tune') return C;                                          // tune ⇒ против sim/constants.js (всё числа)
+  if (parentKey === 'factions') return DEFAULTS.factionDefault;        // factions[id] ⇒ как factionDefault (mods/gold/… числовые)
+  if (parentKey === 'nodes') return (d && typeof d === 'object') ? d : REP_NODE;   // узел ⇒ свой дефолт или репрезентативный
+  if (parentKey === 'pool') return (d && typeof d === 'object') ? d : REP_HERO;     // герой ⇒ свой дефолт или репрезентативный
+  return d;
+}
 function sanitizeNode(node, def, parentKey) {
   if (Array.isArray(node)) return node.slice();                          // массивы (abilities, ids) — как есть
   const out = {};
@@ -137,15 +150,16 @@ function sanitizeNode(node, def, parentKey) {
     const d = (def && typeof def === 'object' && !Array.isArray(def)) ? def[k] : undefined;
     if (typeof v === 'number') {
       if (!Number.isFinite(v)) continue;                                 // NaN/Infinity → дроп
-      if (d !== undefined && typeof d !== 'number') continue;            // в дефолте тут НЕ число → тип не тот, дроп
+      if (d !== undefined && typeof d !== 'number') continue;            // в схеме тут НЕ число → тип не тот, дроп
       out[k] = parentKey === 'mods' ? clamp(v, 0, 100) : clamp(v, 0, 1e7);
     } else if (typeof v === 'string') {
-      if (d !== undefined && typeof d !== 'string') continue;            // ждали число/объект, пришла строка → дроп
+      if (parentKey === 'mods') continue;                               // моды — только числа
+      if (d !== undefined && typeof d !== 'string') continue;            // в схеме тут НЕ строка → дроп
       out[k] = v;
     } else if (typeof v === 'boolean') {
       out[k] = v;
     } else if (v && typeof v === 'object') {
-      out[k] = sanitizeNode(v, k === 'tune' ? C : d, k);                 // tune валидируем против констант (там всё числа → строки дропаются); прочее против DEFAULTS
+      out[k] = sanitizeNode(v, childSchema(k, parentKey, d), k);         // дочерний объект — по схеме контекста
     }
     // null / undefined / функции → дроп
   }

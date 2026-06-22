@@ -46,6 +46,17 @@ const DDL = `
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
   INSERT INTO balance (id, data) VALUES ('active', '{}') ON CONFLICT (id) DO NOTHING;
+  -- авто-ревизия: при изменении data триггер инкрементит version и обновляет updated_at,
+  -- даже если балансер в Directus меняет только JSON (наблюдаемость: видно реальную ревизию в комнате)
+  CREATE OR REPLACE FUNCTION balance_bump() RETURNS trigger AS $fn$
+  BEGIN
+    IF NEW.data IS DISTINCT FROM OLD.data THEN
+      NEW.version := COALESCE(OLD.version, 0) + 1; NEW.updated_at := now();
+    END IF;
+    RETURN NEW;
+  END; $fn$ LANGUAGE plpgsql;
+  DROP TRIGGER IF EXISTS balance_bump_trg ON balance;
+  CREATE TRIGGER balance_bump_trg BEFORE UPDATE ON balance FOR EACH ROW EXECUTE FUNCTION balance_bump();
   -- RLS вкл. без политик: закрывает публичный REST-API (anon-ключ); наш сервер (роль postgres) RLS обходит
   ALTER TABLE users         ENABLE ROW LEVEL SECURITY;
   ALTER TABLE matches       ENABLE ROW LEVEL SECURITY;
@@ -115,6 +126,13 @@ module.exports = {
     await ensureSchema();
     const { rows } = await pool.query('SELECT username, wins, losses, rating FROM users ORDER BY rating DESC, username ASC LIMIT $1', [n | 0 || 10]);
     return rows.map((r) => ({ username: r.username, wins: r.wins, losses: r.losses, rating: r.rating }));
+  },
+  // строка активного баланса. ensureSchema() ГАРАНТИРУЕТ существование таблицы (на свежей БД
+  // balance-store больше не падает с relation "balance" does not exist → дефолты).
+  async getBalanceRow() {
+    await ensureSchema();
+    const { rows } = await pool.query("SELECT data, version, updated_at FROM balance WHERE id = 'active'");
+    return rows[0] || null;
   },
   async _flush() { /* в Postgres коммит синхронный — нечего сбрасывать */ },
   async close() { await pool.end(); },   // graceful shutdown

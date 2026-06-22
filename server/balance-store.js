@@ -16,10 +16,9 @@ let timer = null;
 async function refresh() {
   if (!process.env.DATABASE_URL) return cache;               // dev/тесты без БД → чистые дефолты
   try {
-    const pool = require('./db')._pool;                      // db.pg (DATABASE_URL задан)
-    if (!pool) return cache;
-    const { rows } = await pool.query("SELECT data, version, updated_at FROM balance WHERE id = 'active'");
-    const row = rows[0];
+    const db = require('./db');                              // db.pg (DATABASE_URL задан)
+    if (typeof db.getBalanceRow !== 'function') return cache;
+    const row = await db.getBalanceRow();                    // ensureSchema() ВНУТРИ → на свежей БД таблица создаётся (не «relation does not exist»)
     const data = row && row.data;
     const raw = (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
     cache = sanitizeOverride(raw);                           // ВАЛИДАЦИЯ: дропаем кривые типы, клампим числа (нет отрицательных цен/NaN/огромных значений)

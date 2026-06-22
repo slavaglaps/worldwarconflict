@@ -571,13 +571,13 @@ const GRID=256, TILE=1;
 const CITY_SCALE=2;   // визуальный масштаб построек города
 let MAX_TIER=3, SOLDIER_PRICE=4;
 // 👥 манпауэр — лимит армии от городов: наём солдат и постройка техники тратят его, копится со временем до потолка
-const MP_BASE=20, MP_PER_SIZE=12, MP_PER_TIER=12;               // потолок на город
-const MP_RATE_BASE=0.4, MP_RATE_PER_SIZE=0.15, MP_RATE_PER_TIER=0.2; // регенерация/с на город
-const MP_CAPITAL=1.6;                                           // столица даёт больше (население)
+let MP_BASE=20, MP_PER_SIZE=12, MP_PER_TIER=12;               // потолок на город
+let MP_RATE_BASE=0.4, MP_RATE_PER_SIZE=0.15, MP_RATE_PER_TIER=0.2; // регенерация/с на город
+let MP_CAPITAL=1.6;                                           // столица даёт больше (население)
 let SHIP_MP=20, PLANE_MP=25;                                  // манпауэр за корабль/самолёт
 let manpower=[];
 // ⚔ обстрел из города (ветка atk): бьёт по врагам в радиусе; радиус/урон растут с тиром
-const TOWER_FIRE_CD=1.1, TOWER_DMG_BASE=3, TOWER_RANGE_BASE=8, TOWER_RANGE_PER=4;
+let TOWER_FIRE_CD=1.1, TOWER_DMG_BASE=3, TOWER_RANGE_BASE=8, TOWER_RANGE_PER=4;
 const SPEC={
   prod:{letter:'Э',icon:'💰',name:'Экономика',color:'#7bdc6a'},
   def :{letter:'О',icon:'🛡',name:'Оборона',  color:'#4fd4d4'},
@@ -1018,11 +1018,11 @@ let PLANE_SPEED=13, PLANE_COST=55, PLANE_BUILD_TIME=7, PLANE_HP=22, PLANE_DMG=11
 const PLANE_ALT=4.5;  // высота полёта — чуть выше самых высоких городов
 const PLANE_SCALE=5;  // размер самолёта
 // бомбёжка городов: самолёт кружит над вражеским городом и сбрасывает бомбы
-const PLANE_BOMB_DMG=4, PLANE_BOMB_CD=0.7;       // урон бомбы / кулдаун сброса
+let PLANE_BOMB_DMG=4, PLANE_BOMB_CD=0.7;       // урон бомбы / кулдаун сброса
 const PLANE_TURN=1.35, PLANE_BOMB_RANGE=6, PLANE_EGRESS=15; // вираж (рад/с), радиус сброса, дальность отхода для разворота
 let airOrder=[];                                  // [fid]: {kind:'bomb'|'patrol', city, x, z} — приказ авиации (из аэропорта)
 // 🚀 зенитки (ПВО города): сбивают вражеские самолёты в радиусе, выбиваются бомбёжкой/обстрелом
-const AA_RANGE=15, AA_CD=0.9, AA_DMG=3, AA_MAX=8;        // радиус, кулдаун залпа (с), урон/ствол за залп, лимит на город
+let AA_RANGE=15, AA_CD=0.9, AA_DMG=3, AA_MAX=8;        // радиус, кулдаун залпа (с), урон/ствол за залп, лимит на город
 let AA_COST_BASE=30, AA_COST_STEP=10, AA_MP=4;         // стоимость очередной зенитки (растёт) + манпауэр
 const AA_KILL_CHANCE=0.5;                                 // шанс выбить 1 зенитку при попадании бомбы/ракеты по городу
 const AA_INTERCEPT=0.18;                                  // шанс одного ствола сбить входящую ракету/бомбу (суммарно по числу зениток)
@@ -1507,7 +1507,7 @@ function buildClouds(){
 const SQUAD_SPEED=4.0, PASS_MULT=0.5, FERRY_MULT=0.7, MAX_LINK=48; // карта ×2: дистанции вдвое больше
 // бои во времени: урон/сек на бойца (поле, штурм, оборона города)
 // оборона города выигрывает за счёт defMult-спеков и подкреплений, не скрытым бонусом
-const FIGHT_RATE=0.30, SIEGE_ATK=0.30, SIEGE_DEF=0.30;
+let FIGHT_RATE=0.30, SIEGE_ATK=0.30, SIEGE_DEF=0.30;
 const EDGES=[], ADJ=new Map(), EDGE_BY_KEY=new Map();
 const CITY_INDEX_BY_NAME={}; CITY_LIST.forEach((c,i)=>CITY_INDEX_BY_NAME[c[0]]=i);
 // ключевые морские пути: Ла-Манш, Ирландское море, Балтика, Адриатика
@@ -4652,6 +4652,14 @@ requestAnimationFrame(loop);
         if(K.AA_COST_BASE!=null)AA_COST_BASE=K.AA_COST_BASE; if(K.AA_COST_STEP!=null)AA_COST_STEP=K.AA_COST_STEP; if(K.AA_MP!=null)AA_MP=K.AA_MP;
         if(K.SHIPYARD_BUILD_COST!=null)SHIPYARD_BUILD_COST=K.SHIPYARD_BUILD_COST; if(K.AIRPORT_BUILD_COST!=null)AIRPORT_BUILD_COST=K.AIRPORT_BUILD_COST;
         if(K.UPGRADE_COST_BASE!=null)UPGRADE_COST_BASE=K.UPGRADE_COST_BASE; if(K.UPGRADE_COST_STEP!=null)UPGRADE_COST_STEP=K.UPGRADE_COST_STEP;
+        // юнит-статы + манпауэр-формула + бой/ПВО/башни — для локального показа/оценок (на сервере авторитетно; движение/координатно-зависимые конст. не синкаем)
+        if(K.SHIP_HP!=null)SHIP_HP=K.SHIP_HP; if(K.SHIP_DMG!=null)SHIP_DMG=K.SHIP_DMG;
+        if(K.PLANE_HP!=null)PLANE_HP=K.PLANE_HP; if(K.PLANE_DMG!=null)PLANE_DMG=K.PLANE_DMG; if(K.PLANE_BOMB_DMG!=null)PLANE_BOMB_DMG=K.PLANE_BOMB_DMG; if(K.PLANE_BOMB_CD!=null)PLANE_BOMB_CD=K.PLANE_BOMB_CD;
+        if(K.MP_BASE!=null)MP_BASE=K.MP_BASE; if(K.MP_PER_SIZE!=null)MP_PER_SIZE=K.MP_PER_SIZE; if(K.MP_PER_TIER!=null)MP_PER_TIER=K.MP_PER_TIER;
+        if(K.MP_RATE_BASE!=null)MP_RATE_BASE=K.MP_RATE_BASE; if(K.MP_RATE_PER_SIZE!=null)MP_RATE_PER_SIZE=K.MP_RATE_PER_SIZE; if(K.MP_RATE_PER_TIER!=null)MP_RATE_PER_TIER=K.MP_RATE_PER_TIER; if(K.MP_CAPITAL!=null)MP_CAPITAL=K.MP_CAPITAL;
+        if(K.TOWER_FIRE_CD!=null)TOWER_FIRE_CD=K.TOWER_FIRE_CD; if(K.TOWER_DMG_BASE!=null)TOWER_DMG_BASE=K.TOWER_DMG_BASE; if(K.TOWER_RANGE_BASE!=null)TOWER_RANGE_BASE=K.TOWER_RANGE_BASE; if(K.TOWER_RANGE_PER!=null)TOWER_RANGE_PER=K.TOWER_RANGE_PER;
+        if(K.AA_RANGE!=null)AA_RANGE=K.AA_RANGE; if(K.AA_CD!=null)AA_CD=K.AA_CD; if(K.AA_DMG!=null)AA_DMG=K.AA_DMG; if(K.AA_MAX!=null)AA_MAX=K.AA_MAX;
+        if(K.FIGHT_RATE!=null)FIGHT_RATE=K.FIGHT_RATE; if(K.SIEGE_ATK!=null)SIEGE_ATK=K.SIEGE_ATK; if(K.SIEGE_DEF!=null)SIEGE_DEF=K.SIEGE_DEF;
       }
       // перерисовать UI, где показаны эти числа (дипломатия/политика/панель/кнопка мира)
       try{ const pp=document.getElementById('peacePropose'); if(pp)pp.textContent=`Предложить мир (${POLIT_PEACE}🏛)`;
