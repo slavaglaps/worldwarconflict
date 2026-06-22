@@ -38,19 +38,26 @@ const DDL = `
   );
   CREATE INDEX IF NOT EXISTS match_players_user_idx ON match_players (user_id);
   CREATE INDEX IF NOT EXISTS match_players_match_idx ON match_players (match_id);
-  -- баланс игры: строка id='active', data = JSON-override поверх код-дефолтов (правится в Studio/Directus)
+  -- баланс игры: строка id='active'. Override разбит по СЕКЦИЯМ-полям (удобно править в Directus,
+  -- у каждого своё описание/шаблон). Сервер мёржит секции в один override (legacy data — снизу, back-compat).
   CREATE TABLE IF NOT EXISTS balance (
     id         TEXT PRIMARY KEY,
     data       JSONB       NOT NULL DEFAULT '{}',
     version    INTEGER     NOT NULL DEFAULT 1,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
+  ALTER TABLE balance ADD COLUMN IF NOT EXISTS politics JSONB;   -- сроки/стоимости/шансы дипломатии (+peace-формула)
+  ALTER TABLE balance ADD COLUMN IF NOT EXISTS tune     JSONB;   -- юниты/экономика/бой (override sim/constants.js по имени)
+  ALTER TABLE balance ADD COLUMN IF NOT EXISTS ai       JSONB;   -- поведение ботов
+  ALTER TABLE balance ADD COLUMN IF NOT EXISTS factions JSONB;   -- factionDefault + пер-страновая асимметрия
+  ALTER TABLE balance ADD COLUMN IF NOT EXISTS tech     JSONB;   -- {nodes:{...}} дерево технологий
+  ALTER TABLE balance ADD COLUMN IF NOT EXISTS heroes   JSONB;   -- {perFaction,maxSlots,pool:{...}} герои
   INSERT INTO balance (id, data) VALUES ('active', '{}') ON CONFLICT (id) DO NOTHING;
-  -- авто-ревизия: при изменении data триггер инкрементит version и обновляет updated_at,
-  -- даже если балансер в Directus меняет только JSON (наблюдаемость: видно реальную ревизию в комнате)
+  -- авто-ревизия: при изменении ЛЮБОЙ секции триггер инкрементит version + updated_at (видно реальную ревизию в комнате)
   CREATE OR REPLACE FUNCTION balance_bump() RETURNS trigger AS $fn$
   BEGIN
-    IF NEW.data IS DISTINCT FROM OLD.data THEN
+    IF ROW(NEW.data, NEW.politics, NEW.tune, NEW.ai, NEW.factions, NEW.tech, NEW.heroes)
+       IS DISTINCT FROM ROW(OLD.data, OLD.politics, OLD.tune, OLD.ai, OLD.factions, OLD.tech, OLD.heroes) THEN
       NEW.version := COALESCE(OLD.version, 0) + 1; NEW.updated_at := now();
     END IF;
     RETURN NEW;
@@ -131,7 +138,7 @@ module.exports = {
   // balance-store больше не падает с relation "balance" does not exist → дефолты).
   async getBalanceRow() {
     await ensureSchema();
-    const { rows } = await pool.query("SELECT data, version, updated_at FROM balance WHERE id = 'active'");
+    const { rows } = await pool.query("SELECT data, politics, tune, ai, factions, tech, heroes, version, updated_at FROM balance WHERE id = 'active'");
     return rows[0] || null;
   },
   async _flush() { /* в Postgres коммит синхронный — нечего сбрасывать */ },

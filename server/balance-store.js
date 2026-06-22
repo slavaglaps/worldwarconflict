@@ -19,9 +19,23 @@ async function refresh() {
     const db = require('./db');                              // db.pg (DATABASE_URL задан)
     if (typeof db.getBalanceRow !== 'function') return cache;
     const row = await db.getBalanceRow();                    // ensureSchema() ВНУТРИ → на свежей БД таблица создаётся (не «relation does not exist»)
-    const data = row && row.data;
-    const raw = (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
-    cache = sanitizeOverride(raw);                           // ВАЛИДАЦИЯ: дропаем кривые типы, клампим числа (нет отрицательных цен/NaN/огромных значений)
+    // override = мёрж СЕКЦИЙ-полей (politics/tune/ai/factions/tech/heroes); legacy `data` — снизу (back-compat)
+    const ov = {};
+    if (row) {
+      if (row.data && typeof row.data === 'object' && !Array.isArray(row.data)) Object.assign(ov, row.data);
+      for (const sec of ['politics', 'tune', 'ai', 'tech', 'heroes']) {
+        const v = row[sec];
+        if (v && typeof v === 'object' && !Array.isArray(v)) ov[sec] = v;   // секция перекрывает целиком
+      }
+      // секция factions = {factionDefault:{общие старты}, "<id>":{асимметрия страны}} → раскладываем по override
+      const fs = row.factions;
+      if (fs && typeof fs === 'object' && !Array.isArray(fs)) {
+        if (fs.factionDefault && typeof fs.factionDefault === 'object') ov.factionDefault = fs.factionDefault;
+        const per = {}; for (const k in fs) if (k !== 'factionDefault') per[k] = fs[k];
+        if (Object.keys(per).length) ov.factions = per;
+      }
+    }
+    cache = sanitizeOverride(ov);                            // ВАЛИДАЦИЯ: дропаем кривые типы, клампим числа (нет отрицательных цен/NaN/огромных значений)
     meta = { version: row && Number.isFinite(+row.version) ? +row.version : 0, updatedAt: row ? row.updated_at : null };
     if (!ok) console.log(`[balance] override загружен из Supabase (${Object.keys(cache).length} секций, version=${meta.version})`);
     ok = true;
