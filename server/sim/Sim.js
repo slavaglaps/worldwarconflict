@@ -323,31 +323,31 @@ class Sim {
       if (this.humanFactions.has(fid)) continue;
       if (!this.cities.some(c => c.owner === fid)) continue;               // выбыла
       this.factionTimer[fid] = (this.factionTimer[fid] || 0) + dt;
-      if (this.factionTimer[fid] >= 4.5) { this.factionTimer[fid] = 0; this._aiAct(fid); }
+      if (this.factionTimer[fid] >= this.B.ai.thinkInterval) { this.factionTimer[fid] = 0; this._aiAct(fid); }
     }
   }
   _aiAct(fid) {
     const mine = this.cities.filter(c => c.owner === fid); if (!mine.length) return;
-    const rng = this.rng, myStr = this.factionStrength(fid);
+    const rng = this.rng, myStr = this.factionStrength(fid), A = this.B.ai;
     // мир: проигрывает или война затянулась → белый мир с ИИ
     for (let f = 0; f < this.factions; f++) {
       if (f === fid || !this.atWar(fid, f)) continue;
-      const losing = myStr < this.factionStrength(f) * 0.4;
-      const exhaust = Math.max(0, (this.time - (this.warSince[this.relKey(fid, f)] || this.time)) - 90) / 300;
-      if (((losing && rng() < 0.3) || rng() < exhaust * 0.18) && !this.humanFactions.has(f)) {
+      const losing = myStr < this.factionStrength(f) * A.losingRatio;
+      const exhaust = Math.max(0, (this.time - (this.warSince[this.relKey(fid, f)] || this.time)) - A.exhaustWindow) / A.exhaustDivisor;
+      if (((losing && rng() < A.peaceLosingProb) || rng() < exhaust * A.peaceExhaustMult) && !this.humanFactions.has(f)) {
         this.resolveOccupation(fid, f, 'white'); this.setRelation(fid, f, 'neutral'); this.setTruce(fid, f);
       }
     }
     // война слабому соседу
-    if (this.warList(fid).length === 0 && rng() < 0.6) {
+    if (this.warList(fid).length === 0 && rng() < A.warProb) {
       const nb = new Set();
       for (const c of mine) for (const n of (this.adj.get(c.idx) || [])) { const o = this.cities[n.to].owner; if (o !== fid) nb.add(o); }
       let target = null, ts = 1e9;
       for (const o of nb) { if (this.relation(fid, o) !== 'neutral' || this.truceLeft(fid, o) > 0) continue; const st = this.factionStrength(o); if (st < ts) { ts = st; target = o; } }
-      if (target != null && myStr > ts * 0.7) { this.setWar(fid, target); this.dragAlliesIntoWar(fid, target); }
+      if (target != null && myStr > ts * A.warStrengthRatio) { this.setWar(fid, target); this.dragAlliesIntoWar(fid, target); }
     }
     // союз с соседом против общего врага
-    if (this.allyList(fid).length < 2 && rng() < 0.05) {
+    if (this.allyList(fid).length < A.allyCap && rng() < A.allyProb) {
       const nbs = [];
       for (const c of mine) for (const n of (this.adj.get(c.idx) || [])) { const o = this.cities[n.to].owner; if (o !== fid && this.relation(fid, o) === 'neutral' && this.commonEnemy(fid, o) && !nbs.includes(o)) nbs.push(o); }
       if (nbs.length) this.setRelation(fid, nbs[(rng() * nbs.length) | 0], 'ally');
@@ -355,28 +355,28 @@ class Sim {
     // исследования: занять слоты (приоритет — слоты/анлоки/дёшево)
     if (this.techRes[fid].length < this.slotCount(fid)) {
       const avail = this.techNodeList.filter(n => !this.techHas(fid, n.id) && !this.techRes[fid].some(r => r.id === n.id) && nodeReady(this.techDone[fid], n) && this.gold[fid] >= n.g);
-      if (avail.length && rng() < 0.5) {
-        const prio = n => (n.slot ? 3 : 0) + (n.u ? 2 : 0);
+      if (avail.length && rng() < A.researchProb) {
+        const prio = n => (n.slot ? A.techPrioSlot : 0) + (n.u ? A.techPrioUnlock : 0);
         avail.sort((a, b) => prio(b) - prio(a) || a.g - b.g);
         const pick = avail[0]; this.gold[fid] -= pick.g; this.techRes[fid].push({ id: pick.id, t: 0 });
-        if (rng() < 0.5) return;
+        if (rng() < A.researchEarlyExit) return;
       }
     }
     // ПВО: если воюет — иногда ставит зенитку (контра вражеской авиации)
-    if (rng() < 0.25 && this.warList(fid).length > 0) {
-      const aac = mine.filter(c => (c.aa | 0) < this.K.AA_MAX && this.gold[fid] >= (this.K.AA_COST_BASE + (c.aa | 0) * this.K.AA_COST_STEP) + 10);
+    if (rng() < A.aaProb && this.warList(fid).length > 0) {
+      const aac = mine.filter(c => (c.aa | 0) < this.K.AA_MAX && this.gold[fid] >= (this.K.AA_COST_BASE + (c.aa | 0) * this.K.AA_COST_STEP) + A.aaGoldBuffer);
       if (aac.length) this.cmdBuildAA(fid, aac[(rng() * aac.length) | 0].idx);
     }
     // армия: набор, прокачка, отправка на лучшую цель
-    if (this.squads.filter(s => s.owner === fid).length > 6) return;
+    if (this.squads.filter(s => s.owner === fid).length > A.squadCap) return;
     const buildable = mine.filter(c => !c.occ); if (!buildable.length) return;
     const src = buildable.reduce((a, b) => b.units > a.units ? b : a);
     this.cmdBuy(fid, src.idx, 'max');
-    if (src.tier < this.K.MAX_TIER && this.gold[fid] >= (this.K.UPGRADE_COST_BASE + src.tier * this.K.UPGRADE_COST_STEP) + 20 && rng() < 0.4) {
-      const near = this.cities.some(c => c.owner !== fid && (c.gx - src.gx) ** 2 + (c.gz - src.gz) ** 2 < 30);
+    if (src.tier < this.K.MAX_TIER && this.gold[fid] >= (this.K.UPGRADE_COST_BASE + src.tier * this.K.UPGRADE_COST_STEP) + A.upgradeGoldBuffer && rng() < A.upgradeProb) {
+      const near = this.cities.some(c => c.owner !== fid && (c.gx - src.gx) ** 2 + (c.gz - src.gz) ** 2 < A.nearRadius2);
       this.cmdUpgrade(fid, src.idx, src.spec || (near ? 'atk' : 'prod')); return;
     }
-    if (src.units < 14) return;
+    if (src.units < A.minArmy) return;
     const cand = new Map();
     for (const t of this.cities) {
       if (t.owner === fid) continue;
@@ -390,12 +390,12 @@ class Sim {
     let best = null, bs = 1e9;
     for (const { eff, time } of cand.values()) {
       const sieging = eff.siege && eff.siege[fid] ? eff.siege[fid].units : 0;
-      const sc = time * 2.2 + (eff.units * eff.defMult - sieging) * 1.5;
+      const sc = time * A.targetTimeWeight + (eff.units * eff.defMult - sieging) * A.targetDefWeight;
       if (sc < bs) { bs = sc; best = eff; }
     }
     if (!best) return;
-    const n = Math.floor(src.units * 0.6), ongoing = best.siege && best.siege[fid];
-    if (n > best.units * best.defMult * 1.3 + 4 || (ongoing && n > 6)) {
+    const n = Math.floor(src.units * A.sendFraction), ongoing = best.siege && best.siege[fid];
+    if (n > best.units * best.defMult * A.attackOverkill + A.attackBuffer || (ongoing && n > A.ongoingSiegeMin)) {
       const path = this.findPath(src.idx, best.idx, fid);
       if (path) { src.units -= n; this.squads.push(new Squad(fid, n, path, this, src.atkMult)); }
     }

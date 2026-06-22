@@ -72,6 +72,25 @@ const DEFAULTS = {
   //   TOWER_FIRE_CD/TOWER_DMG_BASE/TOWER_RANGE_BASE/TOWER_RANGE_PER · MAX_SHIPS/MAX_PLANES/MAX_SQUADS.
   tune: {},
 
+  // ── ИИ — поведение незанятых фракций (тайминги/пороги/вероятности/веса). Меняет «характер» ботов.
+  ai: {
+    thinkInterval: 4.5,                          // как часто бот «думает» (с)
+    losingRatio: 0.4,                            // «проигрываю», если сила < врага × этого
+    exhaustWindow: 90, exhaustDivisor: 300,      // усталость войны: (возраст войны − window)/divisor
+    peaceLosingProb: 0.3, peaceExhaustMult: 0.18, // шанс замириться (проигрывая / от усталости×mult)
+    warProb: 0.6, warStrengthRatio: 0.7,         // шанс начать войну / нужный перевес силы для атаки
+    allyCap: 2, allyProb: 0.05,                  // лимит союзов / шанс искать союз
+    researchProb: 0.5, researchEarlyExit: 0.5,   // шанс исследовать / завершить ход после
+    techPrioSlot: 3, techPrioUnlock: 2,          // веса приоритета техов (слот-узлы / анлоки)
+    aaProb: 0.25, aaGoldBuffer: 10,              // шанс ставить ПВО / запас голды сверх цены
+    squadCap: 6,                                 // не набирает армию, если отрядов больше
+    upgradeProb: 0.4, upgradeGoldBuffer: 20, nearRadius2: 30, // шанс/запас апгрейда / радиус² «враг рядом»
+    minArmy: 14,                                 // минимум юнитов в городе для атаки
+    targetTimeWeight: 2.2, targetDefWeight: 1.5, // веса выбора цели (дальность / оборона)
+    sendFraction: 0.6,                           // доля армии сильнейшего города в атаку
+    attackOverkill: 1.3, attackBuffer: 4, ongoingSiegeMin: 6, // порог «хватит сил» / минимум для добивания осады
+  },
+
   // ── СТАРТ + АСИММЕТРИЯ по фракциям ──
   // factionDefault применяется ко всем странам; factions[id] переопределяет конкретную.
   factionDefault: {
