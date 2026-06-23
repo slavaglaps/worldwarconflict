@@ -1,6 +1,11 @@
 # dependencies
 node_modules/
 
+# прод-сборка клиента (esbuild) КОММИТИТСЯ (статик-хостинг без билд-шага серует dist/ напрямую).
+# Перед пушем: `node scripts/build.js`. Свежесть проверяет server/test/build-fresh.test.js (валит npm test, если устарела).
+# Сорсмапы не коммитим (жирные; нужны только для локального дебага).
+tiny-world-builder/dist/*.map
+
 # os
 .DS_Store
 
@@ -14,3 +19,11 @@ server/data/
 .env
 .env.local
 .env.*.local
+
+# local editor/agent config — не часть игры
+.claude/
+
+# бизнес-документы (контракт) — не относятся к репозиторию игры
+docs/
+banamind_shams_contract_*
+scripts/export_contract_docx.py

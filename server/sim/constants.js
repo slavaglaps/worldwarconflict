@@ -12,6 +12,7 @@ module.exports = {
   MP_RATE_BASE: 0.4, MP_RATE_PER_SIZE: 0.15, MP_RATE_PER_TIER: 0.2, // регенерация/с
   MP_CAPITAL: 1.6,                                       // столица — больше населения
   SHIP_MP: 20, PLANE_MP: 25, SOLDIER_MP: 1,             // манпауэр за единицу (солдат = 1)
+  HERO_SUMMON_MP: 30,                                   // 🎖 манпауэр за призыв героя в свободный слот
 
   // ⚓ флот
   SHIP_SPEED: 6, SHIP_COST: 40, SHIP_BUILD_TIME: 6, SHIP_HP: 30, SHIP_DMG: 8, SHIP_RANGE: 2.2, SHIP_ATTACK_RANGE: 16,
@@ -25,8 +26,8 @@ module.exports = {
   SHIP_MISSILE_DMG: 5, SHIP_FIRE_CD: 1.8,
   // 💣 бомбёжка городов авиацией (нужен tech planeBomb)
   PLANE_BOMB_DMG: 4, PLANE_BOMB_CD: 0.7, PLANE_BOMB_RANGE: 6,
-  // ⚔ башни atk-городов
-  TOWER_FIRE_CD: 1.1, TOWER_DMG_BASE: 3, TOWER_RANGE_BASE: 8, TOWER_RANGE_PER: 4,
+  // ⚔ башни atk-городов (TOWER_* — точечная оборона; CITY_BOMBARD_RANGE — осадный обстрел вражеских городов, дотягивается до соседей: медиана дистанций ≈9)
+  TOWER_FIRE_CD: 1.1, TOWER_DMG_BASE: 3, TOWER_RANGE_BASE: 8, TOWER_RANGE_PER: 4, CITY_BOMBARD_RANGE: 13,
   // 🛡 ПВО городов
   AA_RANGE: 15, AA_CD: 0.9, AA_DMG: 3, AA_MAX: 8, AA_COST_BASE: 30, AA_COST_STEP: 10, AA_MP: 4,
   AA_INTERCEPT: 0.18,      // шанс ОДНОГО ствола сбить входящую бомбу/ракету (суммарно по числу зениток)

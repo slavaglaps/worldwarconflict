@@ -1,7 +1,10 @@
 // Водный грид (256×256, упакован битами) — извлечён из game.html. Для движения кораблей.
 const data = require('./water-data.json');
 const N = data.GRID;
-const buf = Buffer.from(data.water, 'base64');
+// base64 → байты: Node (Buffer) ИЛИ браузер (atob → Uint8Array). Оба индексируются buf[i].
+const buf = (typeof Buffer !== 'undefined')
+  ? Buffer.from(data.water, 'base64')
+  : (() => { const bin = atob(data.water), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; })();
 
 function isWaterAt(x, z) {
   const xi = Math.round(x), zi = Math.round(z);

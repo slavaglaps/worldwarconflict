@@ -8,7 +8,9 @@ node_modules/
 *.log
 /.playwright-mcp
 
-dist/
+# dist/ КОММИТИТСЯ (статик-хостинг серует прод-бандл напрямую); игнорим только жирные сорсмапы.
+# Сборка: `node scripts/build.js` из корня. Свежесть: server/test/build-fresh.test.js.
+dist/*.map
 *.zip
 
 # Local Netlify folder

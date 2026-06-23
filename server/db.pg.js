@@ -56,10 +56,9 @@ const DDL = `
   -- авто-ревизия: при изменении ЛЮБОЙ секции триггер инкрементит version + updated_at (видно реальную ревизию в комнате)
   CREATE OR REPLACE FUNCTION balance_bump() RETURNS trigger AS $fn$
   BEGIN
-    IF ROW(NEW.data, NEW.politics, NEW.tune, NEW.ai, NEW.factions, NEW.tech, NEW.heroes)
-       IS DISTINCT FROM ROW(OLD.data, OLD.politics, OLD.tune, OLD.ai, OLD.factions, OLD.tech, OLD.heroes) THEN
-      NEW.version := COALESCE(OLD.version, 0) + 1; NEW.updated_at := now();
-    END IF;
+    -- любая правка строки (вкл. плоские колонки формы politics/tune/ai) → ревизия растёт.
+    -- сервер строку НЕ обновляет (только читает) → апдейты приходят только из Directus = реальные правки.
+    NEW.version := COALESCE(OLD.version, 0) + 1; NEW.updated_at := now();
     RETURN NEW;
   END; $fn$ LANGUAGE plpgsql;
   DROP TRIGGER IF EXISTS balance_bump_trg ON balance;
@@ -138,7 +137,7 @@ module.exports = {
   // balance-store больше не падает с relation "balance" does not exist → дефолты).
   async getBalanceRow() {
     await ensureSchema();
-    const { rows } = await pool.query("SELECT data, politics, tune, ai, factions, tech, heroes, version, updated_at FROM balance WHERE id = 'active'");
+    const { rows } = await pool.query("SELECT * FROM balance WHERE id = 'active'");   // * — чтобы попали ПЛОСКИЕ колонки формы (politics/tune/ai как отдельные поля Directus)
     return rows[0] || null;
   },
   async _flush() { /* в Postgres коммит синхронный — нечего сбрасывать */ },

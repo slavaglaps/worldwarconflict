@@ -105,13 +105,17 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
     assert(attacked, 'атака состоялась (отряд создан / осада / падение гарнизона / захват)');
   });
 
-  await testAsync('ФЛОТ: верфь в прибрежном городе → корабль строится', async () => {
+  await testAsync('ФЛОТ: верфь — отдельный город рядом → корабль строится', async () => {
     const yc = coastalCity(FR); assert(yc != null, 'есть прибрежный город');
+    const n0 = rFR.state.cities.size;
     rFR.send('yard', { city: yc, kind: 'ship' });
-    await sleep(600);
-    eq(rFR.state.cities.get(String(yc)).shipyard, 1, 'верфь построена');
+    await sleep(700);
+    assert(rFR.state.cities.size > n0, 'появился отдельный город-верфь');
+    let yard = null; rFR.state.cities.forEach((c, k) => { if (+k >= n0 && c.shipyard === 1) yard = +k; });
+    assert(yard != null, 'новая верфь-город со флагом shipyard');
+    eq(rFR.state.cities.get(String(yc)).shipyard, 0, 'родитель остался обычным городом');
     const before = ships(rFR, FR);
-    rFR.send('bship', { city: yc }); rFR.send('bship', { city: yc });
+    rFR.send('bship', { city: yard }); rFR.send('bship', { city: yard });
     for (let i = 0; i < 18 && ships(rFR, FR) <= before; i++) await sleep(700);
     gt(ships(rFR, FR), before, 'корабль заспавнился');
   });
@@ -124,13 +128,17 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
     assert(rFR.state.ships.get(id) && rFR.state.ships.get(id).x !== x0, 'корабль сдвинулся');
   });
 
-  await testAsync('АВИАЦИЯ: аэродром в любом городе → самолёт строится', async () => {
+  await testAsync('АВИАЦИЯ: аэродром — отдельный город рядом → самолёт строится', async () => {
     const ac = own(FR)[1];
+    const n0 = rFR.state.cities.size;
     rFR.send('yard', { city: ac, kind: 'air' });
-    await sleep(600);
-    eq(rFR.state.cities.get(String(ac)).airport, 1, 'аэродром построен');
+    await sleep(700);
+    assert(rFR.state.cities.size > n0, 'появился отдельный город-аэродром');
+    let port = null; rFR.state.cities.forEach((c, k) => { if (+k >= n0 && c.airport === 1) port = +k; });
+    assert(port != null, 'новый аэродром-город со флагом airport');
+    eq(rFR.state.cities.get(String(ac)).airport, 0, 'родитель остался обычным городом');
     const before = planes(rFR, FR);
-    rFR.send('bplane', { city: ac }); rFR.send('bplane', { city: ac });
+    rFR.send('bplane', { city: port }); rFR.send('bplane', { city: port });
     for (let i = 0; i < 20 && planes(rFR, FR) <= before; i++) await sleep(700);
     gt(planes(rFR, FR), before, 'самолёт заспавнился');
   });
@@ -165,13 +173,13 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
     gt(eGold(rPL, PL), g0, 'голда переведена Польше (видна получателю)');
   });
 
-  await testAsync('ГЕРОИ: пул+слоты в balance, активка → кулдаун (+эффект) в econ', async () => {
+  await testAsync('ГЕРОИ: авто-слоты страны + призыв нового за манпауэр, активка → кулдаун (+эффект) в econ', async () => {
     await sleep(300);
     assert(rFR.__bal && rFR.__bal.heroes, 'balance содержит героев');
     assert(rFR.__bal.prices && rFR.__bal.prices.SOLDIER_PRICE > 0 && rFR.__bal.prices.SHIP_COST > 0, 'balance содержит prices (цены юнитов/экономики для показа)');
     const pool = rFR.__bal.heroes.pool, slots = rFR.__bal.heroes.slots;
-    assert(Array.isArray(slots) && slots.length > 0, 'у Франции есть герои');
-    let pick = null;   // первая НЕ-airstrike активка (её можно применить без войны)
+    assert(Array.isArray(slots) && slots.length > 0, 'у Франции есть герои (авто-набор страны)');
+    let pick = null;   // первая НЕ-airstrike активка авто-героя (применимо без войны)
     slots.forEach((id, si) => pool[id].abilities.filter(a => a.kind === 'active').forEach((a, ai) => { if (!pick && a.fx.type !== 'airstrike') pick = { si, ai, fx: a.fx }; }));
     assert(pick, 'есть безопасная активка');
     const g0 = eGold(rFR, FR);
@@ -180,6 +188,13 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
     assert(rFR.__hero && rFR.__hero.cd, 'пришло состояние героев в econ');
     gt(rFR.__hero.cd[pick.si][pick.ai], 0, 'кулдаун активки выставлен');
     if (pick.fx.type === 'gold') gt(eGold(rFR, FR), g0, '+голда от активки');
+    // 🎖 призыв НОВОГО героя за манпауэр в свободный слот → обновлённые слоты приходят в balance
+    const maxS = rFR.__bal.heroes.maxSlots || 3;
+    if (slots.length < maxS) {
+      const newId = Object.keys(pool).find(id => !slots.includes(id)); assert(newId, 'есть герой для призыва');
+      rFR.__bal = null; rFR.send('summon', { id: newId }); await sleep(600);
+      assert(rFR.__bal && rFR.__bal.heroes && rFR.__bal.heroes.slots.includes(newId) && rFR.__bal.heroes.slots.length === slots.length + 1, 'призван за манпауэр → добавлен в свободный слот');
+    }
   });
 
   await testAsync('ТЕХНОЛОГИИ: исследование тратит голду', async () => {

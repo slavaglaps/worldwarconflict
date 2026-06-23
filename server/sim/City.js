@@ -16,7 +16,8 @@ class City {
     this.shipQueue = 0; this.shipTimer = 0;   // очередь постройки кораблей
     this.planeQueue = 0; this.planeTimer = 0; // очередь постройки самолётов
     this.aa = 0; this.aaTimer = 0;            // 🛡 ПВО (число стволов) + таймер залпа
-    this.fireTimer = 0;                       // ⚔ таймер башни (atk-город)
+    this.fireTimer = 0;                       // ⚔ таймер башни — точечная оборона (atk-город)
+    this.bombTimer = 0;                       // ⚔ таймер осадного обстрела вражеских городов (atk-город)
 
     this.spec = null;                   // 'prod' | 'def' | 'atk'
     this.tier = 0;

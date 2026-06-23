@@ -7,6 +7,7 @@
 // свежий баланс; идущие матчи не меняются). Правится в Supabase Studio / Directus: строка
 // balance.id='active', колонка data = JSON-override, version = ревизия. JSON ВАЛИДИРУЕТСЯ перед кэшем.
 const { sanitizeOverride } = require('./sim/balance');
+const F = require('./balance-fields');   // плоские параметры politics/tune/ai (отдельные колонки формы Directus) → секции
 
 let cache = {};                                  // последний валидный override (или {})
 let meta = { version: 0, updatedAt: null };      // ревизия из БД (колонки version/updated_at)
@@ -23,9 +24,15 @@ async function refresh() {
     const ov = {};
     if (row) {
       if (row.data && typeof row.data === 'object' && !Array.isArray(row.data)) Object.assign(ov, row.data);
-      for (const sec of ['politics', 'tune', 'ai', 'tech', 'heroes']) {
+      // politics/tune/ai — из ПЛОСКИХ колонок формы Directus (отдельные числовые поля/слайдеры)
+      const flat = F.buildSections(row);
+      if (Object.keys(flat.politics).length) ov.politics = flat.politics;
+      if (Object.keys(flat.tune).length) ov.tune = flat.tune;
+      if (Object.keys(flat.ai).length) ov.ai = flat.ai;
+      // tech/heroes — JSONB-секции (вложенные/динамические — остаются JSON)
+      for (const sec of ['tech', 'heroes']) {
         const v = row[sec];
-        if (v && typeof v === 'object' && !Array.isArray(v)) ov[sec] = v;   // секция перекрывает целиком
+        if (v && typeof v === 'object' && !Array.isArray(v)) ov[sec] = v;
       }
       // секция factions = {factionDefault:{общие старты}, "<id>":{асимметрия страны}} → раскладываем по override
       const fs = row.factions;

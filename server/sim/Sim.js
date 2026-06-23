@@ -31,6 +31,7 @@ class Sim {
     this.heroPool = (this.B.heroes && this.B.heroes.pool) || {};
     const heroIds = Object.keys(this.heroPool);
     const perF = (this.B.heroes && this.B.heroes.perFaction) || 0, maxS = (this.B.heroes && this.B.heroes.maxSlots) || 3;   // сколько героев на фракцию (авто) + потолок слотов
+    this.heroMaxSlots = maxS;                        // потолок слотов героев (для призыва за манпауэр)
     this.heroSlots = []; this.heroBuffs = []; this.heroMods = [];   // heroMods[fid]={key:сумма} — кэш для O(1) techMul
     for (let f = 0; f < this.factions; f++) {
       let ids = this.fb[f].heroes;                  // из баланса; null → авто-ротация из пула по fid (уникально на страну)
@@ -112,7 +113,7 @@ class Sim {
   }
   // Дейкстра: путь от from к to для владельца owner. Пройти через узел можно если он свой/союзный
   // (canPass); цель — исключение (по ней бьём). null если недостижимо.
-  findPath(fromIdx, toIdx, owner) {
+  findPath(fromIdx, toIdx, owner, allowEnemy = false) {
     if (fromIdx === toIdx || !this.adj.size) return null;
     const dist = new Map([[fromIdx, 0]]), prev = new Map(), seen = new Set();
     const pq = [[0, fromIdx]];
@@ -122,7 +123,7 @@ class Sim {
       if (seen.has(u)) continue; seen.add(u);
       if (u === toIdx) break;
       for (const { to, edge } of (this.adj.get(u) || [])) {
-        if (to !== toIdx && !this.canPass(owner, this.cities[to].owner)) continue;
+        if (!allowEnemy && to !== toIdx && !this.canPass(owner, this.cities[to].owner)) continue;
         const nd = d + edge.len / (this.K.SQUAD_SPEED * edge.mult);
         if (nd < (dist.get(to) ?? Infinity)) { dist.set(to, nd); prev.set(to, u); pq.push([nd, to]); }
       }
@@ -236,31 +237,43 @@ class Sim {
     this.gold[fid] -= cost; this.manpower[fid] -= this.K.AA_MP; c.aa = (c.aa | 0) + 1; return true;
   }
 
-  // ⚔ башни atk-городов: бьют осаждающих (приоритет), иначе ближайшего врага/город в радиусе
+  // ⚔ башни atk-городов: (A) точечная оборона — осаждающие/ближайший мобильный враг;
+  //                       (B) осадный обстрел — ОТДЕЛЬНЫМ залпом долбит ближайший вражеский ГОРОД в радиусе,
+  //                       даже когда рядом есть войска (раньше город был лишь fallback и почти не доходил).
   cityTowers(dt) {
     for (const c of this.cities) {
-      const range = c.fireRange; if (range <= 0) continue;
-      c.fireTimer += dt; if (c.fireTimer < this.K.TOWER_FIRE_CD) continue;
-      if (c.siege) {
-        let pool = null, bu = 0;
-        for (const o in c.siege) { if (+o === c.owner || !this.atWar(c.owner, +o)) continue; if (c.siege[o].units > bu) { bu = c.siege[o].units; pool = c.siege[o]; } }
-        if (pool) {
-          c.fireTimer = 0; pool.units = Math.max(0, pool.units - c.fireDmg);
-          for (const o in c.siege) if (c.siege[o] === pool && c.siege[o].units < this.K.SIEGE_POOL_MIN) delete c.siege[o];
-          if (c.siege && Object.keys(c.siege).length === 0) c.siege = null;
-          continue;
+      const range = c.fireRange; if (range <= 0) continue;   // только города в режиме атаки (spec='atk')
+
+      // (A) точечная оборона: осаждающие → ближайший мобильный враг (армия/корабль/самолёт)
+      c.fireTimer += dt;
+      if (c.fireTimer >= this.K.TOWER_FIRE_CD) {
+        let fired = false;
+        if (c.siege) {
+          let pool = null, bu = 0;
+          for (const o in c.siege) { if (+o === c.owner || !this.atWar(c.owner, +o)) continue; if (c.siege[o].units > bu) { bu = c.siege[o].units; pool = c.siege[o]; } }
+          if (pool) {
+            c.fireTimer = 0; fired = true; pool.units = Math.max(0, pool.units - c.fireDmg);
+            for (const o in c.siege) if (c.siege[o] === pool && c.siege[o].units < this.K.SIEGE_POOL_MIN) delete c.siege[o];
+            if (c.siege && Object.keys(c.siege).length === 0) c.siege = null;
+          }
+        }
+        if (!fired) {
+          let best = null, bd = range * range, kind = null;
+          for (const s of this.squads) { if (s.fcount < this.K.UNIT_MIN || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 's'; } }
+          for (const s of this.ships) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } }
+          for (const s of this.planes) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } }
+          if (best) { c.fireTimer = 0; if (kind === 's') best.fcount -= c.fireDmg; else best.hp -= c.fireDmg; }
         }
       }
-      let best = null, bd = range * range, kind = null;
-      for (const s of this.squads) { if (s.fcount < this.K.UNIT_MIN || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 's'; } }
-      for (const s of this.ships) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } }
-      for (const s of this.planes) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } }
-      if (!best) for (const o of this.cities) { if (o === c || o.owner === c.owner || !this.atWar(c.owner, o.owner)) continue; const dx = c.gx - o.gx, dz = c.gz - o.gz, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = o; kind = 'c'; } }
-      if (!best) continue;
-      c.fireTimer = 0;
-      if (kind === 's') best.fcount -= c.fireDmg;
-      else if (kind === 'h') best.hp -= c.fireDmg;
-      else if (kind === 'c') best.units = Math.max(this.K.GARRISON_FLOOR, best.units - c.fireDmg);
+
+      // (B) осадный обстрел вражеского города — независимый залп (дальность дотягивается до соседей)
+      c.bombTimer += dt;
+      if (c.bombTimer >= this.K.TOWER_FIRE_CD) {
+        c.bombTimer = 0;
+        const R = Math.max(range, this.K.CITY_BOMBARD_RANGE); let tgt = null, bd = R * R;
+        for (const o of this.cities) { if (o === c || o.owner === c.owner || !this.atWar(c.owner, o.owner)) continue; const dx = c.gx - o.gx, dz = c.gz - o.gz, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; tgt = o; } }
+        if (tgt) tgt.units = Math.max(this.K.GARRISON_FLOOR, tgt.units - c.fireDmg);
+      }
     }
   }
   // 🛡 ПВО: город с зенитками бьёт ближайший вражеский самолёт
@@ -324,21 +337,33 @@ class Sim {
 
   _isCoastal(c) { for (let r = 1; r <= 3; r++) for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) { if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue; if (isWaterAt(c.gx + dx, c.gz + dz)) return true; } return false; }
   // постройка верфи (прибрежный город) / аэродрома (любой) — любой фракции. Даёт умение строить корабли/самолёты.
+  // верфь/аэродром — ОТДЕЛЬНЫЙ город-сущность рядом с родителем (а не флаг на самом городе): своя позиция,
+  // ребро графа, гарнизон, производство кораблей/самолётов. Родитель остаётся обычным городом.
   cmdBuildYard(fid, idx, kind) {
-    const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ) return false;
+    const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ || c.parent != null) return false;
+    let gx, gz, tech;
     if (kind === 'ship') {
-      if (c.isShipyard || !this._isCoastal(c) || this.gold[fid] < this.K.SHIPYARD_BUILD_COST) return false;
-      this.gold[fid] -= this.K.SHIPYARD_BUILD_COST; c.isShipyard = true;
-      this.techDone[fid].add('i1'); this.techCache[fid] = recomputeTech(this.techDone[fid], this.techNode);   // верфь → умение строить корабли
-      return true;
-    }
-    if (kind === 'air') {
-      if (c.isAirport || this.gold[fid] < this.K.AIRPORT_BUILD_COST) return false;
-      this.gold[fid] -= this.K.AIRPORT_BUILD_COST; c.isAirport = true;
-      this.techDone[fid].add('i8'); this.techCache[fid] = recomputeTech(this.techDone[fid], this.techNode);   // аэродром → умение строить самолёты
-      return true;
-    }
-    return false;
+      if (!this._isCoastal(c) || this.gold[fid] < this.K.SHIPYARD_BUILD_COST) return false;
+      const w = nearestWaterPoint(c.gx, c.gz);                              // верфь — на берег, к воде
+      gx = c.gx + (w.x - c.gx) * 0.55; gz = c.gz + (w.z - c.gz) * 0.55;
+      this.gold[fid] -= this.K.SHIPYARD_BUILD_COST; tech = 'i1';
+    } else if (kind === 'air') {
+      if (this.gold[fid] < this.K.AIRPORT_BUILD_COST) return false;
+      const a = (idx * 1.7 + 0.6) % (Math.PI * 2);                          // аэродром — сбоку на суше
+      gx = c.gx + Math.cos(a) * 2.2; gz = c.gz + Math.sin(a) * 2.2;
+      this.gold[fid] -= this.K.AIRPORT_BUILD_COST; tech = 'i8';
+    } else return false;
+    this.techDone[fid].add(tech); this.techCache[fid] = recomputeTech(this.techDone[fid], this.techNode);
+    const yidx = this.cities.length;
+    const yard = new City({ idx: yidx, gx, gz, country: c.country, size: 1, owner: fid, capital: false, isShipyard: kind === 'ship', isAirport: kind === 'air', tm: c.tm, tv: c.tv, K: this.K });
+    yard.parent = idx; this.cities.push(yard);
+    const len = Math.hypot(gx - c.gx, gz - c.gz) || 1;                      // ребро к родителю — пути/осада/визуал
+    const edge = { a: idx, b: yidx, type: 'road', len, mult: 1 };
+    this.edgeKey.set(this._ek(idx, yidx), edge);
+    if (!this.adj.has(idx)) this.adj.set(idx, []);
+    if (!this.adj.has(yidx)) this.adj.set(yidx, []);
+    this.adj.get(idx).push({ to: yidx, edge }); this.adj.get(yidx).push({ to: idx, edge });
+    return true;
   }
 
   // ── ИИ: незанятые фракции «думают» раз в 4.5с (порт aiActFaction из game.html) ──
@@ -367,13 +392,13 @@ class Sim {
       const nb = new Set();
       for (const c of mine) for (const n of (this.adj.get(c.idx) || [])) { const o = this.cities[n.to].owner; if (o !== fid) nb.add(o); }
       let target = null, ts = 1e9;
-      for (const o of nb) { if (this.relation(fid, o) !== 'neutral' || this.truceLeft(fid, o) > 0) continue; const st = this.factionStrength(o); if (st < ts) { ts = st; target = o; } }
+      for (const o of nb) { if (this.relation(fid, o) !== 'neutral' || this.truceLeft(fid, o) > 0 || this.warList(o).length >= (A.maxWarsTarget || 3)) continue; const st = this.factionStrength(o); if (st < ts) { ts = st; target = o; } }   // анти-нагиб: не пилим того, на ком уже ≥3 войны
       if (target != null && myStr > ts * A.warStrengthRatio) { this.setWar(fid, target); this.dragAlliesIntoWar(fid, target); }
     }
-    // союз с соседом против общего врага
+    // союз с соседом против общего врага (НИКОГДА не втягиваем людей — союз только по их согласию через cmdAlly)
     if (this.allyList(fid).length < A.allyCap && rng() < A.allyProb) {
       const nbs = [];
-      for (const c of mine) for (const n of (this.adj.get(c.idx) || [])) { const o = this.cities[n.to].owner; if (o !== fid && this.relation(fid, o) === 'neutral' && this.commonEnemy(fid, o) && !nbs.includes(o)) nbs.push(o); }
+      for (const c of mine) for (const n of (this.adj.get(c.idx) || [])) { const o = this.cities[n.to].owner; if (o !== fid && !this.humanFactions.has(o) && this.relation(fid, o) === 'neutral' && this.commonEnemy(fid, o) && !nbs.includes(o)) nbs.push(o); }
       if (nbs.length) this.setRelation(fid, nbs[(rng() * nbs.length) | 0], 'ally');
     }
     // исследования: занять слоты (приоритет — слоты/анлоки/дёшево)
@@ -471,6 +496,25 @@ class Sim {
     if (h.cd[abIdx] > 0) return false;                          // на кулдауне
     if (!this._runHeroFx(fid, ab.fx)) return false;             // не применилось (нет цели) → КД не тратим
     h.cd[abIdx] = ab.cd; return true;
+  }
+  // 🎖 призыв героя за манпауэр: игрок сам выбирает героя в свободный слот (до heroMaxSlots)
+  cmdSummonHero(fid, id) {
+    if (!this.validFaction(fid)) return false;
+    const d = this.heroPool[id]; if (!d) return false;                       // нет такого героя в пуле
+    const hs = this.heroSlots[fid] || (this.heroSlots[fid] = []);
+    if (hs.length >= this.heroMaxSlots) return false;                        // все слоты заняты
+    if (hs.some(h => h.id === id)) return false;                             // уже призван
+    if ((this.manpower[fid] || 0) < this.K.HERO_SUMMON_MP) return false;     // мало манпауэра
+    this.manpower[fid] -= this.K.HERO_SUMMON_MP;
+    hs.push({ id, cd: d.abilities.filter(a => a.kind === 'active').map(() => 0) });
+    this._recomputeHeroMods(fid);
+    return true;
+  }
+  // очистить героев фракции — человек начинает с пустыми слотами и призывает сам (ИИ оставляет авто-набор)
+  clearFactionHeroes(fid) {
+    if (!this.validFaction(fid)) return;
+    this.heroSlots[fid] = [];
+    this._recomputeHeroMods(fid);
   }
   _runHeroFx(fid, fx) {
     if (!fx) return false;
@@ -580,10 +624,12 @@ class Sim {
     if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || !this.allied(fid, t) || this.politPts[fid] < this.B.politics.costBreak) return false;
     this.politPts[fid] -= this.B.politics.costBreak; this.setRelation(fid, t, 'neutral'); return true;
   }
+  // поддержка союзника/соседа: перевод голды min(supportMax, своя голда), не ниже supportMin.
+  // Возвращает {ok, amt, to} — GameRoom шлёт точный ack призвавшему (сумма + получатель), при нехватке — denied.
   cmdSupport(fid, t) {
-    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t) return false;
-    const amt = Math.min(this.B.politics.supportMax, this.gold[fid] | 0); if (amt < this.B.politics.supportMin) return false;
-    this.gold[fid] -= amt; this.gold[t] = (this.gold[t] || 0) + amt; return true;
+    if (!this.validFaction(fid) || !this.validFaction(t) || fid === t) return { ok: false };
+    const amt = Math.min(this.B.politics.supportMax, this.gold[fid] | 0); if (amt < this.B.politics.supportMin) return { ok: false };
+    this.gold[fid] -= amt; this.gold[t] = (this.gold[t] || 0) + amt; return { ok: true, amt, to: t };
   }
   cmdPeace(fid, t, terms = {}) {
     if (!this.validFaction(fid) || !this.validFaction(t) || fid === t || !this.atWar(fid, t) || this.peaceCDLeft(fid, t) > 0 || this.politPts[fid] < this.B.politics.costPeace) return { ok: false };
@@ -671,20 +717,33 @@ class Sim {
   // Отправка войск. Реальная карта → движущийся отряд по графу (Squad); toy-мир → мгновенная осада.
   // Атаковать чужой город можно только в состоянии войны.
   cmdSend(fid, fromIdx, toIdx, pct = this.K.SEND_DEFAULT_PCT) {
-    const a = this.cities[fromIdx], b = this.cities[toIdx];
+    const a = this.cities[fromIdx];
+    let b = this.cities[toIdx];
     if (!a || !b || a === b || a.owner !== fid) return false;
     if (!Number.isFinite(pct) || pct <= 0 || pct > 1) return false;
-    const enemy = b.owner !== fid && !this.allied(fid, b.owner);
-    if (enemy && !this.warReady(fid, b.owner)) return false;    // нельзя нападать без войны и до конца мобилизации (WAR_PREP)
-    const n = Math.floor(a.units * pct); if (n <= 0) return false;
     if (this.map) {                                            // реальная карта: отряд идёт по пути
       if (this._squadCount(fid) >= this.K.MAX_SQUADS) return false; // хард-кап отрядов на фракцию
-      const path = this.findPath(fromIdx, toIdx, fid); if (!path) return false;
+      let path = this.findPath(fromIdx, toIdx, fid);
+      if (!path) {                                             // цель ЗА вражеским городом → осаждаем ПЕРВЫЙ вражеский город на маршруте (как ИИ)
+        const through = this.findPath(fromIdx, toIdx, fid, true);   // путь сквозь врагов — только чтобы выбрать фронтовой город
+        if (!through) return false;
+        let eff = -1;
+        for (let i = 1; i < through.length; i++) { const o = this.cities[through[i]].owner; if (o !== fid && !this.allied(fid, o)) { eff = through[i]; break; } }
+        if (eff < 0) return false;
+        path = this.findPath(fromIdx, eff, fid); if (!path) return false;
+        toIdx = eff; b = this.cities[toIdx];
+      }
+      const enemy = b.owner !== fid && !this.allied(fid, b.owner);
+      if (enemy && !this.warReady(fid, b.owner)) return false;  // нельзя нападать без войны и до конца мобилизации (WAR_PREP)
+      const n = Math.floor(a.units * pct); if (n <= 0) return false;
       a.units -= n;
       this.squads.push(new Squad(fid, n, path, this, a.atkMult));
       return true;
     }
-    a.units -= n;                                              // toy-мир: мгновенно
+    const enemy = b.owner !== fid && !this.allied(fid, b.owner);  // toy-мир: мгновенно
+    if (enemy && !this.warReady(fid, b.owner)) return false;
+    const n = Math.floor(a.units * pct); if (n <= 0) return false;
+    a.units -= n;
     if (b.owner === fid || this.allied(fid, b.owner)) { b.units = Math.min(b.capacity, b.units + n); }
     else { b.siege = b.siege || {}; const pool = b.siege[fid] || (b.siege[fid] = { units: 0, atkMult: a.atkMult }); pool.units += n; pool.atkMult = a.atkMult; }
     return true;

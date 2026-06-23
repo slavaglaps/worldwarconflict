@@ -146,13 +146,17 @@ const findAbil = (bal, type) => { const { pool, slots } = bal.heroes; let r = nu
   });
   await testAsync('АКТ4 · верфь → корабль, аэродром → самолёт, ПВО — всё строится', async () => {
     const yc = coastalCity(FR); assert(yc != null, 'есть прибрежный город');
+    const ny = rFR.state.cities.size;
     rFR.send('yard', { city: yc, kind: 'ship' }); await sleep(700);
-    eq(rFR.state.cities.get(String(yc)).shipyard, 1, 'верфь построена');
-    const s0 = shipsN(rFR, FR); rFR.send('bship', { city: yc }); rFR.send('bship', { city: yc });
+    let yard = null; rFR.state.cities.forEach((c, k) => { if (+k >= ny && c.shipyard === 1) yard = +k; });
+    assert(yard != null && rFR.state.cities.get(String(yc)).shipyard === 0, 'верфь — отдельный город, родитель остался обычным');
+    const s0 = shipsN(rFR, FR); rFR.send('bship', { city: yard }); rFR.send('bship', { city: yard });
     assert(await until(() => shipsN(rFR, FR) > s0, 16000), 'корабль заспавнился');
-    const ac = own(FR)[1]; rFR.send('yard', { city: ac, kind: 'air' }); await sleep(700);
-    eq(rFR.state.cities.get(String(ac)).airport, 1, 'аэродром построен');
-    const p0 = planesN(rFR, FR); rFR.send('bplane', { city: ac }); rFR.send('bplane', { city: ac });
+    const ac = own(FR)[1]; const na = rFR.state.cities.size;
+    rFR.send('yard', { city: ac, kind: 'air' }); await sleep(700);
+    let port = null; rFR.state.cities.forEach((c, k) => { if (+k >= na && c.airport === 1) port = +k; });
+    assert(port != null && rFR.state.cities.get(String(ac)).airport === 0, 'аэродром — отдельный город, родитель остался обычным');
+    const p0 = planesN(rFR, FR); rFR.send('bplane', { city: port }); rFR.send('bplane', { city: port });
     assert(await until(() => planesN(rFR, FR) > p0, 16000), 'самолёт заспавнился');
     const aac = own(FR)[2]; const aa0 = rFR.state.cities.get(String(aac)).aa;
     rFR.send('aa', { city: aac });
