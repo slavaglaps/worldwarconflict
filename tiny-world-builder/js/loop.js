@@ -17,7 +17,7 @@ function loop(now){
   const gdt=dt*gameSpeed; // игровое время с учётом паузы/ускорения
   if(MP.localSim){   // 🧪 соло на ЛОКАЛЬНОМ серверном Sim: тик Sim → проекция в guest-рендер, визуал как у гостя
     if(typeof localSimStep==='function')localSimStep(gdt);
-    if(!gameOver&&gdt>0){ for(const c of cities)c.drawProdRing(); if(typeof cityTowersFX==='function')cityTowersFX(gdt); if(typeof updateMissiles==='function')updateMissiles(gdt); }
+    if(!gameOver&&gdt>0){ for(const c of cities)c.drawProdRing(); if(typeof cityTowersFX==='function')cityTowersFX(gdt); if(typeof shipBombardFX==='function')shipBombardFX(gdt); if(typeof updateMissiles==='function')updateMissiles(gdt); }
   } else if(MP.guest && !gameOver && gdt>0){
     // гость: сим заморожен, но локально продвигаем ТОЛЬКО таймеры (плавность между снапшотами; сервер их корректирует)
     gameTime+=gdt;                                                          // ⏳ отсчёт мобилизации войны
@@ -29,6 +29,7 @@ function loop(now){
     }
     const rs=techRes[PLAYER]; if(rs)for(const r of rs){ const n=NODE[r.id]; if(n&&r.t<n.t)r.t=Math.min(n.t,r.t+gdt); }      // 🔬
     cityTowersFX(gdt);     // ⚔ визуал выстрелов atk-городов в онлайне (урон авторитетно считает сервер)
+    shipBombardFX(gdt);    // 🚀 визуал обстрела берега кораблями (урон авторитетно считает сервер)
     updateMissiles(gdt);   // анимируем трассеры/взрывы
   }
   // во время поворота камеры (Q/E или мышь) прячем DOM-подписи целиком — иначе они дрожат

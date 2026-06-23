@@ -215,6 +215,25 @@ function cityTowersFX(dt){
     if(cx!==null)shot(cx,cz,getTerrainHeight(cx,cz)+0.3);
   }
 }
+
+// 🚀 ВИЗУАЛ обстрела берега кораблём: урон считает Sim (сервер/локальный), здесь ТОЛЬКО
+// трассер+вспышка (kind:'none', dmg:0) по той же цели, что и Sim.shipBombard:
+// ближайший вражеский город/отряд в радиусе SHIP_ATTACK_RANGE×sr, корабль с tech shipMissile.
+// Каденс зеркалит сим (таймер сбрасываем только при наличии цели, как fireTimer на сервере).
+function shipBombardFX(dt){
+  for(const s of ships){
+    if(s.hp<=0||!techFlag(s.owner,'shipMissile'))continue;
+    s._fxT=(s._fxT||0)+dt; if(s._fxT<SHIP_FIRE_CD)continue;
+    const R=SHIP_ATTACK_RANGE*techVal(s.owner,'sr'), R2=R*R;
+    let tx=null,tz=null,ty=null,bd=R2;
+    for(const c of cities){ if(c.owner===s.owner||!atWar(s.owner,c.owner))continue; const dx=s.pos.x-c.gx,dz=s.pos.z-c.gz,dd=dx*dx+dz*dz; if(dd<bd){bd=dd;tx=c.gx;tz=c.gz;ty=getTerrainHeight(c.gx,c.gz)+0.3;} }
+    for(const q of squads){ if(q.fcount<0.5||!atWar(s.owner,q.owner))continue; const dx=s.pos.x-q.pos.x,dz=s.pos.z-q.pos.z,dd=dx*dx+dz*dz; if(dd<bd){bd=dd;tx=q.pos.x;tz=q.pos.z;ty=getTerrainHeight(q.pos.x,q.pos.z)+0.3;} }
+    if(tx===null)continue; s._fxT=0;
+    const from={x:s.pos.x,y:WATER_Y_SHIP+0.6,z:s.pos.z};
+    missiles.push(new TowerShot(s.owner,from,{kind:'none',ref:null,x:tx,y:ty,z:tz,dmg:0}));
+    spawnMuzzle(s);
+  }
+}
 /* ── авиабомба: падает с самолёта на город ──────────────────── */
 class Bomb{
   constructor(owner,from,city){
