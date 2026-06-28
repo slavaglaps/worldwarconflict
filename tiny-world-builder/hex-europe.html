@@ -615,6 +615,8 @@
   const R = (M.grass.geo.boundingBox.max.z - M.grass.geo.boundingBox.min.z) / 2;   // circumradius (≈1.1547)
   const HEXS = 1;            // размер хексов ×HEXS при той же карте (меньше HEXS → больше хексов)
   const Rg = R * HEXS;       // шаг сетки = радиус хекса с учётом масштаба
+  const BRIDGE_VISUAL_LIFT = 0.08;
+  const BRIDGE_DEFAULT_SCALE = 1.025;
 
   // 3) проекция + палитра + регионы
   const B = DATA.bbox, regions = DATA.regions;
@@ -1183,6 +1185,7 @@
         c.bridgeModel = model;
         c.bridgeRy = b[3] || 0;
         c.bridgeBankY = b[4] != null ? b[4] : (c.elev || 0);
+        c.bridgeScale = b[5] != null ? Number(b[5]) || BRIDGE_DEFAULT_SCALE : BRIDGE_DEFAULT_SCALE;
         const k = ckey(c.q, c.r);
         if (!bridgeSet.has(k)) { bridgeSet.add(k); bridge.push(c); }
       }
@@ -1550,18 +1553,41 @@
   }
   for (const c of road) setRoadBiome(c, inferRoadBiomeForCell(c));
   for (const c of road) {
-    if (c.tileInstance == null) continue;
-    const top = (c.elev || 0) - 0.075, sy = top - FLOOR;
-    dummy.position.set(c.wx, top, c.wz);
+    if (c.tileInstance == null || !c.tileMesh) continue;
+    dummy.position.set(c.wx, FLOOR - 10, c.wz);
     dummy.rotation.set(0, 0, 0);
-    dummy.scale.set(HEXS, sy, HEXS);
+    dummy.scale.set(0.0001, 0.0001, 0.0001);
     dummy.updateMatrix();
-    if (c.tileMesh) c.tileMesh.setMatrixAt(c.tileInstance, dummy.matrix);
+    c.tileMesh.setMatrixAt(c.tileInstance, dummy.matrix);
   }
   for (const mesh of landMeshes) mesh.instanceMatrix.needsUpdate = true;
   for (const c of bridge) {
     if (c.bridgeModel) continue;
     c.bridgeModel = h2(c.q + 41, c.r - 17) < 0.5 ? M.bridgeA : M.bridgeB;
+    c.bridgeScale = BRIDGE_DEFAULT_SCALE;
+  }
+  { const byModel = new Map();
+    for (const c of bridge) {
+      if (!c.bridgeModel) continue;
+      const key = c.bridgeModel;
+      const list = byModel.get(key) || byModel.set(key, []).get(key);
+      list.push(c);
+    }
+    for (const [model, list] of byModel.entries()) {
+      const m = new THREE.InstancedMesh(model.geo, model.mat, list.length);
+      m.castShadow = true; m.receiveShadow = true;
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i], top = (c.bridgeBankY != null ? c.bridgeBankY : (c.elev || 0)) + BRIDGE_VISUAL_LIFT;
+        const s = (c.bridgeScale || BRIDGE_DEFAULT_SCALE) * HEXS;
+        dummy.position.set(c.wx, top, c.wz);
+        dummy.rotation.set(0, c.bridgeRy || 0, 0);
+        dummy.scale.set(s, s, s);
+        dummy.updateMatrix();
+        m.setMatrixAt(i, dummy.matrix);
+        c.bridgeMesh = m; c.bridgeInstance = i;
+      }
+      m.instanceMatrix.needsUpdate = true; m.userData.cells = list; pickTargets.push(m); scene.add(m);
+    }
   }
   { const byModel = new Map();
     for (const c of road) {
@@ -1580,7 +1606,7 @@
     for (const { model, list } of roadBuckets) {
       const m = new THREE.InstancedMesh(model.geo, model.mat, list.length);
       m.castShadow = false; m.receiveShadow = true;
-      for (let i = 0; i < list.length; i++) { const c = list[i], top = (c.elev || 0) + 0.035, sy = top - FLOOR;
+      for (let i = 0; i < list.length; i++) { const c = list[i], top = (c.elev || 0), sy = top - FLOOR;
         dummy.position.set(c.wx, top, c.wz); dummy.rotation.set(0, c.roadRy || 0, 0); dummy.scale.set(HEXS, sy, HEXS); dummy.updateMatrix();
         m.setMatrixAt(i, dummy.matrix); c.roadMesh = m; c.roadInstance = i; }
       m.instanceMatrix.needsUpdate = true; m.userData.cells = list; pickTargets.push(m); scene.add(m);
@@ -1851,7 +1877,22 @@
     for (const c of land) pushCell(c, false);
     for (const c of river) pushCell(c, true);
     for (const c of sea) pushCell(c, true);
-    const bridges = bridge.map((c) => [r3(c.wx), r3(c.wz), keyOf.get(c.bridgeModel) || 'bridgeA', r4(c.bridgeRy), r3(c.bridgeBankY != null ? c.bridgeBankY : c.elev)]);
+    const bridgeEditByKey = new Map();
+    if (typeof decorEditState !== 'undefined' && decorEditState.edits) {
+      for (const d of decorEditState.edits.values()) {
+        if (d && d.asset && String(d.asset).startsWith('bridge')) bridgeEditByKey.set(ek(d.q, d.r), d);
+      }
+    }
+    const bridgeBankFromEdit = (c, d) => {
+      const h = (typeof normalizeDecorHeight === 'function' ? normalizeDecorHeight(d.height) : (d.height || 0));
+      const cellH = (typeof editHeightForCell === 'function' ? editHeightForCell(c) : 0);
+      return (c.elev || 0) + cellH + h + 0.06 - BRIDGE_VISUAL_LIFT;
+    };
+    const bridges = bridge.map((c) => {
+      const d = bridgeEditByKey.get(ek(c.q, c.r));
+      if (d) return [r3(c.wx), r3(c.wz), d.asset, r4(deg2rad(d.rot || 0)), r3(bridgeBankFromEdit(c, d)), r3(d.scale != null ? d.scale : BRIDGE_DEFAULT_SCALE)];
+      return [r3(c.wx), r3(c.wz), keyOf.get(c.bridgeModel) || 'bridgeA', r4(c.bridgeRy), r3(c.bridgeBankY != null ? c.bridgeBankY : c.elev), r3(c.bridgeScale || BRIDGE_DEFAULT_SCALE)];
+    });
     const savedBridgeKeys = new Set(bridge.map(c => ek(c.q, c.r)));
     if (typeof decorEditState !== 'undefined' && decorEditState.edits) {
       for (const d of decorEditState.edits.values()) {
@@ -1862,7 +1903,8 @@
         if (savedBridgeKeys.has(k)) continue;
         savedBridgeKeys.add(k);
         const h = (typeof normalizeDecorHeight === 'function' ? normalizeDecorHeight(d.height) : (d.height || 0));
-        bridges.push([r3(c.wx), r3(c.wz), d.asset, r4(deg2rad(d.rot || 0)), r3((c.elev || 0) + h)]);
+        const cellH = (typeof editHeightForCell === 'function' ? editHeightForCell(c) : 0);
+        bridges.push([r3(c.wx), r3(c.wz), d.asset, r4(deg2rad(d.rot || 0)), r3((c.elev || 0) + cellH + h + 0.06 - BRIDGE_VISUAL_LIFT), r3(d.scale != null ? d.scale : BRIDGE_DEFAULT_SCALE)]);
       }
     }
     // декор: генерённый (БЕЗ замков на городах — их рисует игра), минус удалённый, плюс ручной (localStorage)
@@ -1872,6 +1914,7 @@
       for (const it of P[k]) { if (it.q != null && removed.has(ek(it.q, it.r))) continue; decor.push([k, r3(it.x), r3(it.z), r3(it.y), r4(it.yaw), r3(it.s != null ? it.s : 1), it.biome || 'default']); }
     }
     if (typeof decorEditState !== 'undefined' && decorEditState.edits) for (const d of decorEditState.edits.values()) {
+      if (d && d.asset && String(d.asset).startsWith('bridge')) continue;
       const c = (typeof findCellByQR === 'function') ? findCellByQR(d.q, d.r) : null; if (!c) continue;
       const h = (typeof normalizeDecorHeight === 'function' ? normalizeDecorHeight(d.height) : (d.height || 0));
       decor.push([d.asset, r3(c.wx), r3(c.wz), r3((c.elev || 0) + h), r4(deg2rad(d.rot)), r3(d.scale != null ? d.scale : 1), biomeOfCell(c)]);
@@ -1921,6 +1964,50 @@
         const minShortcutLen = 16, maxShortcutRatio = 1.8;
         const lengths = paths.map(roadPathLen);
         const active = new Set(paths.map((_, i) => i));
+        const pairKey = (a, b) => Math.min(a, b) + '_' + Math.max(a, b);
+        const pairToIndex = new Map(paths.map((p, i) => [pairKey(p.a, p.b), i]));
+        const endpointExitBucket = (rp, endpoint) => {
+          if (!rp || !Array.isArray(rp.pts) || rp.pts.length < 2) return null;
+          const fromStart = endpoint === rp.a;
+          const fromEnd = endpoint === rp.b;
+          if (!fromStart && !fromEnd) return null;
+          const pts = rp.pts;
+          let a = fromStart ? pts[0] : pts[pts.length - 1];
+          let b = null;
+          if (fromStart) {
+            for (let i = 1; i < pts.length; i++) {
+              if (Math.hypot(pts[i][0] - a[0], pts[i][1] - a[1]) > 0.001) { b = pts[i]; break; }
+            }
+          } else {
+            for (let i = pts.length - 2; i >= 0; i--) {
+              if (Math.hypot(pts[i][0] - a[0], pts[i][1] - a[1]) > 0.001) { b = pts[i]; break; }
+            }
+          }
+          if (!b) return null;
+          const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+          return Math.round((((ang + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 3))) % 6;
+        };
+        const protectedByCityExit = new Set();
+        const bestByCityExit = new Map();
+        for (let i = 0; i < paths.length; i++) {
+          for (const endpoint of [paths[i].a, paths[i].b]) {
+            const bucket = endpointExitBucket(paths[i], endpoint);
+            if (bucket == null) continue;
+            const key = endpoint + ':' + bucket;
+            const prev = bestByCityExit.get(key);
+            if (!prev || lengths[i] < prev.len) bestByCityExit.set(key, { i, len: lengths[i] });
+          }
+        }
+        for (const rec of bestByCityExit.values()) protectedByCityExit.add(rec.i);
+        const usesSameCityExits = (skip, route) => {
+          if (!Array.isArray(route) || route.length < 3) return true;
+          const rp = paths[skip], start = rp.a, target = rp.b;
+          const firstAlt = pairToIndex.get(pairKey(start, route[1]));
+          const lastAlt = pairToIndex.get(pairKey(route[route.length - 2], target));
+          if (firstAlt == null || lastAlt == null) return true;
+          return endpointExitBucket(rp, start) === endpointExitBucket(paths[firstAlt], start)
+            && endpointExitBucket(rp, target) === endpointExitBucket(paths[lastAlt], target);
+        };
         const shortestWithout = (skip) => {
           const start = paths[skip].a, target = paths[skip].b;
           const adj = Array.from({ length: CITY_LIST.length }, () => []);
@@ -1949,10 +2036,12 @@
           const candidates = Array.from(active).filter(i => lengths[i] > minShortcutLen).sort((a, b) => lengths[b] - lengths[a]);
           for (const i of candidates) {
             if (!active.has(i)) continue;
+            if (protectedByCityExit.has(i)) continue;
             const alt = shortestWithout(i);
             if (!Number.isFinite(alt.dist) || alt.dist > lengths[i] * maxShortcutRatio) continue;
             const ca = CITY_LIST[paths[i].a]?.[5], cb = CITY_LIST[paths[i].b]?.[5];
             if (ca && ca === cb && !alt.route.every(idx => CITY_LIST[idx]?.[5] === ca)) continue;
+            if (!usesSameCityExits(i, alt.route)) continue;
             active.delete(i); changed = true;
           }
         }
@@ -2117,8 +2206,47 @@
           }
         }
       };
+      const ensureConnectedAfterPrune = (paths) => {
+        const degree = new Array(CITY_LIST.length).fill(0);
+        const seen = new Set();
+        for (const rp of paths) {
+          degree[rp.a]++; degree[rp.b]++;
+          seen.add(Math.min(rp.a, rp.b) + '_' + Math.max(rp.a, rp.b));
+        }
+        for (let i = 0; i < CITY_LIST.length; i++) {
+          const info = cityRoadStarts.get(i), city = CITY_LIST[i];
+          if (!info || !city || degree[i] > 0 || allowedNoLandRoad.has(city[0])) continue;
+          const candidates = [];
+          for (let j = 0; j < CITY_LIST.length; j++) {
+            if (i === j || !cityRoadStarts.has(j)) continue;
+            const key = Math.min(i, j) + '_' + Math.max(i, j);
+            if (seen.has(key)) continue;
+            const otherCell = cityCellsByIndex[j], other = CITY_LIST[j];
+            if (!otherCell || !other) continue;
+            candidates.push({
+              j,
+              connected: degree[j] > 0,
+              sameCountry: other[5] === city[5],
+              d: Math.hypot(otherCell.wx - info.cityCell.wx, otherCell.wz - info.cityCell.wz),
+            });
+          }
+          candidates.sort((a, b) => (b.connected - a.connected) || (b.sameCountry - a.sameCountry) || a.d - b.d);
+          for (const cand of candidates.slice(0, 120)) {
+            const other = cityRoadStarts.get(cand.j);
+            const roadPath = roadPathBetweenRoadCells(info.starts, other && other.starts);
+            if (!roadPath || roadPath.length < 1) continue;
+            const full = [info.cityCell].concat(roadPath, [cityCellsByIndex[cand.j]]);
+            if (pathCrossesOcean(full)) continue;
+            const key = Math.min(i, cand.j) + '_' + Math.max(i, cand.j);
+            paths.push({ a: i, b: cand.j, pts: full.map(c => [c.wx, c.wz]) });
+            seen.add(key); degree[i]++; degree[cand.j]++;
+            break;
+          }
+        }
+        return paths;
+      };
       ensureConnectedCities();
-      return pruneRoadShortcuts(out).map(trimRoadEndpoints);
+      return ensureConnectedAfterPrune(pruneRoadShortcuts(out)).map(trimRoadEndpoints);
     };
     // маршруты дорог по парам городов → пути юнитов в игре идут по визуальным дорогам
     const seenPair = new Set(), roads = [];
@@ -2462,7 +2590,7 @@
     decorDefaultScale[d.key] = d.scale;
     decorDefaultHeight[d.key] = d.key.startsWith('nature_cloud_') ? 2.5 : d.height;
   }
-  const decorEditState = { on: false, asset: 'treesA', rot: 0, scale: 1, height: 0, offsetX: 0, offsetZ: 0, edits: new Map(), meshes: new Map(), removedGenerated: new Set(), selected: null, selectedKey: null };
+  const decorEditState = { on: false, asset: 'treesA', rot: 0, scale: 1, height: 0, offsetX: 0, offsetZ: 0, edits: new Map(), meshes: new Map(), hiddenBridges: new Map(), removedGenerated: new Set(), selected: null, selectedKey: null };
   const cityEditState = { on: false, selected: 0, mode: 'move', dirty: false, addDraft: null };
   const deletePickMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
   const editKey = (q, r) => q + ',' + r;
@@ -2568,6 +2696,25 @@
     if (restore) restoreCellVisuals(k);
   };
   const findCellByQR = (q, r) => cellMap.get(ckey(q, r)) || sea.find(c => c.q === q && c.r === r) || river.find(c => c.q === q && c.r === r) || null;
+  const hideBridgeVisual = (c, k) => {
+    if (!c || !c.bridgeMesh || c.bridgeInstance == null || decorEditState.hiddenBridges.has(k)) return;
+    const matrix = new THREE.Matrix4();
+    c.bridgeMesh.getMatrixAt(c.bridgeInstance, matrix);
+    dummy.position.set(c.wx, FLOOR - 20, c.wz);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(0.001, 0.001, 0.001);
+    dummy.updateMatrix();
+    c.bridgeMesh.setMatrixAt(c.bridgeInstance, dummy.matrix);
+    c.bridgeMesh.instanceMatrix.needsUpdate = true;
+    decorEditState.hiddenBridges.set(k, { mesh: c.bridgeMesh, index: c.bridgeInstance, matrix });
+  };
+  const restoreBridgeVisual = (k) => {
+    const hidden = decorEditState.hiddenBridges.get(k);
+    if (!hidden) return;
+    hidden.mesh.setMatrixAt(hidden.index, hidden.matrix);
+    hidden.mesh.instanceMatrix.needsUpdate = true;
+    decorEditState.hiddenBridges.delete(k);
+  };
   const modelKeyOf = (model) => {
     for (const k in M) if (M[k] === model) return k;
     return null;
@@ -2999,6 +3146,8 @@
   const normalizeDecorScale = (value) => Math.max(0.1, Math.min(3, Math.round((Number(value) || 1) * 10) / 10));
   const normalizeDecorHeight = (value) => Math.max(-3, Math.min(6, Math.round((Number(value) || 0) * 10) / 10));
   const normalizeDecorOffset = (value) => Math.max(-5, Math.min(5, Math.round((Number(value) || 0) * 10) / 10));
+  const isBridgeDecorAsset = (asset) => String(asset || '').startsWith('bridge');
+  const bridgeDecorKeySet = () => new Set(bridge.map(c => editKey(c.q, c.r)));
   const setDecorMeta = (txt) => { const el = $('decorMeta'); if (el) el.textContent = txt; };
   const updateDecorCount = () => { const el = $('decorEdCount'); if (el) el.textContent = String(decorEditState.edits.size); };
   const effectiveBiomeForCell = (c) => {
@@ -3009,11 +3158,12 @@
     return c.biome || 'default';
   };
   const persistManualDecor = () => {
+    const bridgeKeys = bridgeDecorKeySet();
     const payload = {
       version: 2,
       updatedAt: new Date().toISOString(),
-      edits: [...decorEditState.edits.values()],
-      removedGenerated: [...decorEditState.removedGenerated],
+      edits: [...decorEditState.edits.values()].filter(e => !isBridgeDecorAsset(e && e.asset)),
+      removedGenerated: [...decorEditState.removedGenerated].filter(k => !bridgeKeys.has(k)),
     };
     localStorage.setItem(DECOR_EDIT_KEY, JSON.stringify(payload));
     saveProjectPayload('decor', payload);
@@ -3036,6 +3186,7 @@
     const offsetX = normalizeDecorOffset(edit.offsetX);
     const offsetZ = normalizeDecorOffset(edit.offsetZ);
     removeManualDecorMesh(k);
+    if (String(edit.asset).startsWith('bridge') && c.bridgeModel) hideBridgeVisual(c, k);
     const renderModel = biomeDecorModel(model, effectiveBiomeForCell(c), edit.asset);
     const mesh = new THREE.Mesh(renderModel.geo, renderModel.mat);
     mesh.castShadow = true;
@@ -3061,6 +3212,7 @@
     const k = editKey(q, r);
     removeManualDecorMesh(k);
     decorEditState.edits.delete(k);
+    restoreBridgeVisual(k);
     const c = findCellByQR(q, r);
     if ((c && c.bridgeModel) || generatedTreeByKey.has(k)) decorEditState.removedGenerated.add(k);
     updateDecorCount();
@@ -3071,6 +3223,7 @@
   };
   const clearManualDecor = () => {
     for (const k of [...decorEditState.meshes.keys()]) removeManualDecorMesh(k);
+    for (const k of [...decorEditState.hiddenBridges.keys()]) restoreBridgeVisual(k);
     decorEditState.edits.clear();
     decorEditState.removedGenerated.clear();
     localStorage.removeItem(DECOR_EDIT_KEY);
@@ -3096,11 +3249,6 @@
     height: 0,
   });
   function seedGeneratedDecor() {
-    for (const c of bridge) {
-      const k = editKey(c.q, c.r);
-      if (decorEditState.edits.has(k) || decorEditState.removedGenerated.has(k)) continue;
-      applyManualDecor(bridgeDecorEdit(c), true);
-    }
     for (const [k, entry] of generatedTreeByKey) {
       if (decorEditState.edits.has(k) || decorEditState.removedGenerated.has(k)) continue;
       applyManualDecor(treeDecorEdit(entry), true);
@@ -3113,9 +3261,10 @@
       try { saved = await fetchJson('data/hex-europe-manual-decor.json'); } catch (_) {}
       const raw = localStorage.getItem(DECOR_EDIT_KEY);
       const local = raw ? JSON.parse(raw) : { edits: [], removedGenerated: [] };
-      decorEditState.removedGenerated = new Set([...(saved.removedGenerated || []), ...(local.removedGenerated || [])]);
-      for (const edit of saved.edits || []) applyManualDecor(edit, true);
-      for (const edit of local.edits || []) applyManualDecor(edit, true);
+      const bridgeKeys = bridgeDecorKeySet();
+      decorEditState.removedGenerated = new Set([...(saved.removedGenerated || []), ...(local.removedGenerated || [])].filter(k => !bridgeKeys.has(k)));
+      for (const edit of saved.edits || []) if (!isBridgeDecorAsset(edit && edit.asset)) applyManualDecor(edit, true);
+      for (const edit of local.edits || []) if (!isBridgeDecorAsset(edit && edit.asset)) applyManualDecor(edit, true);
       seedGeneratedDecor();
       updateDecorCount();
       setDecorMeta('загружено: ' + decorEditState.edits.size + ' объектов');

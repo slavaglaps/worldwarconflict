@@ -25,9 +25,12 @@
   const kx = (GRID / (LON1 - LON0)) * (m.lngSpan / m.worldW);
   const kz = (GRID / (LAT1 - LAT0)) * (m.latSpan / m.worldH);
   const kY = (kx + kz) / 2, FLOORg = m.FLOOR * kY;
+  const BRIDGE_VISUAL_LIFT = 0.08;
+  const BRIDGE_DEFAULT_SCALE = 1.025;
   let HEXROADS = new Map();                 // ekey "a_b" → {from, pts[gx,gz], cum, len} для путей юнитов
   let HEXSNAP = null;                        // [x][z] → центр ближайшего хекса (снап зданий городов в центр гекса)
   let HEXCOAST = [];                         // центры сухих прибрежных хексов
+  let HEXROADTILES = [];                      // центры видимых road/bridge-тайлов для ворот в стенах
   let HEXTYPES = new Map();                  // "q,r" → тип исходного тайла без игровой подложки
 
   const dummy = new T.Object3D(), WHITE = new T.Color(0xffffff);
@@ -157,10 +160,27 @@
     im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
     return im;
   }
+  function instObjectMesh(model, list) {
+    if (!list.length || !model) return null;
+    const im = new T.InstancedMesh(model.geo, model.mat, list.length);
+    im.castShadow = true; im.receiveShadow = true;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i], s = c.scale || 1;
+      dummy.position.set(c.gx, c.top, c.gz);
+      dummy.rotation.set(0, c.ry || 0, 0);
+      dummy.scale.set(kx * s, kY * s, kz * s);
+      dummy.updateMatrix();
+      im.setMatrixAt(i, dummy.matrix);
+      im.setColorAt(i, WHITE);
+    }
+    im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    return im;
+  }
 
   function hexBuildWorld() {
     const grass = [], water = [], rivByKey = {}, roadByKey = {};
     HEXTYPES = new Map();
+    HEXROADTILES = [];
     for (const t of MAP.tiles) HEXTYPES.set(t[0] + ',' + t[1], { water: !!t[2], river: !!t[5] });
     const neighborQR = (q, r) => (r & 1)
       ? [[q+1,r],[q-1,r],[q+1,r-1],[q,r-1],[q+1,r+1],[q,r+1]]
@@ -184,13 +204,12 @@
         (rivByKey[rk] || (rivByKey[rk] = [])).push({ gx, gz, top: elev * kY, ry: rry });
       } else if (isW) {                           // море
         water.push({ gx, gz, top: (elev - 0.2) * kY });
-      } else {                                    // суша (с дорогой → тайл чуть утоплен)
-        const lowered = dk ? elev - 0.075 : elev;
-        grass.push({ gx, gz, top: lowered * kY, biome, col: colHex >= 0 ? new T.Color().setHex(colHex) : (BIOME_TINT[biome] || BIOME_TINT.default).clone() });
-        if (dk) {
-          const roadBucket = dk + ':' + biome;
-          (roadByKey[roadBucket] || (roadByKey[roadBucket] = { modelKey: dk, biome, list: [] })).list.push({ gx, gz, top: (elev + 0.035) * kY, ry: dry });
-        }
+      } else if (dk) {                            // дорожный тайл — полноценная замена grass-хекса
+        HEXROADTILES.push({ gx, gz });
+        const roadBucket = dk + ':' + biome;
+        (roadByKey[roadBucket] || (roadByKey[roadBucket] = { modelKey: dk, biome, list: [] })).list.push({ gx, gz, top: elev * kY, ry: dry });
+      } else {                                    // обычная суша
+        grass.push({ gx, gz, top: elev * kY, biome, col: colHex >= 0 ? new T.Color().setHex(colHex) : (BIOME_TINT[biome] || BIOME_TINT.default).clone() });
       }
     }
     const _add = (mm) => { if (mm) scene.add(mm); };
@@ -212,8 +231,18 @@
 
     // мосты: [wx, wz, bridgeKey, bridgeRy, bankY]
     const brByKey = {};
-    for (const b of MAP.bridges) (brByKey[b[2]] || (brByKey[b[2]] = [])).push({ gx: wxToGX(b[0]), gz: wzToGZ(b[1]), top: b[4] * kY, ry: b[3] });
-    for (const k in brByKey) { const mm = instMesh(M[k], brByKey[k], false); if (mm) scene.add(mm); }
+    for (const b of MAP.bridges) {
+      const gx = wxToGX(b[0]), gz = wzToGZ(b[1]);
+      HEXROADTILES.push({ gx, gz });
+      (brByKey[b[2]] || (brByKey[b[2]] = [])).push({
+        gx,
+        gz,
+        top: ((b[4] || 0) + BRIDGE_VISUAL_LIFT) * kY,
+        ry: b[3],
+        scale: b[5] != null ? Number(b[5]) || BRIDGE_DEFAULT_SCALE : BRIDGE_DEFAULT_SCALE,
+      });
+    }
+    for (const k in brByKey) { const mm = instObjectMesh(M[k], brByKey[k]); if (mm) scene.add(mm); }
 
     // декор: [asset, wx, wz, y, yaw, scale, biome] — модель с равномерным масштабом
     const decByKey = {};
@@ -431,6 +460,17 @@
     const t = (qx * sz - qz * sx) / den;
     return t >= -1e-5 && t <= 1.00001 && u >= -1e-5 && u <= 1.00001 ? { roadT: t, edgeT: u } : null;
   }
+  function _gateHitFromDirection(vertices, dir) {
+    const mag = Math.hypot(dir[0], dir[1]);
+    if (mag < 1e-5) return null;
+    const far = [dir[0] / mag * 100, dir[1] / mag * 100];
+    let best = null;
+    for (let k = 0; k < vertices.length; k++) {
+      const hit = _segmentHit([0, 0], far, vertices[k], vertices[(k + 1) % vertices.length]);
+      if (hit && (!best || hit.roadT < best.roadT)) best = { edge: k, t: hit.edgeT, roadT: hit.roadT };
+    }
+    return best ? { edge: best.edge, t: Math.max(0.12, Math.min(0.88, best.t)) } : null;
+  }
   function cityName(idx) { return (typeof CITY_NAMES !== 'undefined' && CITY_NAMES[idx]) || (CITY_LIST[idx] && CITY_LIST[idx][0]) || ''; }
   function isInlineShipyardChild(parent, child) {
     if (!parent || !child || parent === child || !child.isShipyard || parent.isShipyard || parent.isAirport) return false;
@@ -490,48 +530,101 @@
   function gatePositionsForCity(city, vertices, offX, offZ) {
     const gates = new Map();
     const centerX = city.gx + offX * CITY_SCALE, centerZ = city.gz + offZ * CITY_SCALE;
+    const wallRadius = vertices.reduce((sum, p) => sum + Math.hypot(p[0], p[1]), 0) / Math.max(1, vertices.length);
+    const gateCount = () => {
+      let n = 0;
+      for (const list of gates.values()) n += list.length;
+      return n;
+    };
+    const addGate = (found, minGap = 0.08) => {
+      if (!found) return false;
+      const list = gates.get(found.edge) || [];
+      if (list.some(t => Math.abs(t - found.t) < minGap)) return false;
+      list.push(found.t);
+      list.sort((a, b) => a - b);
+      gates.set(found.edge, list);
+      return true;
+    };
+    const refineGate = (found, maxDelta = 0.34) => {
+      if (!found) return false;
+      const list = gates.get(found.edge);
+      if (!list || !list.length) return false;
+      let best = -1, bestDelta = Infinity;
+      for (let i = 0; i < list.length; i++) {
+        const delta = Math.abs(list[i] - found.t);
+        if (delta < bestDelta) { bestDelta = delta; best = i; }
+      }
+      if (best < 0 || bestDelta > maxDelta) return false;
+      if (bestDelta > 0.035) {
+        list[best] = found.t;
+        list.sort((a, b) => a - b);
+      }
+      return true;
+    };
+    const nearGate = (found, maxDelta = 0.34) => {
+      const list = found && gates.get(found.edge);
+      return !!(list && list.some(t => Math.abs(t - found.t) <= maxDelta));
+    };
     const cityRoads = [...HEXROADS.values()]
       .filter(rd => (rd.a === city.idx || rd.b === city.idx) && !roadEndsAtInlineShipyard(city, rd))
       .sort((a, b) => a.len - b.len);
-    const maxGates = city.size <= 1 ? 3 : city.size === 2 ? 4 : 6;
+    const maxGates = 6;
     for (const rd of cityRoads.slice(0, maxGates)) {
       const forward = rd.from === city.idx, pts = rd.pts;
       if (!pts || pts.length < 2) continue;
       const start = forward ? 0 : pts.length - 1, step = forward ? 1 : -1;
+      const localPts = [];
+      for (let i = start; i >= 0 && i < pts.length; i += step) {
+        const p = pts[i];
+        localPts.push([(p[0] - centerX) / CITY_SCALE, (p[1] - centerZ) / CITY_SCALE]);
+      }
       let found = null;
-      for (let i = start; i + step >= 0 && i + step < pts.length && !found; i += step) {
-        const pa = pts[i], pb = pts[i + step];
-        const a = [(pa[0] - centerX) / CITY_SCALE, (pa[1] - centerZ) / CITY_SCALE];
-        const b = [(pb[0] - centerX) / CITY_SCALE, (pb[1] - centerZ) / CITY_SCALE];
+      for (let i = 0; i + 1 < localPts.length && !found; i++) {
+        const a = localPts[i], b = localPts[i + 1];
         for (let k = 0; k < vertices.length; k++) {
           const hit = _segmentHit(a, b, vertices[k], vertices[(k + 1) % vertices.length]);
-          if (hit) { found = { edge: k, t: Math.max(0, Math.min(1, hit.edgeT)) }; break; }
+          if (hit) { found = { edge: k, t: Math.max(0.12, Math.min(0.88, hit.edgeT)) }; break; }
         }
       }
       // Некоторые запечённые дороги заканчиваются в соседнем хексе, не доходя
       // до периметра. В таком случае продолжаем направление до стены лучом.
       if (!found) {
-        let nearest = null, nearestD = Infinity;
-        for (const p of pts) {
-          const x = (p[0] - centerX) / CITY_SCALE, z = (p[1] - centerZ) / CITY_SCALE;
-          const d = x * x + z * z;
-          if (d > 1e-5 && d < nearestD) { nearestD = d; nearest = [x, z]; }
-        }
-        if (nearest) {
-          const mag = Math.hypot(nearest[0], nearest[1]) || 1;
-          const far = [nearest[0] / mag * 100, nearest[1] / mag * 100];
-          let best = null;
-          for (let k = 0; k < vertices.length; k++) {
-            const hit = _segmentHit([0, 0], far, vertices[k], vertices[(k + 1) % vertices.length]);
-            if (hit && (!best || hit.roadT < best.roadT)) best = { edge: k, t: hit.edgeT, roadT: hit.roadT };
-          }
-          if (best) found = { edge: best.edge, t: Math.max(0, Math.min(1, best.t)) };
-        }
+        const outer = localPts.find(p => Math.hypot(p[0], p[1]) >= wallRadius * 0.85)
+          || localPts.reduce((best, p) => Math.hypot(p[0], p[1]) > Math.hypot(best[0], best[1]) ? p : best, localPts[0]);
+        if (outer) found = _gateHitFromDirection(vertices, outer);
       }
       if (!found) continue;
-      const list = gates.get(found.edge) || [];
-      if (!list.some(t => Math.abs(t - found.t) < 0.08)) list.push(found.t);
-      gates.set(found.edge, list);
+      addGate(found);
+    }
+
+    // Граф дорог хранит только связи город-город. Визуально возле города могут быть
+    // дополнительные road/bridge-тайлы, и ворота должны смотреть на них тоже.
+    if (HEXROADTILES.length) {
+      const candidates = [];
+      const minD = wallRadius * 1.05, maxD = wallRadius * (city.size >= 3 ? 5.0 : city.size === 2 ? 4.2 : 3.8);
+      const targetD = wallRadius * 1.65;
+      const maxScore = wallRadius * 0.85;
+      for (const tile of HEXROADTILES) {
+        const lx = (tile.gx - centerX) / CITY_SCALE, lz = (tile.gz - centerZ) / CITY_SCALE;
+        const d = Math.hypot(lx, lz);
+        if (d < minD || d > maxD) continue;
+        const found = _gateHitFromDirection(vertices, [lx, lz]);
+        if (found) candidates.push({ ...found, d, score: Math.abs(d - targetD) });
+      }
+      candidates.sort((a, b) => a.score - b.score || a.d - b.d);
+      const usedSlots = new Set();
+      const refinedEdges = new Set();
+      for (const found of candidates) {
+        if (found.score > maxScore) continue;
+        const slotKey = found.edge + ':' + Math.round(found.t * 8);
+        if (usedSlots.has(slotKey)) continue;
+        usedSlots.add(slotKey);
+        if (!refinedEdges.has(found.edge) && refineGate(found)) { refinedEdges.add(found.edge); continue; }
+        if (refinedEdges.has(found.edge) && nearGate(found)) continue;
+        if (gates.has(found.edge)) continue;
+        if (gateCount() >= maxGates) continue;
+        addGate(found, 0.18);
+      }
     }
     return gates;
   }
@@ -547,7 +640,8 @@
     // Tier 2 — та же компоновка из камня.
     const wallM = tier1Defense && M.fenceWood ? M.fenceWood : M.wall;
     const gateM = tier1Defense && M.fenceWoodGate ? M.fenceWoodGate : (M.wallGate || wallM);
-    const ringR = (tier1Defense || tier >= 2 ? 1.65 : 0.85) * hs;
+    const wallRadiusScale = 0.7;
+    const ringR = (tier1Defense || tier >= 2 ? 1.65 : 0.85) * wallRadiusScale * hs;
     const targetH = (tier >= 3 ? 0.442 : tier2Defense ? 0.34 : tier1Defense ? 0.30 : tier === 2 ? 0.30 : 0.18) * hs;
     const cross = targetH / (_bbY(wallM) || 1);       // масштаб высоты/толщины (сохраняет пропорции)
     const wLong = Math.max(_bbX(wallM), _bbZ(wallM)), idealSeg = wLong * cross;
@@ -579,9 +673,15 @@
     for (let k = 0; k < corners; k++) {
       const p = V[k], q = V[(k + 1) % corners], ang = Math.atan2(q[1] - p[1], q[0] - p[0]);
       const edgeLen = Math.hypot(q[0] - p[0], q[1] - p[1]);
-      let n = Math.max(1, Math.round(edgeLen / idealSeg));
       const edgeGates = gatePositions.get(k) || [];
-      const gateSlots = new Set(edgeGates.map(t => Math.max(0, Math.min(n - 1, Math.round(t * n - 0.5)))));
+      let n = Math.max(1, Math.round(edgeLen / idealSeg));
+      if (edgeGates.length) n = Math.max(n, Math.min(5, edgeGates.length * 2 + 1));
+      const gateSlots = new Map();
+      for (const gateT of edgeGates) {
+        const slot = Math.max(0, Math.min(n - 1, Math.round(gateT * n - 0.5)));
+        const prev = gateSlots.get(slot), slotCenter = (slot + 0.5) / n;
+        if (prev == null || Math.abs(gateT - slotCenter) < Math.abs(prev - slotCenter)) gateSlots.set(slot, gateT);
+      }
       const lZ = _bbZ(wallM) > _bbX(wallM), lenScale = (edgeLen / n) * 1.1 / wLong;
       const land = [];
       for (let i = 0; i < n; i++) {
@@ -599,8 +699,9 @@
       for (let i = 0; i < n; i++) {
         if (!land[i]) continue;
         if (breakEdges.has(k)) continue;
-        const t = (i + 0.5) / n, cx = p[0] + (q[0] - p[0]) * t, cz = p[1] + (q[1] - p[1]) * t;
-        const isGate = gateSlots.has(i) && gateM;
+        const gateT = gateSlots.get(i);
+        const t = gateT == null ? (i + 0.5) / n : gateT, cx = p[0] + (q[0] - p[0]) * t, cz = p[1] + (q[1] - p[1]) * t;
+        const isGate = gateT != null && gateM;
         const wm = isGate ? gateM : wallM, m = new T.Mesh(wm.geo, wm.mat);
         m.position.set(offX + cx, -_bbMinY(wm) * cross, offZ + cz);
         m.rotation.y = -ang + Math.PI + (lZ ? Math.PI / 2 : 0);   // длинной осью вдоль ребра, внешн. стороной наружу

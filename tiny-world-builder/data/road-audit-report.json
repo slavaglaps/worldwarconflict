@@ -1,16 +1,21 @@
 {
-  "ok": true,
-  "generatedAt": "2026-06-28T17:19:40.613Z",
+  "ok": false,
+  "generatedAt": "2026-06-28T20:13:19.193Z",
   "totals": {
     "cities": 239,
     "countries": 32,
-    "bakedRoads": 317,
-    "gameplayEdges": 317,
-    "components": 9,
+    "bakedRoads": 350,
+    "gameplayEdges": 350,
+    "components": 13,
     "oceanCrossings": 0,
-    "isolatedCities": 4
+    "isolatedCities": 8
   },
-  "failures": [],
+  "failures": [
+    "Малага (Испания) has no land road edges",
+    "Ставангер (Норвегия) has no land road edges",
+    "Фару (Португалия) has no land road edges",
+    "Стокгольм (Швеция) has no land road edges"
+  ],
   "warnings": [],
   "allowedNoLandRoad": [
     "Пальма",
@@ -21,107 +26,106 @@
   "globalComponents": [
     {
       "id": 2,
-      "size": 219,
+      "size": 215,
       "cities": [
         "Париж",
-        "Страсбург",
         "Лиль",
         "Леман",
-        "Штутгарт",
-        "Люксембург",
+        "Бурж",
+        "Страсбург",
         "Базел",
         "Брюсель",
         "Нант",
-        "Бурж",
         "Лимоджес",
-        "Мюнхен",
-        "Кёльн",
         "Лион",
         "Женева",
+        "Люксембург",
+        "Штутгарт",
         "Брюгге",
         "Бордо",
         "Клермонт",
-        "Франкфурт",
-        "Нюрнберг",
-        "Зальцбург",
-        "Дюссельдорф",
-        "Антверпен",
         "Валенс",
         "Турин",
         "Цюрих",
+        "Кёльн",
+        "Мюнхен",
+        "Антверпен",
         "Тулуза",
         "Марсель",
-        "Лейпциг",
-        "Лихтенштайн",
-        "Линц",
-        "Ганновер",
-        "Бремен",
-        "Амстердам",
-        "Ротердам",
         "Милан",
         "Генуа",
+        "Лихтенштайн",
+        "Франкфурт",
+        "Дюссельдорф",
+        "Нюрнберг",
+        "Зальцбург",
+        "Ротердам",
         "Андора",
+        "Болзано",
+        "Венеция",
+        "Флоренция",
+        "Бремен",
+        "Ганновер",
+        "Амстердам",
+        "Лейпциг",
+        "Любляна",
+        "Линц",
+        "Сарагоса",
+        "Рим",
+        "Гамбург",
         "Берлин",
         "Прага",
-        "Болзано",
-        "Любляна",
-        "Гамбург",
-        "Флоренция",
-        "Сарагоса",
-        "Вроцлав",
-        "Брно",
-        "Венеция",
         "Грац",
-        "Оденсе",
-        "Рим",
         "Барселона",
         "Бильбао",
         "Мадрид",
-        "Ченстохова",
-        "Познань",
-        "Острава",
-        "Вена",
-        "Орхус",
         "Неаполь",
+        "Оденсе",
+        "Вроцлав",
+        "Познань",
+        "Брно",
+        "Вена",
         "Валенсия",
         "Коимбра",
-        "Лодзь",
-        "Быдгощ",
-        "Братислава",
-        "Катовице",
         "Бари",
+        "Орхус",
+        "Ченстохова",
+        "Быдгощ",
+        "Лодзь",
+        "Острава",
+        "Братислава",
         "Аликанте",
         "Лиссабон",
         "Порту",
-        "Варшава",
-        "Краков",
         "Гданьск",
         "Шецин",
+        "Варшава",
+        "Краков",
+        "Катовице",
         "Кошице",
         "Мурсия",
         "Севилья",
-        "Фару",
         "Люблин",
         "Белосток",
         "Львов",
         "Будапешт",
         "Ужгород",
-        "Малага",
         "Луцк",
-        "Калининград",
         "Druskininkai",
+        "Калининград",
         "Тернопль",
         "Ивано Франковск",
-        "Загреб",
         "Тимишоара",
+        "Загреб",
         "Новый город",
         "Чернобыль",
         "Вильнюс",
         "Каунас",
         "Житомир",
-        "Сараево",
+        "Бухарест",
         "Клуж-Напока",
         "Брашов",
+        "Сараево",
         "Минск",
         "Киев",
         "Мазыр",
@@ -129,116 +133,113 @@
         "Рига",
         "Клайпеда",
         "Виница",
+        "Варна",
+        "София",
+        "Кишенев",
+        "Яссы",
         "Белград",
         "Скопье",
-        "Яссы",
-        "Бухарест",
         "Смоленск",
         "Чернигов",
-        "Псковыы",
         "Тарту",
+        "Псковыы",
         "Миколаев",
         "Кривой рог",
         "Тираспольы",
-        "София",
+        "Бургас",
+        "Пловдив",
+        "Кавала",
         "Лариса",
-        "Тиранэ",
-        "Варна",
-        "Брянск",
-        "Сумы",
-        "Новгород",
-        "Таллин",
         "Одесса",
+        "Тиранэ",
+        "Москва",
+        "Брянск",
+        "Новгород",
+        "Сумы",
+        "Таллин",
         "Херсон",
         "Днепр",
         "Полтава",
-        "Кишенев",
-        "Кавала",
-        "Пловдив",
         "Салоники",
         "Патры",
         "Волос",
-        "Бургас",
-        "Москва",
+        "Тверь",
+        "Нижний Новгород",
+        "Воронеж",
         "Курск",
-        "Харьков",
         "Петербург",
-        "Мариопльв",
+        "Харьков",
         "Симферопольы",
+        "Мариопльв",
         "Донецк",
         "Патрас",
         "Афины",
-        "Тверь",
+        "Ярославль",
+        "Казань",
         "Белгород",
-        "Луганск",
+        "Саратов",
+        "Ростов",
         "Лаппеэнранта",
         "Петрозаводск",
+        "Луганск",
         "Севастополь",
-        "Ростов",
-        "Ярославль",
-        "Воронеж",
+        "Самара",
+        "Волгоград",
+        "Краснодар",
         "Хельсинки",
         "Ювяскюля",
-        "Архангельск",
-        "Краснодар",
-        "Волгоград",
-        "Нижний Новгород",
-        "Саратов",
-        "Тампере",
-        "Турку",
-        "Куопио",
         "Мурманск",
+        "Архангельск",
+        "Астрахань",
         "Сочи",
         "Новоросийск",
         "Ставрополь",
-        "Астрахань",
-        "Казань",
-        "Самара",
-        "Оулу",
-        "Васа",
+        "Тампере",
+        "Турку",
+        "Куопио",
         "Инари",
-        "Владикавказ",
         "Махачкала",
-        "Рованейми",
+        "Владикавказ",
+        "Васа",
+        "Оулу",
         "Хамерфест",
+        "Рованейми",
         "Тбилиси",
         "Кутаиси",
-        "Тромсё",
         "Шеллефтео",
+        "Тромсё",
         "Гюмри",
         "Батуми",
-        "Бодо",
         "Умеа",
+        "Бодо",
         "Ереван",
         "Карс",
-        "Тронхейм",
-        "Шторуман",
+        "Трабзон",
         "Худиксвалль",
+        "Шторуман",
+        "Тронхейм",
         "Гянджа",
+        "Баку",
         "Эрзурум",
+        "Кайсери",
+        "Эребру",
+        "Свэг",
         "Осло",
         "Берген",
-        "Свэг",
-        "Эребру",
         "Сумгаит",
-        "Трабзон",
         "Ван",
-        "Гётеборг",
-        "Ставангер",
-        "Линчёпинг",
-        "Норрчёпинг",
-        "Баку",
-        "Кайсери",
-        "Мардин",
-        "Мальмё",
-        "Стокгольм",
         "Анкара",
         "Адана",
-        "Газиантеп",
+        "Линчёпинг",
+        "Норрчёпинг",
         "Уппсала",
+        "Гётеборг",
+        "Мардин",
+        "Стамбул",
         "Бурса",
         "Конья",
-        "Стамбул",
+        "Газиантеп",
+        "Мальмё",
         "Измир",
         "Анталья",
         "Бодрум"
@@ -253,8 +254,8 @@
         "Эдинбург",
         "Бирмингем",
         "Глазго",
-        "Бирмингмем",
         "Лондон",
+        "Бирмингмем",
         "Малый Лондон"
       ]
     },
@@ -264,12 +265,12 @@
       "cities": [
         "Дублин",
         "Белфаст",
-        "Галвэй",
-        "Лимэрик"
+        "Лимэрик",
+        "Галвэй"
       ]
     },
     {
-      "id": 4,
+      "id": 6,
       "size": 2,
       "cities": [
         "Палермо",
@@ -277,7 +278,7 @@
       ]
     },
     {
-      "id": 8,
+      "id": 12,
       "size": 2,
       "cities": [
         "Каглиари",
@@ -288,6 +289,13 @@
       "id": 3,
       "size": 1,
       "cities": [
+        "Малага"
+      ]
+    },
+    {
+      "id": 4,
+      "size": 1,
+      "cities": [
         "Пальма"
       ]
     },
@@ -295,18 +303,39 @@
       "id": 5,
       "size": 1,
       "cities": [
+        "Фару"
+      ]
+    },
+    {
+      "id": 7,
+      "size": 1,
+      "cities": [
+        "Ставангер"
+      ]
+    },
+    {
+      "id": 8,
+      "size": 1,
+      "cities": [
+        "Стокгольм"
+      ]
+    },
+    {
+      "id": 9,
+      "size": 1,
+      "cities": [
         "Копенгаген"
       ]
     },
     {
-      "id": 6,
+      "id": 10,
       "size": 1,
       "cities": [
         "Торсхавн"
       ]
     },
     {
-      "id": 7,
+      "id": 11,
       "size": 1,
       "cities": [
         "Ираклион"
@@ -320,7 +349,7 @@
         {
           "idx": 44,
           "name": "Вена",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
@@ -341,7 +370,7 @@
         {
           "idx": 48,
           "name": "Любляна",
-          "degree": 3,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -355,7 +384,7 @@
         {
           "idx": 83,
           "name": "Бухарест",
-          "degree": 3,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -390,14 +419,14 @@
         {
           "idx": 156,
           "name": "Зальцбург",
-          "degree": 3,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 157,
           "name": "Линц",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
@@ -430,7 +459,7 @@
       "needsFerryOrManualRoad": [],
       "deadEnds": [],
       "cityCount": 15,
-      "edgeCount": 13
+      "edgeCount": 14
     },
     {
       "country": "Азербайджан",
@@ -438,14 +467,14 @@
         {
           "idx": 133,
           "name": "Баку",
-          "degree": 1,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 134,
           "name": "Гянджа",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
@@ -462,17 +491,9 @@
       ],
       "isolated": [],
       "needsFerryOrManualRoad": [],
-      "deadEnds": [
-        {
-          "idx": 133,
-          "name": "Баку",
-          "degree": 1,
-          "component": 2,
-          "status": "ok"
-        }
-      ],
+      "deadEnds": [],
       "cityCount": 3,
-      "edgeCount": 2
+      "edgeCount": 3
     },
     {
       "country": "Андора",
@@ -500,7 +521,7 @@
         {
           "idx": 131,
           "name": "Ереван",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
@@ -588,7 +609,7 @@
         {
           "idx": 84,
           "name": "София",
-          "degree": 5,
+          "degree": 6,
           "component": 2,
           "status": "ok"
         },
@@ -609,7 +630,7 @@
         {
           "idx": 211,
           "name": "Бургас",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         }
@@ -764,7 +785,7 @@
         {
           "idx": 31,
           "name": "Берлин",
-          "degree": 3,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -785,14 +806,14 @@
         {
           "idx": 34,
           "name": "Франкфурт",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 35,
           "name": "Дюссельдорф",
-          "degree": 4,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -820,7 +841,7 @@
         {
           "idx": 39,
           "name": "Ганновер",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
@@ -846,7 +867,7 @@
       "needsFerryOrManualRoad": [],
       "deadEnds": [],
       "cityCount": 11,
-      "edgeCount": 13
+      "edgeCount": 15
     },
     {
       "country": "Греция",
@@ -876,13 +897,13 @@
           "idx": 91,
           "name": "Ираклион",
           "degree": 0,
-          "component": 7,
+          "component": 11,
           "status": "needs-ferry-or-manual-road"
         },
         {
           "idx": 92,
           "name": "Лариса",
-          "degree": 5,
+          "degree": 6,
           "component": 2,
           "status": "ok"
         },
@@ -896,7 +917,7 @@
         {
           "idx": 94,
           "name": "Кавала",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
@@ -910,14 +931,14 @@
       ],
       "components": [
         2,
-        7
+        11
       ],
       "isolated": [
         {
           "idx": 91,
           "name": "Ираклион",
           "degree": 0,
-          "component": 7,
+          "component": 11,
           "status": "needs-ferry-or-manual-road"
         }
       ],
@@ -926,7 +947,7 @@
           "idx": 91,
           "name": "Ираклион",
           "degree": 0,
-          "component": 7,
+          "component": 11,
           "status": "needs-ferry-or-manual-road"
         }
       ],
@@ -947,7 +968,7 @@
         {
           "idx": 129,
           "name": "Батуми",
-          "degree": 1,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
@@ -964,15 +985,7 @@
       ],
       "isolated": [],
       "needsFerryOrManualRoad": [],
-      "deadEnds": [
-        {
-          "idx": 129,
-          "name": "Батуми",
-          "degree": 1,
-          "component": 2,
-          "status": "ok"
-        }
-      ],
+      "deadEnds": [],
       "cityCount": 3,
       "edgeCount": 2
     },
@@ -983,7 +996,7 @@
           "idx": 71,
           "name": "Копенгаген",
           "degree": 0,
-          "component": 5,
+          "component": 9,
           "status": "needs-ferry-or-manual-road"
         },
         {
@@ -1004,28 +1017,28 @@
           "idx": 74,
           "name": "Торсхавн",
           "degree": 0,
-          "component": 6,
+          "component": 10,
           "status": "needs-ferry-or-manual-road"
         }
       ],
       "components": [
         2,
-        5,
-        6
+        9,
+        10
       ],
       "isolated": [
         {
           "idx": 71,
           "name": "Копенгаген",
           "degree": 0,
-          "component": 5,
+          "component": 9,
           "status": "needs-ferry-or-manual-road"
         },
         {
           "idx": 74,
           "name": "Торсхавн",
           "degree": 0,
-          "component": 6,
+          "component": 10,
           "status": "needs-ferry-or-manual-road"
         }
       ],
@@ -1034,14 +1047,14 @@
           "idx": 71,
           "name": "Копенгаген",
           "degree": 0,
-          "component": 5,
+          "component": 9,
           "status": "needs-ferry-or-manual-road"
         },
         {
           "idx": 74,
           "name": "Торсхавн",
           "degree": 0,
-          "component": 6,
+          "component": 10,
           "status": "needs-ferry-or-manual-road"
         }
       ],
@@ -1077,16 +1090,16 @@
         {
           "idx": 15,
           "name": "Севилья",
-          "degree": 2,
+          "degree": 1,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 16,
           "name": "Малага",
-          "degree": 1,
-          "component": 2,
-          "status": "ok"
+          "degree": 0,
+          "component": 3,
+          "status": "missing-road"
         },
         {
           "idx": 17,
@@ -1106,7 +1119,7 @@
           "idx": 19,
           "name": "Пальма",
           "degree": 0,
-          "component": 3,
+          "component": 4,
           "status": "needs-ferry-or-manual-road"
         },
         {
@@ -1133,14 +1146,22 @@
       ],
       "components": [
         2,
-        3
+        3,
+        4
       ],
       "isolated": [
+        {
+          "idx": 16,
+          "name": "Малага",
+          "degree": 0,
+          "component": 3,
+          "status": "missing-road"
+        },
         {
           "idx": 19,
           "name": "Пальма",
           "degree": 0,
-          "component": 3,
+          "component": 4,
           "status": "needs-ferry-or-manual-road"
         }
       ],
@@ -1149,7 +1170,7 @@
           "idx": 19,
           "name": "Пальма",
           "degree": 0,
-          "component": 3,
+          "component": 4,
           "status": "needs-ferry-or-manual-road"
         }
       ],
@@ -1162,8 +1183,8 @@
           "status": "ok"
         },
         {
-          "idx": 16,
-          "name": "Малага",
+          "idx": 15,
+          "name": "Севилья",
           "degree": 1,
           "component": 2,
           "status": "ok"
@@ -1184,7 +1205,7 @@
         }
       ],
       "cityCount": 10,
-      "edgeCount": 7
+      "edgeCount": 6
     },
     {
       "country": "Италия",
@@ -1199,7 +1220,7 @@
         {
           "idx": 26,
           "name": "Милан",
-          "degree": 2,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -1220,7 +1241,7 @@
         {
           "idx": 29,
           "name": "Флоренция",
-          "degree": 2,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
@@ -1228,27 +1249,27 @@
           "idx": 30,
           "name": "Палермо",
           "degree": 1,
-          "component": 4,
+          "component": 6,
           "status": "ok"
         },
         {
           "idx": 146,
           "name": "Генуа",
-          "degree": 2,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 147,
           "name": "Венеция",
-          "degree": 2,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 148,
           "name": "Болзано",
-          "degree": 3,
+          "degree": 6,
           "component": 2,
           "status": "ok"
         },
@@ -1263,28 +1284,28 @@
           "idx": 150,
           "name": "Катания",
           "degree": 1,
-          "component": 4,
+          "component": 6,
           "status": "ok"
         },
         {
           "idx": 151,
           "name": "Каглиари",
           "degree": 1,
-          "component": 8,
+          "component": 12,
           "status": "ok"
         },
         {
           "idx": 152,
           "name": "Сассари",
           "degree": 1,
-          "component": 8,
+          "component": 12,
           "status": "ok"
         }
       ],
       "components": [
         2,
-        4,
-        8
+        6,
+        12
       ],
       "isolated": [],
       "needsFerryOrManualRoad": [],
@@ -1293,7 +1314,7 @@
           "idx": 30,
           "name": "Палермо",
           "degree": 1,
-          "component": 4,
+          "component": 6,
           "status": "ok"
         },
         {
@@ -1307,26 +1328,26 @@
           "idx": 150,
           "name": "Катания",
           "degree": 1,
-          "component": 4,
+          "component": 6,
           "status": "ok"
         },
         {
           "idx": 151,
           "name": "Каглиари",
           "degree": 1,
-          "component": 8,
+          "component": 12,
           "status": "ok"
         },
         {
           "idx": 152,
           "name": "Сассари",
           "degree": 1,
-          "component": 8,
+          "component": 12,
           "status": "ok"
         }
       ],
       "cityCount": 13,
-      "edgeCount": 10
+      "edgeCount": 15
     },
     {
       "country": "Латвия",
@@ -1334,14 +1355,14 @@
         {
           "idx": 77,
           "name": "Рига",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 78,
           "name": "Даугавпилс",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         }
@@ -1430,7 +1451,7 @@
         {
           "idx": 199,
           "name": "Кишенев",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
@@ -1491,7 +1512,7 @@
         {
           "idx": 56,
           "name": "Берген",
-          "degree": 2,
+          "degree": 1,
           "component": 2,
           "status": "ok"
         },
@@ -1505,9 +1526,9 @@
         {
           "idx": 58,
           "name": "Ставангер",
-          "degree": 1,
-          "component": 2,
-          "status": "ok"
+          "degree": 0,
+          "component": 7,
+          "status": "missing-road"
         },
         {
           "idx": 59,
@@ -1532,21 +1553,30 @@
         }
       ],
       "components": [
-        2
+        2,
+        7
       ],
-      "isolated": [],
-      "needsFerryOrManualRoad": [],
-      "deadEnds": [
+      "isolated": [
         {
           "idx": 58,
           "name": "Ставангер",
+          "degree": 0,
+          "component": 7,
+          "status": "missing-road"
+        }
+      ],
+      "needsFerryOrManualRoad": [],
+      "deadEnds": [
+        {
+          "idx": 56,
+          "name": "Берген",
           "degree": 1,
           "component": 2,
           "status": "ok"
         }
       ],
       "cityCount": 7,
-      "edgeCount": 6
+      "edgeCount": 5
     },
     {
       "country": "Польша",
@@ -1582,7 +1612,7 @@
         {
           "idx": 53,
           "name": "Познань",
-          "degree": 4,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -1610,14 +1640,14 @@
         {
           "idx": 175,
           "name": "Люблин",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 176,
           "name": "Белосток",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         }
@@ -1644,7 +1674,7 @@
         }
       ],
       "cityCount": 10,
-      "edgeCount": 10
+      "edgeCount": 11
     },
     {
       "country": "Португалия",
@@ -1652,7 +1682,7 @@
         {
           "idx": 20,
           "name": "Лиссабон",
-          "degree": 3,
+          "degree": 2,
           "component": 2,
           "status": "ok"
         },
@@ -1673,15 +1703,24 @@
         {
           "idx": 24,
           "name": "Фару",
-          "degree": 1,
-          "component": 2,
-          "status": "ok"
+          "degree": 0,
+          "component": 5,
+          "status": "missing-road"
         }
       ],
       "components": [
-        2
+        2,
+        5
       ],
-      "isolated": [],
+      "isolated": [
+        {
+          "idx": 24,
+          "name": "Фару",
+          "degree": 0,
+          "component": 5,
+          "status": "missing-road"
+        }
+      ],
       "needsFerryOrManualRoad": [],
       "deadEnds": [
         {
@@ -1690,17 +1729,10 @@
           "degree": 1,
           "component": 2,
           "status": "ok"
-        },
-        {
-          "idx": 24,
-          "name": "Фару",
-          "degree": 1,
-          "component": 2,
-          "status": "ok"
         }
       ],
       "cityCount": 4,
-      "edgeCount": 3
+      "edgeCount": 2
     },
     {
       "country": "Россия",
@@ -1708,7 +1740,7 @@
         {
           "idx": 102,
           "name": "Москва",
-          "degree": 2,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -1722,28 +1754,28 @@
         {
           "idx": 104,
           "name": "Смоленск",
-          "degree": 3,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 105,
           "name": "Воронеж",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 106,
           "name": "Ярославль",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 107,
           "name": "Новгород",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
@@ -1820,7 +1852,7 @@
         {
           "idx": 225,
           "name": "Мурманск",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
@@ -1834,28 +1866,28 @@
         {
           "idx": 227,
           "name": "Петрозаводск",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 228,
           "name": "Псковыы",
-          "degree": 4,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 229,
           "name": "Нижний Новгород",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 230,
           "name": "Казань",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
@@ -1938,7 +1970,7 @@
         }
       ],
       "cityCount": 30,
-      "edgeCount": 33
+      "edgeCount": 39
     },
     {
       "country": "Румыния",
@@ -1953,7 +1985,7 @@
         {
           "idx": 202,
           "name": "Тимишоара",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
@@ -1987,14 +2019,14 @@
         {
           "idx": 117,
           "name": "Стамбул",
-          "degree": 1,
+          "degree": 2,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 118,
           "name": "Анкара",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
@@ -2029,7 +2061,7 @@
         {
           "idx": 123,
           "name": "Трабзон",
-          "degree": 2,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
@@ -2071,7 +2103,7 @@
         {
           "idx": 195,
           "name": "Карс",
-          "degree": 3,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -2095,17 +2127,9 @@
       ],
       "isolated": [],
       "needsFerryOrManualRoad": [],
-      "deadEnds": [
-        {
-          "idx": 117,
-          "name": "Стамбул",
-          "degree": 1,
-          "component": 2,
-          "status": "ok"
-        }
-      ],
+      "deadEnds": [],
       "cityCount": 15,
-      "edgeCount": 16
+      "edgeCount": 18
     },
     {
       "country": "Украина",
@@ -2120,7 +2144,7 @@
         {
           "idx": 96,
           "name": "Харьков",
-          "degree": 4,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -2141,7 +2165,7 @@
         {
           "idx": 99,
           "name": "Днепр",
-          "degree": 4,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -2272,7 +2296,7 @@
       "needsFerryOrManualRoad": [],
       "deadEnds": [],
       "cityCount": 22,
-      "edgeCount": 32
+      "edgeCount": 33
     },
     {
       "country": "Финляндия",
@@ -2301,7 +2325,7 @@
         {
           "idx": 70,
           "name": "Оулу",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
@@ -2371,7 +2395,7 @@
         {
           "idx": 6,
           "name": "Париж",
-          "degree": 3,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -2413,14 +2437,14 @@
         {
           "idx": 12,
           "name": "Нант",
-          "degree": 1,
+          "degree": 2,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 145,
           "name": "Бурж",
-          "degree": 4,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -2434,7 +2458,7 @@
         {
           "idx": 164,
           "name": "Базел",
-          "degree": 4,
+          "degree": 5,
           "component": 2,
           "status": "ok"
         },
@@ -2455,7 +2479,7 @@
         {
           "idx": 167,
           "name": "Лимоджес",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
@@ -2472,17 +2496,9 @@
       ],
       "isolated": [],
       "needsFerryOrManualRoad": [],
-      "deadEnds": [
-        {
-          "idx": 12,
-          "name": "Нант",
-          "degree": 1,
-          "component": 2,
-          "status": "ok"
-        }
-      ],
+      "deadEnds": [],
       "cityCount": 14,
-      "edgeCount": 18
+      "edgeCount": 21
     },
     {
       "country": "Чехия",
@@ -2504,7 +2520,7 @@
         {
           "idx": 172,
           "name": "Острава",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         }
@@ -2551,9 +2567,9 @@
         {
           "idx": 60,
           "name": "Стокгольм",
-          "degree": 2,
-          "component": 2,
-          "status": "ok"
+          "degree": 0,
+          "component": 8,
+          "status": "missing-road"
         },
         {
           "idx": 61,
@@ -2586,21 +2602,21 @@
         {
           "idx": 65,
           "name": "Эребру",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 66,
           "name": "Норрчёпинг",
-          "degree": 3,
+          "degree": 2,
           "component": 2,
           "status": "ok"
         },
         {
           "idx": 214,
           "name": "Шеллефтео",
-          "degree": 2,
+          "degree": 3,
           "component": 2,
           "status": "ok"
         },
@@ -2634,9 +2650,18 @@
         }
       ],
       "components": [
-        2
+        2,
+        8
       ],
-      "isolated": [],
+      "isolated": [
+        {
+          "idx": 60,
+          "name": "Стокгольм",
+          "degree": 0,
+          "component": 8,
+          "status": "missing-road"
+        }
+      ],
       "needsFerryOrManualRoad": [],
       "deadEnds": [
         {
@@ -2655,7 +2680,7 @@
         }
       ],
       "cityCount": 12,
-      "edgeCount": 12
+      "edgeCount": 11
     },
     {
       "country": "Эстония",
@@ -2670,7 +2695,7 @@
         {
           "idx": 76,
           "name": "Тарту",
-          "degree": 3,
+          "degree": 4,
           "component": 2,
           "status": "ok"
         }
