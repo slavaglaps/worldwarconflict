@@ -4,6 +4,7 @@ class City{
     this.gx=gx; this.gz=gz; this.country=country; this.size=size; this.owner=owner; this.idx=idx;
     this.occ=false; this.occFrom=null;   // оккупация: занят в войне, но не аннексирован (решается миром)
     this.spec=null; this.tier=0;
+    this.prodTier=0; this.defTier=0; this.atkTier=0;
     this.isShipyard=SHIPYARD_NAMES.has(CITY_NAMES[idx]); // верфь
     this.isAirport=AIRPORT_NAMES.has(CITY_NAMES[idx]);   // аэропорт
     this.shipQueue=0; this.shipTimer=0;   // очередь кораблей
@@ -15,6 +16,7 @@ class City{
     // position on terrain
     const terrainH = getTerrainHeight(gx, gz);
     const baseY = terrainH;
+    this.baseY = baseY;
     this.buildGroup=new T3.Group();
     this.buildGroup.position.set(gx,baseY,gz);
     scene.add(this.buildGroup);
@@ -24,43 +26,45 @@ class City{
     // hitbox for raycast
     this.hit=new T3.Mesh(new T3.CylinderGeometry(0.55*CITY_SCALE,0.55*CITY_SCALE,2.4*CITY_SCALE,10),
       new T3.MeshBasicMaterial({visible:false}));
-    this.hit.position.set(gx,baseY+0.8*CITY_SCALE,gz); this.hit.userData.city=this; scene.add(this.hit);
+    this.hit.position.set(this.gx,this.baseY+0.8*CITY_SCALE,this.gz); this.hit.userData.city=this; scene.add(this.hit);
     // selection ring
     this.ring=new T3.Mesh(new T3.TorusGeometry(0.62*CITY_SCALE,0.06*CITY_SCALE,8,28),
       new T3.MeshBasicMaterial({color:0xffffff}));
-    this.ring.rotation.x=Math.PI/2; this.ring.position.set(gx,baseY+0.03,gz); this.ring.visible=false;
+    this.ring.rotation.x=Math.PI/2; this.ring.position.set(this.gx,this.baseY+0.03,this.gz); this.ring.visible=false;
     scene.add(this.ring);
     // кольцо радиуса обстрела (видно при выборе atk-города)
     this.rangeRing=new T3.Mesh(new T3.TorusGeometry(1,0.12,8,64),
       new T3.MeshBasicMaterial({color:0xff7a3a,transparent:true,opacity:0.5}));
-    this.rangeRing.rotation.x=Math.PI/2; this.rangeRing.position.set(gx,baseY+0.1,gz);
+    this.rangeRing.rotation.x=Math.PI/2; this.rangeRing.position.set(this.gx,this.baseY+0.1,this.gz);
     this.rangeRing.visible=false; this._ringR=0; scene.add(this.rangeRing);
     // production ring
     this.pring=new T3.Mesh(new T3.TorusGeometry(0.7*CITY_SCALE,0.05*CITY_SCALE,8,32,0.001),
       new T3.MeshBasicMaterial({color:0xff9a4a}));
-    this.pring.rotation.x=Math.PI/2; this.pring.position.set(gx,baseY+0.05,gz); this.pring.visible=false;
+    this.pring.rotation.x=Math.PI/2; this.pring.position.set(this.gx,this.baseY+0.05,this.gz); this.pring.visible=false;
     scene.add(this.pring);
     // battle ring (осада)
     this.siege=null; // {ownerId:{units,atkMult}}
     this.bring=new T3.Mesh(new T3.TorusGeometry(0.55*CITY_SCALE,0.055*CITY_SCALE,8,28),
       new T3.MeshBasicMaterial({color:0xff5030}));
-    this.bring.rotation.x=Math.PI/2; this.bring.position.set(gx,baseY+0.08,gz); this.bring.visible=false;
+    this.bring.rotation.x=Math.PI/2; this.bring.position.set(this.gx,this.baseY+0.08,this.gz); this.bring.visible=false;
     scene.add(this.bring);
     this.siegeOrbs={};  // ownerId → {mesh,lab} осаждающие армии (видимы как в бою)
-    // store base position for later use
-    this.baseY = baseY;
     // dom label
     this.lab=document.createElement('div'); this.lab.className='lab';
     document.getElementById('labels').appendChild(this.lab);
   }
-  get capacity(){let c=CITY_CAP_BASE+this.size*CITY_CAP_PER_SIZE;if(this.spec==='def')c*=1+CITY_DEF_CAP_PER_TIER*this.tier;if(this.boosted)c*=CITY_BOOST_CAP;return c*techVal(this.owner,'cc');}
-  get goldInterval(){let g=CITY_GOLD_INTERVAL;if(this.spec==='prod')g*=Math.pow(CITY_PROD_GOLD_DECAY,this.tier);if(this.boosted)g*=CITY_BOOST_GOLD;return g/techMul(this.owner,'eco');}
+  branchTier(track){const v=this[track+'Tier'];return v==null?(this.spec===track?this.tier:0):v;}
+  get totalTier(){return this.branchTier('prod')+this.branchTier('def')+this.branchTier('atk');}
+  get visualTier(){return Math.max(this.branchTier('prod'),this.branchTier('def'),this.branchTier('atk'));}
+  syncLegacyTier(track){this.spec=track;this.tier=this.visualTier;}
+  get capacity(){let c=CITY_CAP_BASE+this.size*CITY_CAP_PER_SIZE;c*=1+CITY_DEF_CAP_PER_TIER*this.branchTier('def');if(this.boosted)c*=CITY_BOOST_CAP;return c*techVal(this.owner,'cc');}
+  get goldInterval(){let g=CITY_GOLD_INTERVAL;g*=Math.pow(CITY_PROD_GOLD_DECAY,this.branchTier('prod'));if(this.boosted)g*=CITY_BOOST_GOLD;return g/techMul(this.owner,'eco');}
   get goldRate(){return this.size/this.goldInterval;}
-  get defMult(){return (1+(this.spec==='def'?CITY_DEF_MULT_PER_TIER*this.tier:0))*techMul(this.owner,'def');}
-  get atkMult(){return (1+(this.spec==='atk'?CITY_ATK_MULT_PER_TIER*this.tier:0))*techMul(this.owner,'atk');}
-  get speedMult(){return (this.spec==='atk'?1+.18*this.tier:1)*techMul(this.owner,'speed');}
-  get fireRange(){return this.spec==='atk' ? (TOWER_RANGE_BASE+TOWER_RANGE_PER*this.tier)*techVal(this.owner,'tr') : 0;} // башни стреляют от самой прокачки атаки
-  get fireDmg(){return (TOWER_DMG_BASE+this.tier)*techMul(this.owner,'atk')*techVal(this.owner,'td');}
+  get defMult(){return (1+CITY_DEF_MULT_PER_TIER*this.branchTier('def'))*techMul(this.owner,'def');}
+  get atkMult(){return (1+CITY_ATK_MULT_PER_TIER*this.branchTier('atk'))*techMul(this.owner,'atk');}
+  get speedMult(){return (1+.18*this.branchTier('atk'))*techMul(this.owner,'speed');}
+  get fireRange(){const tier=this.branchTier('atk');return tier>0?(TOWER_RANGE_BASE+TOWER_RANGE_PER*tier)*techVal(this.owner,'tr'):0;}
+  get fireDmg(){return (TOWER_DMG_BASE+this.branchTier('atk'))*techMul(this.owner,'atk')*techVal(this.owner,'td');}
   get trainPer(){let t=CITY_TRAIN_BASE-this.size*CITY_TRAIN_PER_SIZE;if(this.boosted)t*=CITY_BOOST_TRAIN;return t/techMul(this.owner,'prod');}
   get queued(){return this.batches.reduce((s,b)=>s+b.count,0);}
 
@@ -287,6 +291,15 @@ class City{
     p.units+=units;
   }
   update(dt){
+    if(this._visualGX!=null){
+      const vx=this._visualGX,vz=this._visualGZ,vy=this._visualY==null?this.baseY:this._visualY;
+      this.buildGroup.position.x=vx;this.buildGroup.position.z=vz;
+      this.hit.position.x=vx;this.hit.position.z=vz;this.hit.position.y=vy+0.8*CITY_SCALE;
+      this.ring.position.x=vx;this.ring.position.z=vz;this.ring.position.y=vy+0.03;
+      this.rangeRing.position.x=vx;this.rangeRing.position.z=vz;this.rangeRing.position.y=vy+0.1;
+      this.pring.position.x=vx;this.pring.position.z=vz;
+      this.bring.position.x=vx;this.bring.position.z=vz;this.bring.position.y=vy+0.08;
+    }
     // ── осада: бой за город во времени ──
     if(this.siege){
       const pools=Object.values(this.siege);
@@ -339,11 +352,11 @@ class City{
       this.pring.visible=true;
       this.pring.geometry.dispose();
       this.pring.geometry=new T3.TorusGeometry(0.7*CITY_SCALE,0.05*CITY_SCALE,8,32,Math.max(0.001,frac*Math.PI*2));
-      this.pring.position.y=this.baseY+this.topY*CITY_SCALE+0.35;
+      this.pring.position.y=(this._visualY==null?this.baseY:this._visualY)+this.topY*CITY_SCALE+0.35;
     } else this.pring.visible=false;
   }
   updateLabel(){
-    const v=new T3.Vector3(this.gx,this.baseY+this.topY*CITY_SCALE+0.7,this.gz).project(camera);
+    const v=new T3.Vector3(this._visualGX==null?this.gx:this._visualGX,(this._visualY==null?this.baseY:this._visualY)+this.topY*CITY_SCALE+0.7,this._visualGZ==null?this.gz:this._visualGZ).project(camera);
     if(v.z>1){showLab(this.lab,false);return;}
     showLab(this.lab,true);
     posLab(this.lab,(v.x*0.5+0.5)*innerWidth,(-v.y*0.5+0.5)*innerHeight);
@@ -362,7 +375,7 @@ class City{
     if(!this.siege){
       for(const o in orbs){scene.remove(orbs[o].mesh);orbs[o].lab.remove();delete orbs[o];}
       // снять тряску города
-      this.buildGroup.position.set(this.gx,this.baseY,this.gz);
+      this.buildGroup.position.set(this._visualGX==null?this.gx:this._visualGX,this._visualY==null?this.baseY:this._visualY,this._visualGZ==null?this.gz:this._visualGZ);
       return;
     }
     // удалить орбы пуллов, что уже не осаждают
@@ -398,8 +411,8 @@ class City{
     }
     // город трясётся под штурмом
     const cj=now/60;
-    this.buildGroup.position.set(this.gx+Math.sin(cj*1.9)*0.04, this.baseY, this.gz+Math.cos(cj*1.6)*0.04);
+    const bx=this._visualGX==null?this.gx:this._visualGX,bz=this._visualGZ==null?this.gz:this._visualGZ,by=this._visualY==null?this.baseY:this._visualY;
+    this.buildGroup.position.set(bx+Math.sin(cj*1.9)*0.04,by,bz+Math.cos(cj*1.6)*0.04);
   }
 }
 const CITY_NAMES = CITY_LIST.map(c => c[0]);
-

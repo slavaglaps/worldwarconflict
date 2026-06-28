@@ -25,6 +25,22 @@ class Squad {
     if (!b) { this.x = a.gx; this.z = a.gz; return; }
     const e = this.sim.edgeBetween(this.path[this.hop], this.path[this.hop + 1]);
     const f = e ? Math.min(1, this.prog / e.len) : 0;
+    if (e && Array.isArray(e.pts) && e.pts.length >= 2 && e.len > 0) {
+      const pts = e.a === this.path[this.hop] ? e.pts : e.pts.slice().reverse();
+      const target = f * e.len;
+      let walked = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const p0 = pts[i - 1], p1 = pts[i];
+        const seg = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+        if (walked + seg >= target || i === pts.length - 1) {
+          const t = seg > 0 ? Math.max(0, Math.min(1, (target - walked) / seg)) : 0;
+          this.x = p0.x + (p1.x - p0.x) * t;
+          this.z = p0.z + (p1.z - p0.z) * t;
+          return;
+        }
+        walked += seg;
+      }
+    }
     this.x = a.gx + (b.gx - a.gx) * f;
     this.z = a.gz + (b.gz - a.gz) * f;
   }

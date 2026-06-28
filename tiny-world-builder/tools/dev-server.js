@@ -92,6 +92,216 @@ function readJsonBody(req, maxBytes = 24 * 1024 * 1024) {
   });
 }
 
+function writeJsonAtomic(out, input) {
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const tmp = out + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(input, null, 2) + '\n');
+  fs.renameSync(tmp, out);
+  return fs.statSync(out);
+}
+
+function cityOwnerToken(country) {
+  if (country === 'Британия' || country === 'Франция') return 'P';
+  if (country === 'Россия' || country === 'Турция') return 'E';
+  return 'N';
+}
+
+function cityNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 10000) / 10000 : fallback;
+}
+
+function formatCityList(cities) {
+  const rows = cities.map(city => {
+    const name = String(city[0] || 'Новый город');
+    const lng = cityNumber(city[1]);
+    const lat = cityNumber(city[2]);
+    const size = Math.max(1, Math.min(3, Math.round(Number(city[3]) || 1)));
+    const country = String(city[5] || 'Нейтральные');
+    const owner = cityOwnerToken(country);
+    return `  [${JSON.stringify(name)},${lng},${lat},${size},${owner},${JSON.stringify(country)}],`;
+  });
+  return `const CITY_LIST = [\n${rows.join('\n')}\n];`;
+}
+
+function parseCityListBlock(src) {
+  const m = src.match(/const\s+CITY_LIST\s*=\s*(\[[\s\S]*?\n\]);/);
+  if (!m) return null;
+  return Function('P', 'E', 'N', `return ${m[1].replace(/,\s*\]/, ']')};`)('P', 'E', 'N');
+}
+
+function writeCityList(cities) {
+  if (!Array.isArray(cities)) throw new Error('Expected cities array');
+  if (cities.length < 1) throw new Error('Refusing to save an empty CITY_LIST');
+  const out = path.resolve(root, 'js', 'data.js');
+  const src = fs.readFileSync(out, 'utf8');
+  const existingCities = parseCityListBlock(src);
+  if (!existingCities) throw new Error('CITY_LIST block not found');
+  if (existingCities.length >= 20 && cities.length < existingCities.length * 0.5) {
+    throw new Error(`Refusing to shrink CITY_LIST from ${existingCities.length} to ${cities.length}`);
+  }
+  const next = src.replace(/const\s+CITY_LIST\s*=\s*\[[\s\S]*?\n\];/, formatCityList(cities));
+  if (next === src) return fs.statSync(out);
+  const tmp = out + '.tmp';
+  fs.writeFileSync(tmp, next);
+  fs.renameSync(tmp, out);
+  return fs.statSync(out);
+}
+
+function readGameDataForSim() {
+  const src = fs.readFileSync(path.resolve(root, 'js', 'data.js'), 'utf8');
+  const CITY_LIST = parseCityListBlock(src);
+  if (!CITY_LIST) throw new Error('CITY_LIST block not found');
+  const colorsBlock = src.match(/const\s+FACTION_COLOR\s*=\s*(\{[\s\S]*?\n\});/);
+  if (!colorsBlock) throw new Error('FACTION_COLOR block not found');
+  const colorExpr = colorsBlock[1].replace(/([,{]\s*)'([^']+)'\s*:/g, '$1"$2":').replace(/0x[0-9a-fA-F]+/g, m => String(Number(m)));
+  const FACTION_COLOR = Function(`return ${colorExpr};`)();
+  return { CITY_LIST, FACTION_COLOR };
+}
+
+function cityListToSimMap(hexMap) {
+  const { CITY_LIST, FACTION_COLOR } = readGameDataForSim();
+  const countries = [...new Set(CITY_LIST.map(c => c[5]))];
+  const factByCountry = {};
+  const factions = countries.map((country, id) => {
+    factByCountry[country] = id;
+    return { id, country, color: FACTION_COLOR[country] || 0x9aa6b2 };
+  });
+  const capitals = new Set();
+  const cities = CITY_LIST.map((c, idx) => {
+    const country = c[5];
+    const capital = !capitals.has(country); capitals.add(country);
+    const gx = Math.round(((c[1] - (-13)) / (51 - (-13))) * 256);
+    const gz = Math.round(((70 - c[2]) / (70 - 34)) * 256);
+    const name = String(c[0] || 'Новый город');
+    return {
+      idx, name, gx, gz,
+      size: Math.max(1, Math.min(3, Math.round(Number(c[3]) || 1))),
+      country,
+      owner: factByCountry[country] ?? 0,
+      capital,
+      shipyard: /^Верфь /.test(name),
+      airport: /^Аэропорт /.test(name),
+    };
+  });
+  const edgeMap = new Map();
+  const m0 = hexMap.meta || {};
+  const B0 = m0.B || {};
+  const worldW0 = Number(m0.worldW) || 1, worldH0 = Number(m0.worldH) || 1;
+  const lngSpan0 = Number(m0.lngSpan) || 1, latSpan0 = Number(m0.latSpan) || 1;
+  const minX0 = Number(B0.minX) || -13, maxY0 = Number(B0.maxY) || 70;
+  const wxToGX0 = wx => {
+    const lng = minX0 + ((wx + worldW0 / 2) / worldW0) * lngSpan0;
+    return (lng - (-13)) / (51 - (-13)) * 256;
+  };
+  const wzToGZ0 = wz => {
+    const lat = maxY0 - ((wz + worldH0 / 2) / worldH0) * latSpan0;
+    return (70 - lat) / (70 - 34) * 256;
+  };
+  const qrToWorld = (q, r) => {
+    const scale = (Number(m0.R) || 1) * (Number(m0.HEXS) || 1);
+    return {
+      wx: Math.sqrt(3) * scale * (q + (r & 1) * 0.5) - worldW0 / 2,
+      wz: 1.5 * scale * r - worldH0 / 2,
+    };
+  };
+  const allCells = [];
+  const roadCells = new Map();
+  const addRoadCell = (cell) => {
+    if (!cell) return;
+    roadCells.set(`${cell.q},${cell.r}`, { q: cell.q, r: cell.r, x: cell.x, z: cell.z });
+  };
+  for (const t of hexMap.tiles || []) {
+    const q = Number(t[0]), r = Number(t[1]);
+    const w = qrToWorld(q, r);
+    const cell = { q, r, wx: w.wx, wz: w.wz, x: wxToGX0(w.wx), z: wzToGZ0(w.wz) };
+    allCells.push(cell);
+    if (t[7]) addRoadCell(cell);
+  }
+  const nearestWorldCell = (wx, wz) => {
+    let best = null, bestD = Infinity;
+    for (const cell of allCells) {
+      const d = (cell.wx - wx) ** 2 + (cell.wz - wz) ** 2;
+      if (d < bestD) { bestD = d; best = cell; }
+    }
+    return best;
+  };
+  for (const bridge of hexMap.bridges || []) {
+    const cell = nearestWorldCell(Number(bridge[0]), Number(bridge[1]));
+    addRoadCell(cell);
+  }
+  const roadNeighbors = (q, r) => (r & 1)
+    ? [[q + 1, r], [q - 1, r], [q + 1, r - 1], [q, r - 1], [q + 1, r + 1], [q, r + 1]]
+    : [[q + 1, r], [q - 1, r], [q, r - 1], [q - 1, r - 1], [q, r + 1], [q - 1, r + 1]];
+  const nearestRoadCell = (city) => {
+    let best = null, bestD = Infinity;
+    for (const cell of roadCells.values()) {
+      const d = (city.gx - cell.x) ** 2 + (city.gz - cell.z) ** 2;
+      if (d < bestD) { bestD = d; best = cell; }
+    }
+    return best;
+  };
+  const roadPolylineBetween = (a, b) => {
+    const start = nearestRoadCell(a), target = nearestRoadCell(b);
+    if (!start || !target) return null;
+    const startKey = `${start.q},${start.r}`, targetKey = `${target.q},${target.r}`;
+    const queue = [startKey], prev = new Map([[startKey, null]]);
+    for (let qi = 0; qi < queue.length; qi++) {
+      const key = queue[qi];
+      if (key === targetKey) break;
+      const cell = roadCells.get(key);
+      for (const [nq, nr] of roadNeighbors(cell.q, cell.r)) {
+        const nk = `${nq},${nr}`;
+        if (!roadCells.has(nk) || prev.has(nk)) continue;
+        prev.set(nk, key); queue.push(nk);
+      }
+    }
+    if (!prev.has(targetKey)) return null;
+    const keys = [];
+    for (let k = targetKey; k; k = prev.get(k)) keys.push(k);
+    keys.reverse();
+    const pts = [{ x: a.gx, z: a.gz }];
+    for (const key of keys) {
+      const cell = roadCells.get(key);
+      pts.push({ x: Math.round(cell.x * 10) / 10, z: Math.round(cell.z * 10) / 10 });
+    }
+    pts.push({ x: b.gx, z: b.gz });
+    return pts;
+  };
+  const nearestCityIndex = (point) => {
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.z)) return null;
+    let best = null, bestD = Infinity;
+    for (const city of cities) {
+      const d = (city.gx - point.x) ** 2 + (city.gz - point.z) ** 2;
+      if (d < bestD) { bestD = d; best = city.idx; }
+    }
+    return bestD <= 20 * 20 ? best : null;
+  };
+  const addEdge = (a, b, type, len, mult, pts, force = false) => {
+    if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= cities.length || b >= cities.length || a === b) return;
+    const key = a < b ? `${a}_${b}` : `${b}_${a}`;
+    if (edgeMap.has(key) && !force) return;
+    edgeMap.set(key, { a, b, type, len: Math.round(len * 100) / 100, mult, pts });
+  };
+  for (const rd of hexMap.roads || []) {
+    let a = Number(rd[0]), b = Number(rd[1]);
+    const raw = Array.isArray(rd[2]) ? rd[2] : [];
+    const pts = raw.map(p => ({ x: Math.round(wxToGX0(Number(p[0])) * 10) / 10, z: Math.round(wzToGZ0(Number(p[1])) * 10) / 10 })).filter(p => Number.isFinite(p.x) && Number.isFinite(p.z));
+    if (pts.length < 2) continue;
+    let len = 0; for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+    if (!len && cities[a] && cities[b]) len = Math.hypot(cities[a].gx - cities[b].gx, cities[a].gz - cities[b].gz);
+    addEdge(a, b, 'road', len || 1, 1, pts, true);
+  }
+  return { meta: { GRID: 256, LON0: -13, LON1: 51, LAT0: 34, LAT1: 70 }, factions, cities, edges: [...edgeMap.values()] };
+}
+
+function writeSimMapData(hexMap) {
+  const out = path.resolve(root, 'sim', 'map-data.json');
+  const next = cityListToSimMap(hexMap);
+  fs.writeFileSync(out, JSON.stringify(next));
+  return { stat: fs.statSync(out), map: next };
+}
+
 function choose(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }
@@ -739,6 +949,82 @@ const server = http.createServer((req, res) => {
       return;
     }
     send(res, 405, 'Method Not Allowed', { Allow: 'GET, POST' });
+    return;
+  }
+  if (parsedUrl.pathname === '/api/save-hex-map') {
+    // dev-only: запекатель карты hex-europe.html POST'ит сюда полную карту → пишем в hex-map.json
+    if (req.method !== 'POST') {
+      send(res, 405, 'Method Not Allowed', { Allow: 'POST' });
+      return;
+    }
+    readJsonBody(req).then(input => {
+      const out = path.resolve(root, 'hex-map.json');
+      fs.writeFileSync(out, JSON.stringify(input));
+      const stat = fs.statSync(out);
+      const sim = writeSimMapData(input);
+      sendJson(res, 200, {
+        ok: true,
+        path: path.relative(root, out),
+        bytes: stat.size,
+        tiles: Array.isArray(input.tiles) ? input.tiles.length : 0,
+        roads: Array.isArray(input.roads) ? input.roads.length : 0,
+        simPath: path.relative(root, path.resolve(root, 'sim', 'map-data.json')),
+        simCities: sim.map.cities.length,
+        simEdges: sim.map.edges.length,
+      });
+    }).catch(err => {
+      sendJson(res, 500, { ok: false, error: err.message || String(err) });
+    });
+    return;
+  }
+  if (parsedUrl.pathname === '/api/save-city-list') {
+    if (req.method !== 'POST') {
+      send(res, 405, 'Method Not Allowed', { Allow: 'POST' });
+      return;
+    }
+    readJsonBody(req, 2 * 1024 * 1024).then(input => {
+      const cities = input && input.cities;
+      if (!Array.isArray(cities)) throw new Error('Expected cities array');
+      const stat = writeCityList(cities);
+      sendJson(res, 200, {
+        ok: true,
+        path: path.relative(root, path.resolve(root, 'js', 'data.js')),
+        bytes: stat.size,
+        cities: cities.length,
+      });
+    }).catch(err => {
+      sendJson(res, 500, { ok: false, error: err.message || String(err) });
+    });
+    return;
+  }
+  if (parsedUrl.pathname === '/api/save-hex-europe-edits' || parsedUrl.pathname === '/api/save-hex-europe-decor') {
+    if (req.method !== 'POST') {
+      send(res, 405, 'Method Not Allowed', { Allow: 'POST' });
+      return;
+    }
+    readJsonBody(req, 8 * 1024 * 1024).then(input => {
+      if (!input || !Array.isArray(input.edits)) throw new Error('Expected an edits array');
+      const isDecor = parsedUrl.pathname.endsWith('-decor');
+      if (isDecor && input.removedGenerated != null && !Array.isArray(input.removedGenerated)) {
+        throw new Error('Expected removedGenerated to be an array');
+      }
+      const out = path.resolve(root, 'data', isDecor ? 'hex-europe-manual-decor.json' : 'hex-europe-manual-edits.json');
+      const payload = {
+        ...input,
+        version: isDecor ? 2 : 1,
+        savedAt: new Date().toISOString(),
+      };
+      const stat = writeJsonAtomic(out, payload);
+      sendJson(res, 200, {
+        ok: true,
+        path: path.relative(root, out),
+        bytes: stat.size,
+        edits: payload.edits.length,
+        savedAt: payload.savedAt,
+      });
+    }).catch(err => {
+      sendJson(res, 500, { ok: false, error: err.message || String(err) });
+    });
     return;
   }
   if (parsedUrl.pathname === '/api/reinterpret-stamp') {

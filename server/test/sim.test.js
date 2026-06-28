@@ -61,7 +61,14 @@ test('нельзя купить чужой фракцией (анти-чит)', 
 
 group('Прокачка города');
 test('prod: spec+tier, стоимость 50', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 200; assert(s.cmdUpgrade(0, 0, 'prod')); eq(s.cities[0].spec, 'prod'); eq(s.cities[0].tier, 1); eq(s.gold[0], 150); });
-test('спец залочен (нельзя сменить ветку)', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 500; s.cmdUpgrade(0, 0, 'prod'); eq(s.cmdUpgrade(0, 0, 'def'), false); eq(s.cities[0].tier, 1); });
+test('ветки прокачиваются независимо', () => {
+  const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 500;
+  assert(s.cmdUpgrade(0, 0, 'prod'));
+  assert(s.cmdUpgrade(0, 0, 'def'));
+  assert(s.cmdUpgrade(0, 0, 'atk'));
+  eq(s.cities[0].prodTier, 1); eq(s.cities[0].defTier, 1); eq(s.cities[0].atkTier, 1);
+  eq(s.cities[0].totalTier, 3); eq(s.gold[0], 350);
+});
 test('тиры 1→2→3 по растущей цене', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1000; s.cmdUpgrade(0, 0, 'prod'); s.cmdUpgrade(0, 0, 'prod'); s.cmdUpgrade(0, 0, 'prod'); eq(s.cities[0].tier, 3); eq(s.gold[0], 1000 - 50 - 100 - 150); });
 test('не выше MAX_TIER', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1e9; for (let i = 0; i < 5; i++) s.cmdUpgrade(0, 0, 'prod'); eq(s.cities[0].tier, C.MAX_TIER); });
 test('нельзя без голды', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 10; eq(s.cmdUpgrade(0, 0, 'prod'), false); });
@@ -70,6 +77,87 @@ test('нельзя апгрейдить с невалидной веткой', (
 
 group('Отправка армии / осада / захват / оккупация / аннексия');
 test('подкрепление своего города', () => { const s = new Sim({ factions: 1, cities: 2 }); const u1 = s.cities[1].units; assert(s.cmdSend(0, 0, 1, 0.5)); gt(s.cities[1].units, u1); });
+test('реальная карта: отряд идёт по полилинии дороги Галвэй → Дублин', () => {
+  const byName = Object.fromEntries(map.cities.map(c => [c.name, c]));
+  const from = byName['Галвэй'].idx, to = byName['Дублин'].idx, fid = byName['Галвэй'].owner;
+  const s = new Sim({ map, balance: makeBalance({ factionDefault: { gold: 200, polit: 80 } }), ai: false });
+  assert(s.cmdSend(fid, from, to, 0.5));
+  const q = s.squads[0], edge = s.edgeBetween(from, to);
+  assert(edge && Array.isArray(edge.pts) && edge.pts.length >= 2, 'у ребра есть запечённая полилиния');
+  q.prog = edge.len * 0.5; q._setPos();
+  const pts = edge.a === from ? edge.pts : edge.pts.slice().reverse();
+  const target = edge.len * 0.5; let walked = 0, expected = pts[pts.length - 1];
+  for (let i = 1; i < pts.length; i++) {
+    const p0 = pts[i - 1], p1 = pts[i], seg = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+    if (walked + seg >= target || i === pts.length - 1) {
+      const f = seg > 0 ? Math.max(0, Math.min(1, (target - walked) / seg)) : 0;
+      expected = { x: p0.x + (p1.x - p0.x) * f, z: p0.z + (p1.z - p0.z) * f };
+      break;
+    }
+    walked += seg;
+  }
+  near(q.x, expected.x, 1e-6); near(q.z, expected.z, 1e-6);
+});
+test('реальная карта: Лимэрик → Белфаст идёт мультихопом по дорожным полилиниям', () => {
+  const byName = Object.fromEntries(map.cities.map(c => [c.name, c]));
+  const from = byName['Лимэрик'].idx, to = byName['Белфаст'].idx, fid = byName['Лимэрик'].owner;
+  const s = new Sim({ map, balance: makeBalance({ factionDefault: { gold: 200, polit: 80 } }), ai: false });
+  const path = s.findPath(from, to, fid);
+  eq(path.map(i => map.cities[i].name).join(' → '), 'Лимэрик → Дублин → Белфаст');
+  assert(s.cmdSend(fid, from, to, 0.5));
+  const q = s.squads[0];
+  for (let hop = 0; hop < q.path.length - 1; hop++) {
+    q.hop = hop;
+    const edge = s.edgeBetween(q.path[hop], q.path[hop + 1]);
+    assert(edge && Array.isArray(edge.pts) && edge.pts.length >= 2, 'у каждого сегмента есть полилиния');
+    q.prog = edge.len * 0.5; q._setPos();
+    const pts = edge.a === q.path[hop] ? edge.pts : edge.pts.slice().reverse();
+    let best = Infinity;
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 1], p1 = pts[i], vx = p1.x - p0.x, vz = p1.z - p0.z;
+      const wx = q.x - p0.x, wz = q.z - p0.z, l = vx * vx + vz * vz;
+      const f = l ? Math.max(0, Math.min(1, (wx * vx + wz * vz) / l)) : 0;
+      best = Math.min(best, Math.hypot(q.x - (p0.x + vx * f), q.z - (p0.z + vz * f)));
+    }
+    near(best, 0, 1e-6);
+  }
+});
+test('реальная карта: Глазго → Эдинбург идёт по южной визуальной дороге', () => {
+  const byName = Object.fromEntries(map.cities.map(c => [c.name, c]));
+  const from = byName['Глазго'].idx, to = byName['Эдинбург'].idx, fid = byName['Глазго'].owner;
+  const s = new Sim({ map, balance: makeBalance({ factionDefault: { gold: 200, polit: 80 } }), ai: false });
+  eq(s.findPath(from, to, fid).map(i => map.cities[i].name).join(' → '), 'Глазго → Эдинбург');
+  assert(s.cmdSend(fid, from, to, 0.5));
+  const q = s.squads[0], edge = s.edgeBetween(from, to);
+  assert(edge && Array.isArray(edge.pts) && edge.pts.length >= 5, 'у ребра есть детальная полилиния визуальной дороги');
+  q.prog = edge.len * 0.5; q._setPos();
+  near(q.x, 38.1, 0.08);
+  near(q.z, 103, 0.08);
+});
+test('реальная карта: Бирмингмем → Ливерпуль идёт мультихопом по дорожным полилиниям', () => {
+  const byName = Object.fromEntries(map.cities.map(c => [c.name, c]));
+  const from = byName['Бирмингмем'].idx, to = byName['Ливерпуль'].idx, fid = byName['Бирмингмем'].owner;
+  const s = new Sim({ map, balance: makeBalance({ factionDefault: { gold: 200, polit: 80 } }), ai: false });
+  const path = s.findPath(from, to, fid);
+  eq(path.map(i => map.cities[i].name).join(' → '), 'Бирмингмем → Бирмингем → Маннчестер → Ливерпуль');
+  assert(s.cmdSend(fid, from, to, 0.5));
+  const q = s.squads[0];
+  for (let hop = 0; hop < q.path.length - 1; hop++) {
+    q.hop = hop;
+    const edge = s.edgeBetween(q.path[hop], q.path[hop + 1]);
+    assert(edge && Array.isArray(edge.pts) && edge.pts.length >= 2, 'у каждого сегмента есть полилиния');
+    q.prog = edge.len * 0.5; q._setPos();
+    const pts = edge.a === q.path[hop] ? edge.pts : edge.pts.slice().reverse();
+    let best = Infinity;
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 1], p1 = pts[i], vx = p1.x - p0.x, vz = p1.z - p0.z;
+      const wx = q.x - p0.x, wz = q.z - p0.z, l = vx * vx + vz * vz;
+      const f = l ? Math.max(0, Math.min(1, (wx * vx + wz * vz) / l)) : 0;
+      best = Math.min(best, Math.hypot(q.x - (p0.x + vx * f), q.z - (p0.z + vz * f)));
+    }
+    near(best, 0, 1e-6);
+  }
+});
 test('осада чужого (в войне): создаётся пул', () => { const s = new Sim({ factions: 2, cities: 2, warPrep: 0 }); s.setWar(0, 1); const u0 = s.cities[0].units; assert(s.cmdSend(0, 0, 1, 0.5)); eq(s.cities[0].units, u0 - Math.floor(u0 * 0.5)); assert(s.cities[1].siege && s.cities[1].siege[0]); });
 test('нельзя нападать без объявления войны', () => { const s = new Sim({ factions: 2, cities: 2 }); eq(s.cmdSend(0, 0, 1, 0.5), false); assert(!s.cities[1].siege); });
 test('нельзя слать из чужого города', () => { const s = new Sim({ factions: 2, cities: 2 }); eq(s.cmdSend(0, 1, 0, 0.5), false); });

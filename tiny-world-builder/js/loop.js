@@ -110,8 +110,11 @@ function loop(now){
   const ci=i=>byIdx.get(i);
 
   /* ── хост: стратегический снапшот (дельта городов + дипломатия по изменению) ── */
-  const cityTuple=c=>[c.idx,c.owner,Math.min(8191,Math.round(c.units)),SPEC2ID[c.spec]||0,c.tier,c.occ?1:0];
-  const packCity=c=>((c.owner|0)|(Math.min(8191,Math.round(c.units))<<5)|((SPEC2ID[c.spec]||0)<<18)|((c.tier|0)<<20)|((c.occ?1:0)<<22));
+  const cityTuple=c=>[c.idx,c.owner,Math.min(8191,Math.round(c.units)),SPEC2ID[c.spec]||0,c.tier,c.occ?1:0,
+    undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,
+    c.branchTier('prod'),c.branchTier('def'),c.branchTier('atk')];
+  const packCity=c=>[c.owner|0,Math.min(8191,Math.round(c.units)),SPEC2ID[c.spec]||0,c.tier|0,c.occ?1:0,
+    c.branchTier('prod'),c.branchTier('def'),c.branchTier('atk')].join(':');
   function buildSnap(now){
     ensureIndex();
     const msg={t:'snap',time:gameTime,over:gameOver?1:0,
@@ -139,14 +142,18 @@ function loop(now){
   }
 
   /* ── гость: применить состояние одного города ── */
-  function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner,prodTime,prodElapsed,shipQ,shipT,planeQ,planeT){
-    const spec=ID2SPEC[specId]||null, prevOwner=c.owner, specChanged=(c.spec!==spec||c.tier!==tier);
-    c.owner=owner; c.units=units; c.spec=spec; c.tier=tier; c.occ=!!occ;
-    if(queued!==undefined)   // ⏳ найм: реальные время/прогресс партии с сервера (дс→с) → кольцо и прогресс-бар идут
+  function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner,prodTime,prodElapsed,shipQ,shipT,planeQ,planeT,prodTier,defTier,atkTier){
+    const spec=ID2SPEC[specId]||null, prevOwner=c.owner;
+    const nextProd=prodTier==null?(spec==='prod'?tier:0):prodTier;
+    const nextDef=defTier==null?(spec==='def'?tier:0):defTier;
+    const nextAtk=atkTier==null?(spec==='atk'?tier:0):atkTier;
+    const specChanged=c.spec!==spec||c.tier!==tier||c.prodTier!==nextProd||c.defTier!==nextDef||c.atkTier!==nextAtk;
+    c.owner=owner; c.units=units; c.spec=spec; c.tier=tier; c.prodTier=nextProd; c.defTier=nextDef; c.atkTier=nextAtk; c.occ=!!occ;
+    if(queued!=null)   // ⏳ найм: реальные время/прогресс партии с сервера (дс→с) → кольцо и прогресс-бар идут
       c.batches = queued>0 ? [{count:queued, time:Math.max(0.1,(prodTime||10)/10), elapsed:Math.min((prodTime||10)/10,(prodElapsed||0)/10)}] : [];
-    if(shipQ!==undefined){ c.shipQueue=shipQ|0; c.shipTimer=(shipT||0)/10; }                            // ⚓ верфь: очередь + таймер
-    if(planeQ!==undefined){ c.planeQueue=planeQ|0; c.planeTimer=(planeT||0)/10; }                       // ✈ аэродром: очередь + таймер
-    if(siegeUnits!==undefined) c.siege = siegeUnits>0 ? {[siegeOwner]:{units:siegeUnits,atkMult:1}} : null; // осада → орбы + кольцо боя + тряска
+    if(shipQ!=null){ c.shipQueue=shipQ|0; c.shipTimer=(shipT||0)/10; }                            // ⚓ верфь: очередь + таймер
+    if(planeQ!=null){ c.planeQueue=planeQ|0; c.planeTimer=(planeT||0)/10; }                       // ✈ аэродром: очередь + таймер
+    if(siegeUnits!=null) c.siege = siegeUnits>0 ? {[siegeOwner]:{units:siegeUnits,atkMult:1}} : null; // осада → орбы + кольцо боя + тряска
     if(specChanged){ try{c.buildMeshes&&c.buildMeshes();}catch(e){} }
     if(prevOwner!==owner){ try{c.recolor&&c.recolor();}catch(e){} }
   }
@@ -174,7 +181,7 @@ function loop(now){
     MP._lastTime=m.time; gameTime=m.time;
     const list=m.c||m.dc;
     if(m.c)MP._synced=true;   // получили полный keyframe → можно судить о победе/поражении
-    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14]); } regionsDirty=true; }
+    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15],d[16],d[17]); } regionsDirty=true; }
     if(m.g){ const g=m.g; for(let i=0;i<g.length;i++){gold[i]=g[i];politPts[i]=m.p[i];manpower[i]=m.m[i];} }  // в cs-режиме экономика идёт через 'econ'; в relay — здесь
     if(m.rel){ relations={}; for(const [k,v] of m.rel)relations[k]=v; warSince={}; for(const [k,v] of m.ws)warSince[k]=+v; warNotify(); allyNotify(); }
     // победа/поражение — только после keyframe И если видели партию ИДУЩЕЙ (не врываемся в уже оконченную)
@@ -188,18 +195,121 @@ function loop(now){
     }
   }
 
+  /* ── KayKit ship assets for guest/local-sim mirrors ── */
+  const SHIP_ASSET = {
+    blue: 'assets/hex-kit/units/blue/ship_blue_full.gltf',
+    red: 'assets/hex-kit/units/red/ship_red_full.gltf',
+    green: 'assets/hex-kit/units/green/ship_green_full.gltf',
+    yellow: 'assets/hex-kit/units/yellow/ship_yellow_full.gltf',
+    neutral: 'assets/hex-kit/units/neutral/ship.gltf',
+  };
+  const SHIP_PALETTE = [
+    { key: 'blue', color: new T3.Color(0x3f6fc8) },
+    { key: 'red', color: new T3.Color(0xc14a3a) },
+    { key: 'green', color: new T3.Color(0x3f9e7e) },
+    { key: 'yellow', color: new T3.Color(0xcaa233) },
+  ];
+  const SHIP_MODEL_SCALE = 1.55;
+  const SHIP_MODEL_ROT_Y = Math.PI / 2; // KayKit ship length is on local Z; game heading expects +X.
+  const shipModelCache = {};
+  let shipModelPromise = null;
+
+  function shipKeyForOwner(owner) {
+    const hex = OWNER_COL[owner] != null ? OWNER_COL[owner] : null;
+    if (hex == null) return 'neutral';
+    const c = new T3.Color(hex);
+    const spread = Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+    if (spread < 0.12) return 'neutral';
+    let best = SHIP_PALETTE[0].key, bd = Infinity;
+    for (const p of SHIP_PALETTE) {
+      const dr = c.r - p.color.r, dg = c.g - p.color.g, db = c.b - p.color.b;
+      const d = dr * dr + dg * dg + db * db;
+      if (d < bd) { bd = d; best = p.key; }
+    }
+    return best;
+  }
+
+  function prepareShipModel(root) {
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      o.receiveShadow = true;
+      if (o.material) {
+        o.material = o.material.clone();
+        o.material.metalness = 0;
+        o.material.roughness = 0.82;
+      }
+    });
+    return root;
+  }
+
+  function ensureShipModels() {
+    if (shipModelPromise) return shipModelPromise;
+    if (!T3.GLTFLoader) return Promise.resolve(shipModelCache);
+    const loader = new T3.GLTFLoader();
+    const jobs = Object.entries(SHIP_ASSET).map(([key, path]) => new Promise((res) => {
+      loader.load(path, (gltf) => { shipModelCache[key] = prepareShipModel(gltf.scene); res(); },
+        undefined, (err) => { console.warn('[ship] model skipped:', key, err); res(); });
+    }));
+    shipModelPromise = Promise.all(jobs).then(() => {
+      for (const gh of MP.ghosts.values()) if (gh.kind === 1 && gh.group.userData.fallbackShip) installShipVisual(gh.group, gh.owner, gh);
+      return shipModelCache;
+    });
+    return shipModelPromise;
+  }
+
+  function cloneShipModel(owner) {
+    const src = shipModelCache[shipKeyForOwner(owner)] || shipModelCache.neutral;
+    if (!src) return null;
+    const model = src.clone(true);
+    let mat = null;
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      o.receiveShadow = true;
+      if (o.material) {
+        o.material = o.material.clone();
+        if (!mat) mat = o.material;
+      }
+    });
+    model.rotation.y = SHIP_MODEL_ROT_Y;
+    model.scale.setScalar(SHIP_MODEL_SCALE);
+    return { model, mat };
+  }
+
+  function fallbackShipVisual(g, owner) {
+    const col = OWNER_COL[owner] != null ? OWNER_COL[owner] : 0x9aa6b2;
+    const hullM = new T3.MeshLambertMaterial({ color: 0x6b4a2c });
+    const mat = new T3.MeshLambertMaterial({ color: col });
+    const hull = new T3.Mesh(new T3.BoxGeometry(0.55, 0.16, 0.24), hullM); hull.position.y = 0.08; hull.castShadow = true; g.add(hull);
+    const bow = new T3.Mesh(new T3.ConeGeometry(0.12, 0.3, 4), hullM); bow.rotation.z = -Math.PI / 2; bow.rotation.y = Math.PI / 4; bow.position.set(0.4, 0.08, 0); g.add(bow);
+    const mast = new T3.Mesh(new T3.CylinderGeometry(0.014, 0.014, 0.4), hullM); mast.position.y = 0.34; g.add(mast);
+    const sail = new T3.Mesh(new T3.BoxGeometry(0.03, 0.26, 0.22), mat); sail.position.set(0, 0.42, 0); sail.castShadow = true; g.add(sail);
+    g.scale.setScalar(typeof SHIP_SCALE !== 'undefined' ? SHIP_SCALE : 5);
+    g.userData.fallbackShip = true;
+    ensureShipModels();
+    return mat;
+  }
+
+  function installShipVisual(g, owner, gh) {
+    while (g.children.length) g.remove(g.children[0]);
+    g.scale.setScalar(1);
+    const built = cloneShipModel(owner);
+    if (!built) return fallbackShipVisual(g, owner);
+    g.add(built.model);
+    g.userData.fallbackShip = false;
+    if (gh) gh.mat = built.mat;
+    return built.mat;
+  }
+  ensureShipModels();
+
   /* ── гость: зеркала сущностей ── */
   function ghostMesh(kind,owner){
     const col=(OWNER_COL[owner]!=null?OWNER_COL[owner]:0x9aa6b2), g=new T3.Group(); let lab=null, mat=null;
     if(kind===0){ mat=new T3.MeshLambertMaterial({color:col}); g.userData.orbs=[]; g.userData.orbN=0;   // 🪖 рой мини-юнитов (как солошный Squad), число ∝ армии — строится в reconcile/ghostSwarm
       lab=document.createElement('div'); lab.className='lab'; labels&&labels.appendChild(lab); }
-    else if(kind===1){ // ⚓ корабль: корпус + нос + мачта + парус (а не «прямоугольник»)
-      const hullM=new T3.MeshLambertMaterial({color:0x6b4a2c}); mat=new T3.MeshLambertMaterial({color:col});
-      const hull=new T3.Mesh(new T3.BoxGeometry(0.55,0.16,0.24),hullM); hull.position.y=0.08; hull.castShadow=true; g.add(hull);
-      const bow=new T3.Mesh(new T3.ConeGeometry(0.12,0.3,4),hullM); bow.rotation.z=-Math.PI/2; bow.rotation.y=Math.PI/4; bow.position.set(0.4,0.08,0); g.add(bow);
-      const mast=new T3.Mesh(new T3.CylinderGeometry(0.014,0.014,0.4),hullM); mast.position.y=0.34; g.add(mast);
-      const sail=new T3.Mesh(new T3.BoxGeometry(0.03,0.26,0.22),mat); sail.position.set(0,0.42,0); sail.castShadow=true; g.add(sail);
-      g.scale.setScalar(typeof SHIP_SCALE!=='undefined'?SHIP_SCALE:5); }
+    else if(kind===1){ // ⚓ KayKit ship model; primitive fallback until GLTFs finish loading.
+      mat=installShipVisual(g,owner,null); }
     else if(kind===2){ // ✈ самолёт: фюзеляж + крылья + хвост + нос (а не «конус»)
       const bodyM=new T3.MeshLambertMaterial({color:0xe8edf2}); mat=new T3.MeshLambertMaterial({color:col});
       const fus=new T3.Mesh(new T3.CylinderGeometry(0.06,0.035,0.5,8),bodyM); fus.rotation.z=Math.PI/2; fus.castShadow=true; g.add(fus);
@@ -261,7 +371,7 @@ function loop(now){
     const c=m.c!=null?ci(m.c):null;
     if(m.cmd==='army'){ const a=ci(m.a),b=ci(m.b); if(a&&b&&a.owner===fid)sendUnits(a,b,(m.pct||50)/100); }
     else if(m.cmd==='buy'){ if(c&&c.owner===fid&&!c.occ){ const amt=buyAmount(c,m.spec); if(amt>0){gold[fid]-=amt*SOLDIER_PRICE;manpower[fid]-=amt;c.batches.push({count:amt,time:amt*c.trainPer,elapsed:0});} } }
-    else if(m.cmd==='upg'){ if(c&&c.owner===fid&&!c.occ&&c.tier<MAX_TIER&&(!c.spec||c.spec===m.track)){ const cost=upgradeCost(c.tier); if(gold[fid]>=cost){gold[fid]-=cost;c.spec=m.track;c.tier++;c.buildMeshes();markRegions();} } }
+    else if(m.cmd==='upg'){ if(c&&c.owner===fid&&!c.occ){ const tier=c.branchTier(m.track); const cost=upgradeCost(tier); if(tier<MAX_TIER&&gold[fid]>=cost){gold[fid]-=cost;c[m.track+'Tier']=tier+1;c.syncLegacyTier(m.track);c.buildMeshes();markRegions();} } }
     else if(m.cmd==='war'){ if(fid!==m.tg&&!atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_WAR){ politPts[fid]-=POLIT_WAR; setWar(fid,m.tg); try{dragAlliesIntoWar(fid,m.tg);}catch(e){} } }
     else if(m.cmd==='ally'){ if(fid!==m.tg&&!atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_ALLY){ politPts[fid]-=POLIT_ALLY; setRelation(fid,m.tg,'ally'); } }
     else if(m.cmd==='peace'){ if(atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_PEACE){ politPts[fid]-=POLIT_PEACE; resolveOccupation(fid,m.tg,'white'); setRelation(fid,m.tg,'neutral'); if(typeof setTruce==='function')setTruce(fid,m.tg); } }

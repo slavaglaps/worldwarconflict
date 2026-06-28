@@ -23,6 +23,9 @@ function projectState(sim, state, techN) {
     s.units = Math.min(65535, Math.round(c.units));
     s.spec = SPEC_ID[c.spec] || 0;
     s.tier = c.tier;
+    s.prodTier = c.branchTier('prod');
+    s.defTier = c.branchTier('def');
+    s.atkTier = c.branchTier('atk');
     s.occ = c.occ ? 1 : 0;
     s.shipyard = c.isShipyard ? 1 : 0; s.airport = c.isAirport ? 1 : 0;
     s.aa = c.aa | 0;

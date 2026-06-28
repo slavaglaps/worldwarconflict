@@ -45,6 +45,26 @@ const playerSel=()=>[...selectedSet].filter(c=>c.owner===OWNER.PLAYER);
 function clearSel(){selectedSet.clear();}
 // источники отправки при перетаскивании: если схваченный город входит в мультивыбор — все выбранные, иначе только он
 function dragSources(){ const ps=playerSel(); return (dragFrom&&selectedSet.has(dragFrom)&&ps.length>1)?ps:(dragFrom?[dragFrom]:[]); }
+function cityArrowPoint(c,dy=0.5){return {x:c.gx,y:c.baseY+dy,z:c.gz};}
+function pushArrowPoint(list,p){
+  const last=list[list.length-1];
+  if(!last||Math.hypot(last.x-p.x,last.z-p.z)>0.05)list.push(p);
+}
+function edgeArrowPoints(from,to){
+  const out=[cityArrowPoint(from)];
+  const visual=typeof hexRoadPolyline==='function'?hexRoadPolyline(from.idx,to.idx):null;
+  if(visual&&visual.length){
+    for(const p of visual)pushArrowPoint(out,{x:p.x,y:getTerrainHeight(p.x,p.z)+0.5,z:p.z});
+  }else{
+    const eg=getEdge(from.idx,to.idx);
+    if(eg&&eg.pts){
+      const pts=(eg.a===from.idx)?eg.pts:[...eg.pts].reverse();
+      for(let i=1;i<pts.length-1;i++){const p=pts[i];pushArrowPoint(out,{x:p.x,y:p.y+0.5,z:p.z});}
+    }
+  }
+  pushArrowPoint(out,cityArrowPoint(to));
+  return out;
+}
 
 /* ── камера: панорама/вращение/зум-к-курсору ────────────────── */
 let orbiting=null, panning=null, camRotating=false;
@@ -123,7 +143,7 @@ window.addEventListener('mousemove',e=>{
       const tc=(hoverCity&&hoverCity!==dragFrom)?hoverCity:null, gp=groundPoint(e.clientX,e.clientY);
       const tx=tc?tc.gx:(gp?gp.x:dragFrom.gx), tz=tc?tc.gz:(gp?gp.z:dragFrom.gz), ty=tc?tc.baseY:(gp?gp.y:0);
       const col=(tc&&tc.owner!==dragFrom.owner&&atWar(dragFrom.owner,tc.owner))?0xff5a4a:0x6fc0ff; // красный = бомбить
-      updateDragArrow([{x:dragFrom.gx,y:dragFrom.baseY+0.5,z:dragFrom.gz},{x:tx,y:ty+0.5,z:tz}],col);
+      updateDragArrow([cityArrowPoint(dragFrom),{x:tx,y:ty+0.5,z:tz}],col);
       return;
     }
     const srcs=dragSources();   // все выбранные города (или один схваченный)
@@ -132,11 +152,9 @@ window.addEventListener('mousemove',e=>{
       const list=[]; let col=0x6fc0ff;
       for(const s of srcs){ if(s===hoverCity)continue;
         const r=findPath(s.idx,hoverCity.idx,s.owner); if(!r)continue;
-        const pathPts=[{x:s.gx,y:s.baseY+0.5,z:s.gz}];
+        const pathPts=[];
         for(let i=0;i<r.path.length-1;i++){
-          const eg=getEdge(r.path[i].idx,r.path[i+1].idx);
-          const pts=(eg.a===r.path[i].idx)?eg.pts:[...eg.pts].reverse();
-          for(const pt of pts)pathPts.push({x:pt.x,y:pt.y+0.5,z:pt.z});
+          for(const pt of edgeArrowPoints(r.path[i],r.path[i+1]))pushArrowPoint(pathPts,pt);
           if(i+1<r.path.length-1&&r.path[i+1].owner!==s.owner)col=0xffae4a;
         }
         list.push(pathPts);
@@ -144,7 +162,7 @@ window.addEventListener('mousemove',e=>{
       if(list.length)updateDragArrows(list,col); else hideDragArrow();
     } else {
       const gp=groundPoint(e.clientX,e.clientY);
-      if(gp)updateDragArrows(srcs.map(s=>[{x:s.gx,y:s.baseY+0.5,z:s.gz},{x:gp.x,y:gp.y+0.5,z:gp.z}]),0x6fc0ff);
+      if(gp)updateDragArrows(srcs.map(s=>[cityArrowPoint(s),{x:gp.x,y:gp.y+0.5,z:gp.z}]),0x6fc0ff);
     }
   } else if(boxStart){
     const x=Math.min(boxStart.x,e.clientX),y=Math.min(boxStart.y,e.clientY);
@@ -263,4 +281,3 @@ function updateCameraKeys(dt){
   }
   applyCam();
 }
-

@@ -155,7 +155,8 @@ function updatePanel(){
   const occ=!!c.occ;   // 🏴 оккупированный город: своя территория де-факто, но стройка/армия запрещены до аннексии
   const yard=c.isShipyard||c.isAirport;
   if(c!==panelCity){ panelCity=c; if(yard)panelTab='army'; buildPanelRows(); }   // пересборка ТОЛЬКО при смене города
-  document.getElementById('pName').textContent=c.spec?`${CITY_NAMES[c.idx]} · ${SPEC[c.spec].icon}${c.tier}`:CITY_NAMES[c.idx];
+  const tiers=['prod','def','atk'].filter(tr=>c.branchTier(tr)>0).map(tr=>`${SPEC[tr].icon}${c.branchTier(tr)}`).join(' ');
+  document.getElementById('pName').textContent=tiers?`${CITY_NAMES[c.idx]} · ${tiers}`:CITY_NAMES[c.idx];
   document.getElementById('pGold').textContent=gold[PLAYER]|0;
   // верфь/аэропорт: скрываем вкладку прокачки, только армия
   tabUpgBtn.style.display=yard?'none':'';
@@ -194,9 +195,9 @@ function updatePanel(){
   // прокачка — обновляем только текст/состояние постоянных строк
   for(const tr of ['prod','def','atk']){
     const row=upgRows[tr]; let enabled,right;
-    if(c.spec&&c.spec!==tr){enabled=false;right='занято';}
-    else if(c.tier>=MAX_TIER){enabled=false;right='MAX';}
-    else{const cost=upgradeCost(c.tier);enabled=gold[PLAYER]>=cost;right=`−${cost}💰`;}
+    const tier=c.branchTier(tr);
+    if(tier>=MAX_TIER){enabled=false;right=`${tier} · MAX`;}
+    else{const cost=upgradeCost(tier);enabled=gold[PLAYER]>=cost;right=`${tier} → ${tier+1} · −${cost}💰`;}
     if(occ){enabled=false;right='🏴 оккупация';}
     row.classList.toggle('dis',!enabled);
     row.querySelector('small').textContent=right;
@@ -325,4 +326,3 @@ function updateHUD(){
   document.getElementById('sbTech').classList.toggle('active',!!techWinOpen);
   document.getElementById('sbPol').classList.toggle('active',!!polWinOpen);
 }
-

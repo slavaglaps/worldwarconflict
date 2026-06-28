@@ -150,7 +150,7 @@
         if(par&&typeof addEdgeRuntime==='function'){try{addEdgeRuntime(idx,par.idx);}catch(e){}}
       }
     });
-    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0]));
+    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0, cc.prodTier|0, cc.defTier|0, cc.atkTier|0]));
     const rel=[]; state.relations.forEach((v,k)=> rel.push([k, v===1?'war':'ally']));
     const ws=[]; if(state.warStart) state.warStart.forEach((v,k)=> ws.push([k, v]));   // время начала каждой войны → отсчёт мобилизации (60с)
     onMsg({ data: JSON.stringify({ t:'snap', time:+state.clock||0, over:0, c, rel, ws }) });   // экономика идёт отдельным сообщением 'econ' (приватно)

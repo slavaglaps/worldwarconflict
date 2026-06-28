@@ -15,6 +15,7 @@ test('город: owner/units(округл.)/spec/tier/occ', () => {
   projectState(s, st, techN);
   const cs = st.cities.get('7');
   eq(cs.owner, c.owner); eq(cs.units, 124); eq(cs.spec, SPEC_ID.atk); eq(cs.tier, 2); eq(cs.occ, 1);
+  eq(cs.prodTier, 0); eq(cs.defTier, 0); eq(cs.atkTier, 2);
 });
 
 test('осада: в схему идёт СИЛЬНЕЙШИЙ пул (units + owner)', () => {

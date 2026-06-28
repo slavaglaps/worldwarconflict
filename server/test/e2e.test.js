@@ -19,7 +19,7 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
 
 (async () => {
   // сервер задаёт конфиг сима: хватает голды/политочков на войну/исследования; rng детерминирован
-  GameRoom.simOptions = { factions: 6, cities: 18, politStart: 200, goldStart: 300, warPrep: 0, rng: () => 0.01 };   // warPrep:0 → осаду тестим сразу (мобилизацию проверяет sim.test)
+  GameRoom.simOptions = { factions: 6, cities: 18, politStart: 200, goldStart: 500, warPrep: 0, rng: () => 0.01 };   // warPrep:0 → осаду тестим сразу (мобилизацию проверяет sim.test)
   const server = new Server();
   server.define('game', GameRoom);
   await server.listen(PORT);
@@ -50,11 +50,16 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
     assert(bal1.tech.nodes.m1 && bal1.tech.nodes.m1.g > 0, 'узел m1 дерева с ценой пришёл');
   });
 
-  await testAsync('upg через сеть применяется авторитетно', async () => {
+  await testAsync('ветки upg через сеть применяются независимо', async () => {
     const [k] = myCity(r1, f1);
     r1.send('upg', { city: Number(k), track: 'prod' });
+    await sleep(250);
+    r1.send('upg', { city: Number(k), track: 'def' });
+    await sleep(250);
+    r1.send('upg', { city: Number(k), track: 'atk' });
     await sleep(500);
-    eq(r1.state.cities.get(k).spec, 1); eq(r1.state.cities.get(k).tier, 1);
+    const c = r1.state.cities.get(k);
+    eq(c.prodTier, 1); eq(c.defTier, 1); eq(c.atkTier, 1);
   });
 
   await testAsync('buy через сеть → производство → гарнизон растёт', async () => {

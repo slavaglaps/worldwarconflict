@@ -55,7 +55,8 @@ class GameRoom extends Room {
       const cs = new CityState();
       cs.gx = c.gx; cs.gz = c.gz; cs.size = c.size; cs.country = c.country; cs.capital = c.capital ? 1 : 0;
       cs.shipyard = c.isShipyard ? 1 : 0; cs.airport = c.isAirport ? 1 : 0;
-      cs.owner = c.owner; cs.units = Math.round(c.units); cs.spec = 0; cs.tier = 0; cs.occ = 0;
+      cs.owner = c.owner; cs.units = Math.round(c.units); cs.spec = 0; cs.tier = 0;
+      cs.prodTier = 0; cs.defTier = 0; cs.atkTier = 0; cs.occ = 0;
       this.state.cities.set(String(c.idx), cs);
     }
     // экономика (gold/manpower/politPts) НЕ в broadcast-стейте — шлётся per-client в _sendEcon()

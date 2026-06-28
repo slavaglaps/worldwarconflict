@@ -144,11 +144,11 @@ function sendUnits(from,to,pctOverride){
 function upgradeCity(c,track){
   if(MP.guest){ MP.cmd({cmd:'upg',c:c.idx,track}); return; }
   if(c.occ){if(c.owner===OWNER.PLAYER)toast('🏴 Оккупированный город — нельзя прокачивать (аннексируйте через мир)');return;}
-  if(c.owner!==OWNER.PLAYER||c.tier>=MAX_TIER)return;
-  if(c.spec&&c.spec!==track)return;
-  const cost=upgradeCost(c.tier);
+  const tier=c.branchTier(track);
+  if(c.owner!==OWNER.PLAYER||tier>=MAX_TIER)return;
+  const cost=upgradeCost(tier);
   if(gold[c.owner]<cost){toast('Не хватает голды на прокачку');return;}
-  gold[c.owner]-=cost;c.spec=track;c.tier++;c.buildMeshes();markRegions();
+  gold[c.owner]-=cost;c[track+'Tier']=tier+1;c.syncLegacyTier(track);c.buildMeshes();markRegions();
 }
 function buyAmount(c,spec){
   const space=Math.floor(c.capacity-c.units-c.queued); if(space<=0)return 0;
@@ -270,7 +270,7 @@ function factionStrength(fid){
 function factionPower(fid){
   let p=0;
   for(const c of cities){ if(c.owner!==fid)continue;
-    p += 25 + c.size*6 + c.tier*18 + c.units;   // город + размер + прокачка (тир) + гарнизон
+    p += 25 + c.size*6 + c.totalTier*18 + c.units;   // город + размер + сумма прокачек + гарнизон
     if(c.capital)p+=40; }
   for(const q of squads)if(q.owner===fid)p+=q.fcount;        // армии в походе
   for(const s of ships)if(s.owner===fid)p+=14;               // флот
@@ -280,12 +280,12 @@ function factionPower(fid){
 }
 // приток политочков фракции = база + города×k + сумма_тиров×k2 (с потолком)
 function politRate(fid){
-  let n=0,t=0; for(const c of cities)if(c.owner===fid){n++;t+=c.tier;}
+  let n=0,t=0; for(const c of cities)if(c.owner===fid){n++;t+=c.totalTier;}
   return Math.min(POLIT_RATE_MAX, POLIT_RATE_BASE + n*POLIT_PER_CITY + t*POLIT_PER_TIER);
 }
 // 👥 манпауэр: потолок и регенерация фракции от её городов
-function manpowerCap(fid){ let m=0; for(const c of cities)if(c.owner===fid)m+=(MP_BASE+c.size*MP_PER_SIZE+c.tier*MP_PER_TIER)*(c.capital?MP_CAPITAL:1); return m*techMul(fid,'prod'); }
-function manpowerRate(fid){ let r=0; for(const c of cities)if(c.owner===fid)r+=(MP_RATE_BASE+c.size*MP_RATE_PER_SIZE+c.tier*MP_RATE_PER_TIER)*(c.capital?MP_CAPITAL:1); return r*techMul(fid,'prod'); }
+function manpowerCap(fid){ let m=0; for(const c of cities)if(c.owner===fid)m+=(MP_BASE+c.size*MP_PER_SIZE+c.totalTier*MP_PER_TIER)*(c.capital?MP_CAPITAL:1); return m*techMul(fid,'prod'); }
+function manpowerRate(fid){ let r=0; for(const c of cities)if(c.owner===fid)r+=(MP_RATE_BASE+c.size*MP_RATE_PER_SIZE+c.totalTier*MP_RATE_PER_TIER)*(c.capital?MP_CAPITAL:1); return r*techMul(fid,'prod'); }
 function commonEnemy(a,b){return FACTIONS.some(f=>f.id!==a&&f.id!==b&&atWar(a,f.id)&&atWar(b,f.id));}
 function acceptAlliance(fid,vs){return commonEnemy(fid,vs)||Math.random()<POLITICS.allyAcceptProb;}
 // вероятность что фракция ai примет мир от vs при дани tribute (vs платит ai)
@@ -540,4 +540,3 @@ function showNextWarNotif(){
 function dismissWarNotif(){showNextWarNotif();}
 document.getElementById('warNotifOk').onclick=dismissWarNotif;
 document.getElementById('warNotifDiplo').onclick=()=>{const t=warNotifFrom;dismissWarNotif();openDiplo(t);};
-

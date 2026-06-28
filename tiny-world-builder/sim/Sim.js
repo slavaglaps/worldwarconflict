@@ -104,7 +104,7 @@ class Sim {
   edgeBetween(a, b) { return this.edgeKey.get(this._ek(a, b)); }
   _buildGraph(edges) {
     for (const e of edges) {
-      const edge = { a: e.a, b: e.b, type: e.type, len: e.len, mult: e.mult };
+      const edge = { a: e.a, b: e.b, type: e.type, len: e.len, mult: e.mult, pts: Array.isArray(e.pts) ? e.pts : null };
       this.edgeKey.set(this._ek(e.a, e.b), edge);
       if (!this.adj.has(e.a)) this.adj.set(e.a, []);
       if (!this.adj.has(e.b)) this.adj.set(e.b, []);
@@ -422,9 +422,14 @@ class Sim {
     const buildable = mine.filter(c => !c.occ); if (!buildable.length) return;
     const src = buildable.reduce((a, b) => b.units > a.units ? b : a);
     this.cmdBuy(fid, src.idx, 'max');
-    if (src.tier < this.K.MAX_TIER && this.gold[fid] >= (this.K.UPGRADE_COST_BASE + src.tier * this.K.UPGRADE_COST_STEP) + A.upgradeGoldBuffer && rng() < A.upgradeProb) {
-      const near = this.cities.some(c => c.owner !== fid && (c.gx - src.gx) ** 2 + (c.gz - src.gz) ** 2 < A.nearRadius2);
-      this.cmdUpgrade(fid, src.idx, src.spec || (near ? 'atk' : 'prod')); return;
+    const near = this.cities.some(c => c.owner !== fid && (c.gx - src.gx) ** 2 + (c.gz - src.gz) ** 2 < A.nearRadius2);
+    const preferredTrack = near ? 'atk' : 'prod';
+    const upgradeTrack = src.branchTier(preferredTrack) < this.K.MAX_TIER
+      ? preferredTrack
+      : ['def', 'prod', 'atk'].find(track => src.branchTier(track) < this.K.MAX_TIER);
+    const upgradeTier = upgradeTrack ? src.branchTier(upgradeTrack) : this.K.MAX_TIER;
+    if (upgradeTrack && this.gold[fid] >= (this.K.UPGRADE_COST_BASE + upgradeTier * this.K.UPGRADE_COST_STEP) + A.upgradeGoldBuffer && rng() < A.upgradeProb) {
+      this.cmdUpgrade(fid, src.idx, upgradeTrack); return;
     }
     if (src.units < A.minArmy) return;
     const cand = new Map();
@@ -545,9 +550,9 @@ class Sim {
   }
 
   // ── ресурсные потолки/притоки (учитывают tech 'prod') ──
-  manpowerCap(fid) { let m = 0; for (const c of this.cities) if (c.owner === fid) m += (this.K.MP_BASE + c.size * this.K.MP_PER_SIZE + c.tier * this.K.MP_PER_TIER) * (c.capital ? this.K.MP_CAPITAL : 1); return m * this.techMul(fid, 'prod'); }
-  manpowerRate(fid) { let r = 0; for (const c of this.cities) if (c.owner === fid) r += (this.K.MP_RATE_BASE + c.size * this.K.MP_RATE_PER_SIZE + c.tier * this.K.MP_RATE_PER_TIER) * (c.capital ? this.K.MP_CAPITAL : 1); return r * this.techMul(fid, 'prod'); }
-  politRate(fid) { let n = 0, t = 0; for (const c of this.cities) if (c.owner === fid) { n++; t += c.tier; } const P = this.B.politics; return Math.min(P.rateMax, P.rateBase + n * P.perCity + t * P.perTier); }
+  manpowerCap(fid) { let m = 0; for (const c of this.cities) if (c.owner === fid) m += (this.K.MP_BASE + c.size * this.K.MP_PER_SIZE + c.totalTier * this.K.MP_PER_TIER) * (c.capital ? this.K.MP_CAPITAL : 1); return m * this.techMul(fid, 'prod'); }
+  manpowerRate(fid) { let r = 0; for (const c of this.cities) if (c.owner === fid) r += (this.K.MP_RATE_BASE + c.size * this.K.MP_RATE_PER_SIZE + c.totalTier * this.K.MP_RATE_PER_TIER) * (c.capital ? this.K.MP_CAPITAL : 1); return r * this.techMul(fid, 'prod'); }
+  politRate(fid) { let n = 0, t = 0; for (const c of this.cities) if (c.owner === fid) { n++; t += c.totalTier; } const P = this.B.politics; return Math.min(P.rateMax, P.rateBase + n * P.perCity + t * P.perTier); }
   factionStrength(fid) { let s = 0; for (const c of this.cities) if (c.owner === fid) s += c.units + this.K.FACTION_STR_CITY_BASE; return s; }
   validFaction(fid) { return Number.isInteger(fid) && fid >= 0 && fid < this.factions; }
   // счётчики сущностей фракции (existing + queued) — для хард-капов
@@ -707,12 +712,16 @@ class Sim {
     return true;
   }
   cmdUpgrade(fid, idx, track) {
-    const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ || c.tier >= this.K.MAX_TIER) return false;
+    const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ) return false;
     if (!['prod', 'def', 'atk'].includes(track)) return false;
-    if (c.spec && c.spec !== track) return false;
-    const cost = this.K.UPGRADE_COST_BASE + c.tier * this.K.UPGRADE_COST_STEP;
+    c.migrateTiers();
+    const tier = c.branchTier(track);
+    if (tier >= this.K.MAX_TIER) return false;
+    const cost = this.K.UPGRADE_COST_BASE + tier * this.K.UPGRADE_COST_STEP;
     if (this.gold[fid] < cost) return false;
-    this.gold[fid] -= cost; c.spec = track; c.tier++;
+    this.gold[fid] -= cost;
+    c[track + 'Tier'] = tier + 1;
+    c.spec = track; c.tier = c.visualTier;
     return true;
   }
   // Отправка войск. Реальная карта → движущийся отряд по графу (Squad); toy-мир → мгновенная осада.

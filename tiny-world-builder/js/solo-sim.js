@@ -16,7 +16,8 @@ function projectLocalSim(sim, onMsg) {
     c.push([cc.idx, cc.owner, Math.round(cc.units), (_SOLO_SPEC2ID[cc.spec] || 0), cc.tier, cc.occ ? 1 : 0,
       Math.round(cc.queued || 0), Math.round(su), so,
       b0 ? Math.round(b0.time * 10) : 0, b0 ? Math.round(b0.elapsed * 10) : 0,
-      cc.shipQueue | 0, Math.round((cc.shipTimer || 0) * 10), cc.planeQueue | 0, Math.round((cc.planeTimer || 0) * 10)]);
+      cc.shipQueue | 0, Math.round((cc.shipTimer || 0) * 10), cc.planeQueue | 0, Math.round((cc.planeTimer || 0) * 10),
+      cc.branchTier('prod'), cc.branchTier('def'), cc.branchTier('atk')]);
   }
   const rel = []; for (const k in sim.relations) rel.push([k, sim.relations[k]]);             // 'war'|'ally'
   const ws = []; for (const k in sim.warSince) if (sim.relations[k] === 'war') ws.push([k, sim.warSince[k]]);
@@ -28,7 +29,18 @@ function projectLocalSim(sim, onMsg) {
   const WY = (typeof WATER_Y_SHIP !== 'undefined' ? WATER_Y_SHIP : -0.1);
   const PA = (typeof PLANE_ALT !== 'undefined' ? PLANE_ALT : 4.5);
   const e = [];
-  for (const s of sim.squads) e.push(['sq' + s.id, 0, s.owner, s.x, gy(s.x, s.z) + 0.2, s.z, Math.round(s.fcount)]);
+  for (const s of sim.squads) {
+    let x = s.x, z = s.z;                                          // прямая интерполяция ребра…
+    if (typeof hexRoadPos === 'function' && !s.foe && s.path) {    // …но рисуем ВДОЛЬ визуальной дороги (хекс-карта)
+      const a = s.path[s.hop], b = s.path[s.hop + 1];
+      if (a != null && b != null) {
+        const ed = sim.edgeBetween(a, b), frac = ed && ed.len ? Math.min(1, s.prog / ed.len) : 0;
+        const rp = hexRoadPos(a, b, frac);
+        if (rp) { x = rp.x; z = rp.z; }
+      }
+    }
+    e.push(['sq' + s.id, 0, s.owner, x, gy(x, z) + 0.2, z, Math.round(s.fcount)]);
+  }
   for (const s of sim.ships) e.push(['sh' + s.id, 1, s.owner, s.x, WY, s.z, 0]);
   for (const p of sim.planes) e.push(['pl' + p.id, 2, p.owner, p.x, PA, p.z, 0]);
   onMsg({ data: JSON.stringify({ t: 'ent', e }) });

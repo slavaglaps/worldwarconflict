@@ -21,6 +21,9 @@ class City {
 
     this.spec = null;                   // 'prod' | 'def' | 'atk'
     this.tier = 0;
+    this.prodTier = null;               // null = legacy spec/tier ещё не разложены по веткам
+    this.defTier = null;
+    this.atkTier = null;
     this.occ = false; this.occFrom = null;   // оккупация (до мира)
     this.units = 8 + this.size * 4;          // стартовый гарнизон
     this.boosted = false;
@@ -35,15 +38,26 @@ class City {
     this.K = o.K || C;                  // константы комнаты (balance.tune); фолбэк — код-дефолты
   }
 
-  get capacity()    { let c = this.K.CITY_CAP_BASE + this.size * this.K.CITY_CAP_PER_SIZE; if (this.spec === 'def') c *= 1 + this.K.CITY_DEF_CAP_PER_TIER * this.tier; if (this.boosted) c *= this.K.CITY_BOOST_CAP; return c * this.tv(this.owner, 'cc'); }
-  get goldInterval(){ let g = this.K.CITY_GOLD_INTERVAL; if (this.spec === 'prod') g *= Math.pow(this.K.CITY_PROD_GOLD_DECAY, this.tier); if (this.boosted) g *= this.K.CITY_BOOST_GOLD; return g / this.tm(this.owner, 'eco'); }
+  branchTier(track) { const v = this[track + 'Tier']; return v == null ? (this.spec === track ? this.tier : 0) : v; }
+  get totalTier()   { return this.branchTier('prod') + this.branchTier('def') + this.branchTier('atk'); }
+  get visualTier()  { return Math.max(this.branchTier('prod'), this.branchTier('def'), this.branchTier('atk')); }
+  migrateTiers() {
+    if (this.prodTier != null && this.defTier != null && this.atkTier != null) return;
+    const spec = this.spec, tier = this.tier | 0;
+    this.prodTier = spec === 'prod' ? tier : 0;
+    this.defTier = spec === 'def' ? tier : 0;
+    this.atkTier = spec === 'atk' ? tier : 0;
+  }
+
+  get capacity()    { let c = this.K.CITY_CAP_BASE + this.size * this.K.CITY_CAP_PER_SIZE; c *= 1 + this.K.CITY_DEF_CAP_PER_TIER * this.branchTier('def'); if (this.boosted) c *= this.K.CITY_BOOST_CAP; return c * this.tv(this.owner, 'cc'); }
+  get goldInterval(){ let g = this.K.CITY_GOLD_INTERVAL; g *= Math.pow(this.K.CITY_PROD_GOLD_DECAY, this.branchTier('prod')); if (this.boosted) g *= this.K.CITY_BOOST_GOLD; return g / this.tm(this.owner, 'eco'); }
   get trainPer()    { let t = this.K.CITY_TRAIN_BASE - this.size * this.K.CITY_TRAIN_PER_SIZE; if (this.boosted) t *= this.K.CITY_BOOST_TRAIN; return t / this.tm(this.owner, 'prod'); }
   get queued()      { return this.batches.reduce((s, b) => s + b.count, 0); }
-  get defMult()     { return (1 + (this.spec === 'def' ? this.K.CITY_DEF_MULT_PER_TIER * this.tier : 0)) * this.tm(this.owner, 'def'); }
-  get atkMult()     { return (1 + (this.spec === 'atk' ? this.K.CITY_ATK_MULT_PER_TIER * this.tier : 0)) * this.tm(this.owner, 'atk'); }
+  get defMult()     { return (1 + this.K.CITY_DEF_MULT_PER_TIER * this.branchTier('def')) * this.tm(this.owner, 'def'); }
+  get atkMult()     { return (1 + this.K.CITY_ATK_MULT_PER_TIER * this.branchTier('atk')) * this.tm(this.owner, 'atk'); }
   // ⚔ башня: atk-город бьёт по врагам в радиусе (радиус/урон растут с тиром и tech)
-  get fireRange()   { return this.spec === 'atk' ? (this.K.TOWER_RANGE_BASE + this.K.TOWER_RANGE_PER * this.tier) * this.tv(this.owner, 'tr') : 0; }
-  get fireDmg()     { return (this.K.TOWER_DMG_BASE + this.tier) * this.tm(this.owner, 'atk') * this.tv(this.owner, 'td'); }
+  get fireRange()   { const tier = this.branchTier('atk'); return tier > 0 ? (this.K.TOWER_RANGE_BASE + this.K.TOWER_RANGE_PER * tier) * this.tv(this.owner, 'tr') : 0; }
+  get fireDmg()     { return (this.K.TOWER_DMG_BASE + this.branchTier('atk')) * this.tm(this.owner, 'atk') * this.tv(this.owner, 'td'); }
 
   // Возвращает заработанную за тик голду (Sim начисляет владельцу).
   update(dt) {

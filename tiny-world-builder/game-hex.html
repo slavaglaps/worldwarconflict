@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Voxel Wars</title>
+<link rel="stylesheet" href="game.css">
+</head>
+<body>
+<div id="app"></div>
+<div id="labels"></div>
+
+<div id="topbar">
+  <div class="cell fcell">
+    <div class="emblem"><svg id="emblemSvg" viewBox="0 0 44 50"></svg></div>
+    <div><div class="fname" id="hFaction">Франция</div><div class="fbar" id="fBar"></div></div>
+  </div>
+
+  <div class="cell">
+    <div class="ic"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#f0c460" stroke="#a9772a" stroke-width="2"/><circle cx="16" cy="16" r="9.5" fill="none" stroke="#c9912f" stroke-width="1.4"/><text x="16" y="21.5" text-anchor="middle" font-size="15" font-weight="900" fill="#8a5a17">$</text></svg></div>
+    <div><div class="lbl">Голда</div><div class="val" id="hGold">0</div><div class="rate"><span class="d">–</span><span id="hGoldRate">+0/с</span></div></div>
+  </div>
+
+  <div class="cell">
+    <div class="ic"><svg viewBox="0 0 32 32"><g fill="#f0c460" stroke="#a9772a" stroke-width="1" stroke-linejoin="round"><polygon points="16,4 29,11 3,11"/><rect x="6" y="12" width="3" height="11"/><rect x="12" y="12" width="3" height="11"/><rect x="17" y="12" width="3" height="11"/><rect x="23" y="12" width="3" height="11"/><rect x="3" y="24" width="26" height="3"/></g></svg></div>
+    <div><div class="lbl">Политочки</div><div class="val" id="hPol">0</div><div class="rate"><span class="d">–</span><span id="hPolRate">+0/с</span></div></div>
+  </div>
+
+  <div class="cell">
+    <div class="ic"><svg viewBox="0 0 32 32" fill="#f0c460" stroke="#a9772a" stroke-width="1"><circle cx="11" cy="11" r="4.6"/><circle cx="22" cy="12" r="3.9"/><path d="M2.5 27c0-5.2 4-8.5 8.5-8.5s8.5 3.3 8.5 8.5z"/><path d="M17.5 27c.4-4.2 3-7 6.5-7 3.2 0 5.5 2.6 5.5 7z"/></svg></div>
+    <div><div class="lbl">Манпауэр</div><div class="val"><span id="hMp">0</span><span class="den">/<span id="hMpCap">0</span></span></div></div>
+  </div>
+
+  <div class="cell">
+    <div><div class="lbl">Города</div><div class="val"><span id="hMine">0</span><span class="den"> / <span id="hTotal">0</span></span></div></div>
+  </div>
+
+  <div class="cell">
+    <div><div class="lbl">Место</div><div class="val"><span id="hRank">1</span><span class="den"> / <span id="hRankTot">24</span></span></div></div>
+  </div>
+
+  <div class="cell">
+    <div><div class="lbl">Фракций живо</div><div class="val" id="hAlive">24</div></div>
+  </div>
+
+  <div class="cell">
+    <div class="ic"><svg viewBox="0 0 32 32"><g stroke="#9a6b27" stroke-width="1.3" stroke-linejoin="round"><path d="M7 25l13-13 3 3-13 13z" fill="#e9e3d6"/><path d="M25 25L12 12l-3 3 13 13z" fill="#e9e3d6"/></g><g stroke="#caa64a" stroke-width="2.6" stroke-linecap="round"><path d="M5.5 26.5l3.5-3.5M26.5 26.5l-3.5-3.5"/></g></svg></div>
+    <div><div class="lbl">Армия</div><div class="val" id="hUnits">0</div></div>
+  </div>
+</div>
+<div id="slider">
+  <div>
+    <div class="lbl">Отправлять</div>
+    <div class="srow"><input id="pct" type="range" min="10" max="100" step="10" value="50"><b class="pctv" id="pctVal">50%</b></div>
+  </div>
+</div>
+<div id="toast" style="position:fixed;top:64px;left:50%;transform:translateX(-50%);opacity:0;transition:opacity .25s;
+  background:rgba(8,16,26,.85);color:#ffd1c2;font-weight:700;font-size:14px;padding:8px 18px;border-radius:9px;z-index:15;pointer-events:none;"></div>
+<div id="warPreps" style="position:fixed;top:150px;left:12px;display:flex;flex-direction:column;gap:5px;z-index:14;"></div>
+
+<div id="panel" class="panelbox">
+  <div class="title"><span id="pName">Город</span><span class="gold">💰<span id="pGold">0</span></span></div>
+  <div id="tabs">
+    <button id="tabUpg" class="active">Прокачка</button>
+    <button id="tabArmy">Армия</button>
+  </div>
+  <div id="upgTab"></div>
+  <div id="armyTab" style="display:none">
+    <div id="info">Гарнизон 0/0</div>
+    <div id="qbar"><div id="qfill"></div><div id="qtext"></div></div>
+    <div id="buyRows"></div>
+  </div>
+</div>
+
+<div id="heroBar"></div>
+<div id="heroWin">
+  <div id="heroCard" class="panelbox gpanel">
+    <button id="heroClose">✕</button>
+    <h2>🎖 Выберите героя</h2>
+    <div id="heroSub">3 слота · призыв за политочки 🏛 · у каждого 1 пассивная и 2 активные способности</div>
+    <div id="heroList"></div>
+  </div>
+</div>
+
+<div id="countryWin">
+  <div id="countryCard" class="panelbox gpanel">
+    <h2>🌍 За кого играть?</h2>
+    <div id="countrySub">Выберите страну — вы возглавите её на старте партии</div>
+    <div id="countryList"></div>
+  </div>
+</div>
+
+<div id="overlay"><div class="ovCard gpanel"><div class="gstars">★ <b>★</b> ★</div><h1 id="ovTitle">Победа!</h1><button id="ovBtn" class="dbtn ally">Играть снова</button></div></div>
+
+<div id="sideMenu">
+  <div class="sbtn" id="sbMap" title="Обзор карты">
+    <div class="si"><svg viewBox="0 0 32 32"><polygon data-fill points="16,3 27,9.5 27,22.5 16,29 5,22.5 5,9.5" fill="#c2ccd6" stroke="#6c7884" stroke-width="1.5"/><polygon points="16,3 16,29 5,22.5 5,9.5" fill="#a9b4be"/><polygon points="16,9 22,12.5 22,19.5 16,23 10,19.5 10,12.5" fill="none" stroke="#5b6671" stroke-width="1"/></svg></div>
+    <div class="sl">Карта</div>
+  </div>
+  <div class="sbtn" id="sbCities" title="Мои города">
+    <div class="si"><svg viewBox="0 0 32 32"><g data-fill fill="#c2ccd6" stroke="#6c7884" stroke-width="1" stroke-linejoin="round"><polygon points="16,4 29,11 3,11"/><rect x="6" y="12" width="3" height="11"/><rect x="12" y="12" width="3" height="11"/><rect x="17" y="12" width="3" height="11"/><rect x="23" y="12" width="3" height="11"/><rect x="3" y="24" width="26" height="3"/></g></svg></div>
+    <div class="sl">Города</div>
+  </div>
+  <div class="sbtn" id="sbArmy" title="Крупнейший гарнизон">
+    <div class="si"><svg viewBox="0 0 32 32"><g data-fill fill="#c2ccd6" stroke="#6c7884" stroke-width="1" stroke-linejoin="round"><path d="M6 6l8 8-2 2-8-8z"/><path d="M26 6l-8 8 2 2 8-8z"/><path d="M6 26l8-8 2 2-8 8z"/><path d="M26 26l-8-8-2 2 8 8z"/></g></svg></div>
+    <div class="sl">Армия</div>
+  </div>
+  <div class="sbtn" id="sbTech" title="Технологии (T)">
+    <div class="si"><svg viewBox="0 0 32 32"><path data-fill d="M13 4h6v2h-1v6l6 11.5a2 2 0 0 1-1.8 3H9.8a2 2 0 0 1-1.8-3L14 12V6h-1z" fill="#c2ccd6" stroke="#6c7884" stroke-width="1.3" stroke-linejoin="round"/><path d="M11 18.5h10" stroke="#5b6671" stroke-width="1.1"/></svg></div>
+    <div class="sl">Технологии</div>
+  </div>
+  <div class="sbtn" id="sbPol" title="Политика (P)">
+    <div class="si"><svg viewBox="0 0 32 32"><g data-fill fill="#c2ccd6" stroke="#6c7884" stroke-width="1" stroke-linejoin="round"><polygon points="16,3 28,9 4,9"/><rect x="6" y="10" width="20" height="14"/><rect x="4" y="24" width="24" height="3"/></g><path d="M16 12l4.5 1.8v3c0 2.7-2.2 4.1-4.5 5-2.3-.9-4.5-2.3-4.5-5v-3z" fill="#9aa6b1" stroke="#5b6671" stroke-width="1" stroke-linejoin="round"/></svg></div>
+    <div class="sl">Политика</div>
+  </div>
+  <div class="sbtn" id="sbIntel" title="Разведка">
+    <div class="si"><svg viewBox="0 0 32 32"><g fill="none" stroke="#6c7884" stroke-width="1.3"><circle cx="16" cy="16" r="11"/><circle cx="16" cy="16" r="7"/><circle cx="16" cy="16" r="3"/></g><path data-fill d="M16 16 L25.5 9.5 A11 11 0 0 0 16 5 Z" fill="#c2ccd6" opacity=".88"/><circle cx="16" cy="16" r="1.7" fill="#c2ccd6"/></svg></div>
+    <div class="sl">Разведка</div>
+  </div>
+</div>
+<div id="polWin">
+  <div id="polCard" class="panelbox">
+    <button id="polClose">✕</button>
+    <div id="polHeader">
+      <div class="phIcon"><svg viewBox="0 0 48 54"><polygon points="24,2 45,13.5 45,40.5 24,52 3,40.5 3,13.5" fill="#1c2620" stroke="#9aa07a" stroke-width="2.4"/><g stroke="#caa64a" stroke-width="2.4" stroke-linecap="round" fill="none"><path d="M16 16 L32 38"/><path d="M32 16 L16 38"/></g><g fill="#caa64a"><circle cx="16" cy="16" r="2.4"/><circle cx="32" cy="16" r="2.4"/></g></svg></div>
+      <div class="phTitle"><h2>Дипломатия / Фракции</h2><div class="phSub">Выстраивайте отношения, заключайте союзы и защищайте интересы.</div></div>
+      <div class="phPts">🏛 <b id="polPts">0</b> очк.</div>
+    </div>
+    <div id="polColhdr">
+      <span>Фракция</span><span class="ctr">Мощь</span><span class="ctr">Города</span><span class="ctr">Армия</span><span class="ctr">Отношение</span><span class="ctr">Действия</span>
+    </div>
+    <div id="polList"></div>
+  </div>
+</div>
+<div id="techWin">
+  <div id="techCard" class="panelbox" style="position:relative">
+    <button id="techClose">✕</button>
+    <h2>🔬 Исследования</h2>
+    <div class="sub">Исследования идут во времени и занимают слоты · открывайте корабли, авиацию, башни</div>
+    <div id="techGrid"></div>
+  </div>
+</div>
+<div id="techTip"></div>
+
+<div id="diploWin">
+  <div id="diploCard" class="panelbox gpanel" style="position:relative">
+    <button id="diploClose">✕</button>
+    <div id="diploName">Страна</div>
+    <div id="diploInfo"></div>
+    <div id="diploRel"></div>
+    <div id="diploBtns"></div>
+  </div>
+</div>
+
+<div id="warNotif">
+  <div id="warNotifCard" class="gpanel">
+    <div class="gstars">★ <b>★</b> ★</div>
+    <div class="gtitle danger"><span class="gtIcon">⚠</span>Вам объявлена война!</div>
+    <div id="warNotifBody"></div>
+    <div id="warNotifBtns">
+      <button id="warNotifDiplo" class="dbtn war">🛡 К дипломатии</button>
+      <button id="warNotifOk" class="dbtn ghost">Понятно</button>
+    </div>
+  </div>
+</div>
+
+<div id="peaceWin">
+  <div id="peaceCard" class="gpanel">
+    <div class="gstars">★ ★ ★</div>
+    <div id="peaceName">🕊 Мир</div>
+    <div id="peaceInfo"></div>
+    <div class="pterm">
+      <span class="ic">🌍</span><span class="nm">Занять земли</span>
+      <span class="v" id="ptLandV"></span>
+      <button class="tgl" id="ptLandBtn" data-r="land">✓</button>
+    </div>
+    <div class="pterm">
+      <span class="ic">💰</span><span class="nm">Контрибуция</span>
+      <button class="mm" data-r="money" data-d="-10">−</button>
+      <span class="pct" id="ptMoneyV">0%</span>
+      <button class="pp" data-r="money" data-d="10">+</button>
+      <button class="mx" data-r="money" data-d="max">MAX</button>
+    </div>
+    <div class="pterm">
+      <span class="ic">💵</span><span class="nm">Репарации</span>
+      <button class="mm" data-r="repar" data-d="-10">−</button>
+      <span class="pct" id="ptReparV">0%</span>
+      <button class="pp" data-r="repar" data-d="10">+</button>
+      <button class="mx" data-r="repar" data-d="max">MAX</button>
+    </div>
+    <div id="peaceChance"></div>
+    <div class="row2">
+      <button id="peacePropose" class="dbtn peace">Предложить мир</button>
+      <button id="peaceCancel" class="dbtn neutral">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<div id="peaceOffer">
+  <div id="peaceOfferCard" class="gpanel">
+    <div class="gstars">★ ★ ★</div>
+    <div id="peaceOfferTitle">🕊 Предложение мира</div>
+    <div id="peaceOfferBody"></div>
+    <div class="row2">
+      <button id="peaceOfferYes" class="dbtn ally">Принять</button>
+      <button id="peaceOfferNo" class="dbtn war">Отклонить</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/three/three.r128.min.js"></script>
+<script src="vendor/three/GLTFLoader.r128.js"></script>
+<!-- ── Сборщик модулей игры ───────────────────────────────────────────────
+     game.html разбит на модули (js/*.js + мост game.net.js) для удобства правок.
+     Сборки нет: модули НЕЛЬЗЯ грузить отдельными <script> — функции хойстятся
+     только внутри своего скрипта, а тут полно top-level-кода с перекрёстными
+     ссылками между модулями (напр. hud.js вешает onclick на openCountryPick из
+     loop.js). Поэтому модули склеиваются в один <script> на лету: ЕДИНАЯ область
+     видимости и хойстинг 1:1 как у исходного inline-скрипта. Порядок = порядок в MODS. -->
+<script>
+// ── game-hex.html — PoC «новая карта из хексов». Отдельный файл; game.html и
+//    редактор hex-europe.html НЕ трогаются. Всегда рантайм-склейка (хекс-бандла нет).
+//    Перед игровыми модулями АСИНХРОННО грузим хекс-карту (hex-preload.js), затем
+//    в MODS добавлен hex-world.js (переопределяет buildWorld/getTerrainHeight перед boot).
+(async () => {
+  const bust = location.search.includes('nocache') ? ('?_=' + Date.now()) : '';
+  const loadScript = (src) => new Promise((res, rej) => {   // внешний <script src> — CSP-safe
+    const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error(src)); document.head.appendChild(s);
+  });
+
+  // ── 0) хекс-карта: грузим модели KayKit + генерим сетку ДО игровых модулей ──
+  try {
+    await loadScript('js/hex-preload.js' + bust);
+    await window.hexPreload();
+  } catch (e) {
+    console.error('[hex-loader] не удалось подготовить хекс-карту:', e);
+    document.body.insertAdjacentHTML('beforeend',
+      '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;'
+      + 'background:#0b1118;color:#ff9b8a;font:600 16px/1.5 sans-serif;z-index:99999;text-align:center;padding:24px">'
+      + 'Хекс-карта не загрузилась:<br>' + (e && e.message || e) + '</div>');
+    return;
+  }
+
+  // ── рантайм-склейка модулей (как в game.html) + hex-world.js перед loop.js ──
+  const MODS = [
+    'js/_rules.gen.js',      // ПЕРВЫМИ: данные правил из server/sim (single-source, codegen)
+    'js/_tech.gen.js',       //   константы + древо технологий — канон на сервере
+    'js/_balance.gen.js',    //   POLITICS + AI дефолты (дипломатия/боты) — канон balance.js
+    'js/sim-loader.js',      //   loadServerSim(): грузит настоящий server/sim/ в браузер (Фаза 2)
+    'js/solo-sim.js',        //   projectLocalSim(): Sim → guest-рендер (Фаза 2 проектор)
+    'js/data.js', 'js/world.js', 'js/heroes.js', 'js/decor.js', 'js/roads.js',
+    'js/city.js', 'js/units.js', 'js/logic.js', 'js/ui.js', 'js/input.js',
+    'js/hud.js',
+    'js/hex-world.js',       // ⬡ ПЕРЕД loop.js: переопределяет buildWorld/getTerrainHeight до boot
+    'js/loop.js',
+    'game.net.js',           // мост Colyseus — последним (использует глобали игры)
+  ];
+  try {
+    const parts = await Promise.all(MODS.map(async (f) => {
+      const r = await fetch(f + bust);
+      if (!r.ok) throw new Error(f + ' → HTTP ' + r.status);
+      return '\n/* ===================== ' + f + ' ===================== */\n' + await r.text();
+    }));
+    const s = document.createElement('script');
+    s.textContent = parts.join('\n;\n');   // ';' между модулями — страховка от ASI
+    document.body.appendChild(s);
+  } catch (e) {
+    console.error('[game-loader] не удалось собрать игру:', e);
+    document.body.insertAdjacentHTML('beforeend',
+      '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;'
+      + 'background:#0b1118;color:#ff9b8a;font:600 16px/1.5 sans-serif;z-index:99999;text-align:center;padding:24px">'
+      + 'Не удалось загрузить модули игры:<br>' + (e && e.message || e) + '</div>');
+  }
+})();
+</script>
+</body>
+</html>
