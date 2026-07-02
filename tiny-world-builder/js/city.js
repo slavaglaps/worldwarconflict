@@ -1,4 +1,26 @@
 /* ── City ───────────────────────────────────────────────────── */
+// общие dummy для роя осаждающих юнитов (тот же приём, что ghostUnitDummy в loop.js)
+const _siegeDummy=new T3.Object3D(); _siegeDummy.rotation.order='YXZ';
+const _siegeMat=new T3.Matrix4();
+// ── FX осады: общий пул пыли и стрел, анимируется раз в кадр ──
+const _dust=[], _arrows=[]; let _fxInit=false, _fxNow=0;
+function _initSiegeFX(){ if(_fxInit)return; _fxInit=true;
+  const cv=document.createElement('canvas'); cv.width=cv.height=64; const g=cv.getContext('2d');
+  const rg=g.createRadialGradient(32,32,1,32,32,31); rg.addColorStop(0,'rgba(255,255,255,1)'); rg.addColorStop(0.35,'rgba(242,238,230,0.85)'); rg.addColorStop(0.7,'rgba(225,218,205,0.4)'); rg.addColorStop(1,'rgba(210,203,190,0)');
+  g.fillStyle=rg; g.fillRect(0,0,64,64); const tex=new T3.CanvasTexture(cv);
+  for(let i=0;i<22;i++){ const s=new T3.Sprite(new T3.SpriteMaterial({map:tex,transparent:true,depthWrite:false,opacity:0})); s.visible=false; s.userData.perfGroup='units'; scene.add(s); _dust.push({sp:s,t0:-1,life:0.45,x:0,y:0,z:0,sc:0.4}); }
+  const ag=new T3.BoxGeometry(0.02,0.02,0.24), am=new T3.MeshBasicMaterial({color:0x2e2620});
+  for(let i=0;i<16;i++){ const m=new T3.Mesh(ag,am); m.visible=false; m.userData.perfGroup='units'; scene.add(m); _arrows.push({m,t0:-1,life:0.4,x0:0,y0:0,z0:0,x1:0,y1:0,z1:0,arc:0.5}); }
+}
+function _spawnDust(x,y,z,sc){ _initSiegeFX(); for(const d of _dust){ if(d.t0<0||(_fxNow-d.t0)/1000>d.life){ d.t0=_fxNow; d.x=x;d.y=y;d.z=z;d.sc=sc; d.sp.visible=true; return; } } }
+function _spawnArrow(x0,y0,z0,x1,y1,z1){ _initSiegeFX(); for(const a of _arrows){ if(a.t0<0||(_fxNow-a.t0)/1000>a.life){ a.t0=_fxNow; a.x0=x0;a.y0=y0;a.z0=z0;a.x1=x1;a.y1=y1;a.z1=z1; a.arc=0.35+Math.random()*0.3; a.m.visible=true; return; } } }
+function _updateSiegeFX(now){ const first=now!==_fxNow; _fxNow=now; if(!first||!_fxInit)return;
+  for(const d of _dust){ if(d.t0<0)continue; const k=(now-d.t0)/1000/d.life; if(k>=1){ d.sp.visible=false; d.t0=-1; continue; }
+    const s=d.sc*(0.5+k*1.9); d.sp.scale.set(s,s,s); d.sp.position.set(d.x,d.y+k*0.32,d.z); d.sp.material.opacity=(1-k*k)*0.95; }   // поднимается + тает (ярче, дольше держит непрозрачность)
+  for(const a of _arrows){ if(a.t0<0)continue; const k=(now-a.t0)/1000/a.life; if(k>=1){ a.m.visible=false; a.t0=-1; continue; }
+    const x=a.x0+(a.x1-a.x0)*k, z=a.z0+(a.z1-a.z0)*k, y=a.y0+(a.y1-a.y0)*k+Math.sin(k*Math.PI)*a.arc;
+    a.m.position.set(x,y,z); a.m.lookAt(a.x1,a.y1,a.z1); }
+}
 class City{
   constructor(gx,gz,country,size,owner,idx){
     this.gx=gx; this.gz=gz; this.country=country; this.size=size; this.owner=owner; this.idx=idx;
@@ -18,6 +40,7 @@ class City{
     const baseY = terrainH;
     this.baseY = baseY;
     this.buildGroup=new T3.Group();
+    this.buildGroup.userData.perfGroup='city';
     this.buildGroup.position.set(gx,baseY,gz);
     scene.add(this.buildGroup);
     this.mats=[];
@@ -26,26 +49,31 @@ class City{
     // hitbox for raycast
     this.hit=new T3.Mesh(new T3.CylinderGeometry(0.55*CITY_SCALE,0.55*CITY_SCALE,2.4*CITY_SCALE,10),
       new T3.MeshBasicMaterial({visible:false}));
+    this.hit.userData.perfGroup='city-hit';
     this.hit.position.set(this.gx,this.baseY+0.8*CITY_SCALE,this.gz); this.hit.userData.city=this; scene.add(this.hit);
     // selection ring
     this.ring=new T3.Mesh(new T3.TorusGeometry(0.62*CITY_SCALE,0.06*CITY_SCALE,8,28),
       new T3.MeshBasicMaterial({color:0xffffff}));
+    this.ring.userData.perfGroup='city-ui';
     this.ring.rotation.x=Math.PI/2; this.ring.position.set(this.gx,this.baseY+0.03,this.gz); this.ring.visible=false;
     scene.add(this.ring);
     // кольцо радиуса обстрела (видно при выборе atk-города)
     this.rangeRing=new T3.Mesh(new T3.TorusGeometry(1,0.12,8,64),
       new T3.MeshBasicMaterial({color:0xff7a3a,transparent:true,opacity:0.5}));
+    this.rangeRing.userData.perfGroup='city-ui';
     this.rangeRing.rotation.x=Math.PI/2; this.rangeRing.position.set(this.gx,this.baseY+0.1,this.gz);
     this.rangeRing.visible=false; this._ringR=0; scene.add(this.rangeRing);
     // production ring
     this.pring=new T3.Mesh(new T3.TorusGeometry(0.7*CITY_SCALE,0.05*CITY_SCALE,8,32,0.001),
       new T3.MeshBasicMaterial({color:0xff9a4a}));
+    this.pring.userData.perfGroup='city-ui';
     this.pring.rotation.x=Math.PI/2; this.pring.position.set(this.gx,this.baseY+0.05,this.gz); this.pring.visible=false;
     scene.add(this.pring);
     // battle ring (осада)
     this.siege=null; // {ownerId:{units,atkMult}}
     this.bring=new T3.Mesh(new T3.TorusGeometry(0.55*CITY_SCALE,0.055*CITY_SCALE,8,28),
       new T3.MeshBasicMaterial({color:0xff5030}));
+    this.bring.userData.perfGroup='city-ui';
     this.bring.rotation.x=Math.PI/2; this.bring.position.set(this.gx,this.baseY+0.08,this.gz); this.bring.visible=false;
     scene.add(this.bring);
     this.siegeOrbs={};  // ownerId → {mesh,lab} осаждающие армии (видимы как в бою)
@@ -371,48 +399,32 @@ class City{
   }
   // осаждающие армии видны как сферы у города, дрожат и светятся красным (как полевой бой)
   updateSiegeViz(now){
+    _updateSiegeFX(now);                                                   // пыль/осколки (раз в кадр)
     const orbs=this.siegeOrbs;
+    const bx=this._visualGX==null?this.gx:this._visualGX, bz=this._visualGZ==null?this.gz:this._visualGZ, by=this._visualY==null?this.baseY:this._visualY;
     if(!this.siege){
-      for(const o in orbs){scene.remove(orbs[o].mesh);orbs[o].lab.remove();delete orbs[o];}
-      // снять тряску города
-      this.buildGroup.position.set(this._visualGX==null?this.gx:this._visualGX,this._visualY==null?this.baseY:this._visualY,this._visualGZ==null?this.gz:this._visualGZ);
+      for(const o in orbs){this._killSiegeOrb(orbs[o]);delete orbs[o];}    // старый рой (если остался) — убрать
+      if(this._siegeLab)showLab(this._siegeLab,false);
+      this.buildGroup.position.set(bx,by,bz);                              // снять тряску
       return;
     }
-    // удалить орбы пуллов, что уже не осаждают
-    for(const o in orbs){if(!this.siege[o]){scene.remove(orbs[o].mesh);orbs[o].lab.remove();delete orbs[o];}}
-    let k=0;
-    for(const o of Object.keys(this.siege)){
-      const pool=this.siege[o];
-      let orb=orbs[o];
-      if(!orb){
-        const sz=0.2+Math.min(0.16,pool.units*0.004);
-        const mesh=new T3.Mesh(new T3.SphereGeometry(0.24,12,10),
-          new T3.MeshLambertMaterial({color:OWNER_COL[o],emissive:new T3.Color(0x6b1a12)}));
-        mesh.castShadow=true; scene.add(mesh);
-        const lab=document.createElement('div'); lab.className='lab';
-        document.getElementById('labels').appendChild(lab);
-        orb=orbs[o]={mesh,lab};
-      }
-      // сторона по индексу пулла, чуть за кольцом города
-      const ang=k*2.1+0.6;
-      const ox=this.gx+Math.cos(ang)*0.78, oz=this.gz+Math.sin(ang)*0.78;
-      const j=now/70+ox*3;
-      const s=0.85+Math.min(0.9,pool.units*0.012);
-      orb.mesh.scale.setScalar(s);
-      orb.mesh.position.set(ox+Math.sin(j*1.7)*0.08, this.baseY+0.55+Math.abs(Math.sin(j))*0.1, oz+Math.cos(j*1.3)*0.08);
-      // подсветка-пульс боя
-      orb.mesh.material.emissive.setHex(Math.sin(now/90+k)>0?0x8a1c10:0x3a0c06);
-      const v=new T3.Vector3(orb.mesh.position.x,orb.mesh.position.y+0.4,orb.mesh.position.z).project(camera);
-      if(v.z>1)showLab(orb.lab,false);
-      else{showLab(orb.lab,true);
-        posLab(orb.lab,(v.x*.5+.5)*innerWidth,(-v.y*.5+.5)*innerHeight);
-        setLabText(orb.lab,Math.ceil(pool.units)); setLabColor(orb.lab,'#ff6a4a');}
-      k++;
+    for(const o in orbs){this._killSiegeOrb(orbs[o]);delete orbs[o];}      // рой осаждающих больше НЕ рисуем — бой идёт ВНУТРИ здания
+    // ── как в Mushroom Wars: юниты просто зашли в здание, а из здания летит пыль + осколки и оно трясётся ──
+    const beat=Math.floor(now/150);
+    if(this._sBeat!==beat){ this._sBeat=beat;
+      for(let d=0;d<2;d++){ const a=Math.random()*6.283, r=0.12+Math.random()*0.45;                        // 2 клуба пыли за удар → всегда видно с любого угла
+        _spawnDust(bx+Math.cos(a)*r, by+0.2+Math.random()*0.6, bz+Math.sin(a)*r, 1.2+Math.random()*0.9); }  // пыль летит из здания
+      if((beat&1)===0){ const a2=Math.random()*6.283; _spawnArrow(bx, by+0.5+Math.random()*0.4, bz, bx+Math.cos(a2)*1.45, by+0.03, bz+Math.sin(a2)*1.35); }  // осколок наружу
     }
-    // город трясётся под штурмом
-    const cj=now/60;
-    const bx=this._visualGX==null?this.gx:this._visualGX,bz=this._visualGZ==null?this.gz:this._visualGZ,by=this._visualY==null?this.baseY:this._visualY;
-    this.buildGroup.position.set(bx+Math.sin(cj*1.9)*0.04,by,bz+Math.cos(cj*1.6)*0.04);
+    const sh=0.05;                                                          // здание вздрагивает от боя
+    this.buildGroup.position.set(bx+Math.sin(now/43)*sh, by, bz+Math.cos(now/36)*sh);
+    // ── красная цифра: суммарная осаждающая сила ──
+    let total=0; for(const o in this.siege) total+=this.siege[o].units;
+    if(!this._siegeLab){ this._siegeLab=document.createElement('div'); this._siegeLab.className='lab'; document.getElementById('labels').appendChild(this._siegeLab); }
+    const v=new T3.Vector3(bx,by+0.72,bz).project(camera);
+    if(v.z>1)showLab(this._siegeLab,false);
+    else{ showLab(this._siegeLab,true); posLab(this._siegeLab,(v.x*.5+.5)*innerWidth,(-v.y*.5+.5)*innerHeight); setLabText(this._siegeLab,Math.ceil(total)); setLabColor(this._siegeLab,'#ff6a4a'); }
   }
+  _killSiegeOrb(orb){ if(!orb)return; if(orb.mesh)scene.remove(orb.mesh); orb.lab&&orb.lab.remove(); if(orb.banner)scene.remove(orb.banner); }
 }
 const CITY_NAMES = CITY_LIST.map(c => c[0]);

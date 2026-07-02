@@ -1,0 +1,182 @@
+<svg width="420" height="760" viewBox="0 0 420 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cardBronze" x1="96" y1="80" x2="322" y2="704" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F1DFA4"/>
+      <stop offset="0.22" stop-color="#A68445"/>
+      <stop offset="0.52" stop-color="#D6B96B"/>
+      <stop offset="0.78" stop-color="#816332"/>
+      <stop offset="1" stop-color="#E4C879"/>
+    </linearGradient>
+    <linearGradient id="darkGlass" x1="210" y1="116" x2="210" y2="674" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#192321" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#0B0F0F" stop-opacity="0.5"/>
+    </linearGradient>
+    <filter id="outerShadow" x="40" y="46" width="340" height="686" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="10" flood-color="#020405" flood-opacity="0.62"/>
+    </filter>
+    <filter id="selectedGlow" x="26" y="30" width="368" height="716" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.58 0 0 0 0 0.86 0 0 0 0 0.34 0 0 0 0.68 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Optional selected-state glow, matching the concept's thin green halo. -->
+  <path filter="url(#selectedGlow)" opacity="0.78"
+    d="M210 58
+       L268 94
+       L302 94
+       L323 116
+       L346 116
+       L346 635
+       L323 635
+       L302 657
+       L268 657
+       L210 694
+       L152 657
+       L118 657
+       L97 635
+       L74 635
+       L74 116
+       L97 116
+       L118 94
+       L152 94
+       Z"
+    stroke="#A7D565" stroke-width="8" stroke-linejoin="miter"/>
+
+  <g filter="url(#outerShadow)">
+    <!-- Main card silhouette from the generated concept: tall, straight, stepped shoulders, pointed bottom. -->
+    <path
+      d="M210 58
+         L268 94
+         L302 94
+         L323 116
+         L346 116
+         L346 635
+         L323 635
+         L302 657
+         L268 657
+         L210 694
+         L152 657
+         L118 657
+         L97 635
+         L74 635
+         L74 116
+         L97 116
+         L118 94
+         L152 94
+         Z"
+      fill="url(#darkGlass)"
+      stroke="url(#cardBronze)"
+      stroke-width="12"
+      stroke-linejoin="miter"/>
+
+    <!-- Inner fine-line border. -->
+    <path
+      d="M210 82
+         L260 113
+         L292 113
+         L310 132
+         L326 132
+         L326 617
+         L309 617
+         L291 636
+         L260 636
+         L210 668
+         L160 636
+         L129 636
+         L111 617
+         L94 617
+         L94 132
+         L110 132
+         L128 113
+         L160 113
+         Z"
+      stroke="#2A332F"
+      stroke-width="5"
+      stroke-linejoin="miter"/>
+
+    <path
+      d="M210 90
+         L257 120
+         L288 120
+         L306 139
+         L318 139
+         L318 609
+         L304 609
+         L286 628
+         L257 628
+         L210 658
+         L163 628
+         L134 628
+         L116 609
+         L102 609
+         L102 139
+         L114 139
+         L132 120
+         L163 120
+         Z"
+      stroke="#B79A55"
+      stroke-width="2"
+      stroke-linejoin="miter"
+      opacity="0.82"/>
+
+    <!-- Top flag/emblem socket, as seen on the concept cards. -->
+    <path
+      d="M210 106
+         L262 136
+         L262 196
+         L210 226
+         L158 196
+         L158 136
+         Z"
+      fill="#101615"
+      fill-opacity="0.62"
+      stroke="url(#cardBronze)"
+      stroke-width="6"
+      stroke-linejoin="miter"/>
+    <path
+      d="M210 122
+         L247 144
+         L247 188
+         L210 210
+         L173 188
+         L173 144
+         Z"
+      stroke="#27322D"
+      stroke-width="3"
+      stroke-linejoin="miter"/>
+
+    <!-- Bottom name plaque / stats zone from the concept. -->
+    <path
+      d="M102 538
+         L124 516
+         L296 516
+         L318 538
+         L318 618
+         L304 618
+         L286 637
+         L257 637
+         L210 667
+         L163 637
+         L134 637
+         L116 618
+         L102 618
+         Z"
+      fill="#0A0F0E"
+      fill-opacity="0.78"
+      stroke="url(#cardBronze)"
+      stroke-width="4"
+      stroke-linejoin="miter"/>
+    <path d="M128 572H292" stroke="#B79A55" stroke-width="2" opacity="0.62"/>
+    <path d="M128 618H292" stroke="#B79A55" stroke-width="1.5" opacity="0.42"/>
+
+    <!-- Small bottom ornament. -->
+    <path d="M196 648L210 636L224 648L210 660Z" stroke="#8D723D" stroke-width="2"/>
+    <path d="M174 648L187 637L200 648L187 659Z" stroke="#6D5833" stroke-width="1.6" opacity="0.72"/>
+    <path d="M220 648L233 637L246 648L233 659Z" stroke="#6D5833" stroke-width="1.6" opacity="0.72"/>
+  </g>
+</svg>

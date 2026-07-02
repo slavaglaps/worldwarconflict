@@ -68,6 +68,11 @@ if [[ -f default_island.json ]]; then
   cp default_island.json "$DIST/default_island.json"
 fi
 
+# Current baked hex campaign map used by game-hex.html.
+if [[ -f hex-map.json ]]; then
+  cp hex-map.json "$DIST/hex-map.json"
+fi
+
 # LandscapeEngine mixin modules referenced via engine/landscape/*.js script tags.
 if [[ -d engine ]]; then
   mkdir -p "$DIST/engine"

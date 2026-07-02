@@ -139,19 +139,42 @@ class Sim {
     if (c.owner === s.owner || this.allied(s.owner, c.owner)) c.units = Math.min(c.capacity, c.units + s.fcount);
     else { c.siege = c.siege || {}; const p = c.siege[s.owner] || (c.siege[s.owner] = { units: 0, atkMult: s.atkMult }); p.units += s.fcount; p.atkMult = s.atkMult; }
   }
-  // полевой бой через spatial-grid: O(n) вместо O(n²) (как navalBattles/airBattles)
+  // дорожная дистанция между отрядами: одно ребро → |Δarc| вдоль дороги;
+  // смежные рёбра → сумма расстояний до общего узла (встреча на перекрёстке); иначе null (не на одной дороге)
+  roadDistance(s, o) {
+    const sa = s.path[s.hop], sb = s.path[s.hop + 1];
+    const oa = o.path[o.hop], ob = o.path[o.hop + 1];
+    if (sb === undefined || ob === undefined) return null;         // кто-то уже в узле прибытия
+    const se = this.edgeBetween(sa, sb), oe = this.edgeBetween(oa, ob);
+    if (!se || !oe) return null;
+    if (se === oe) {                                               // одна дорога: позиции вдоль канонического направления ребра
+      const pa = sa === se.a ? s.prog : se.len - s.prog;
+      const pb = oa === se.a ? o.prog : se.len - o.prog;
+      return Math.abs(pa - pb);
+    }
+    let u = null;                                                  // общий узел-перекрёсток смежных рёбер
+    if (sa === oa || sa === ob) u = sa; else if (sb === oa || sb === ob) u = sb;
+    if (u == null) return null;
+    const ds = u === sa ? s.prog : se.len - s.prog;                // дистанция каждого до узла по своей дороге
+    const dO = u === oa ? o.prog : oe.len - o.prog;
+    return ds + dO;
+  }
+  // полевой бой через spatial-grid: O(n) вместо O(n²) (как navalBattles/airBattles).
+  // Сцепка ТОЛЬКО при реальной встрече на дороге: дорожная дистанция ≤ FIELD_CONTACT
+  // (одно ребро впритык или нос-к-носу у перекрёстка). FIELD_RANGE — лишь радиус префильтра grid.
   fieldBattles(dt) {
     this.squadGrid.clear();
     for (const s of this.squads) this.squadGrid.insert(s, s.x, s.z);
-    const R2 = this.K.FIELD_RANGE * this.K.FIELD_RANGE;
+    const CONTACT = this.K.FIELD_CONTACT != null ? this.K.FIELD_CONTACT : 0.6;
     for (const s of this.squads) {
       if (s.foe && s.foe.fcount < this.K.UNIT_MIN) s.foe = null;
       if (s.foe) continue;
-      let best = null, bd = R2;                                   // ближайший враг в радиусе (раньше — первый в массиве)
+      let best = null, bd = Infinity;                              // ближайший враг по ДОРОЖНОЙ метрике
       this.squadGrid.queryWithin(s.x, s.z, this.K.FIELD_RANGE, (o) => {
         if (o === s || o.owner === s.owner || this.allied(s.owner, o.owner) || !this.atWar(s.owner, o.owner)) return;
-        const dx = s.x - o.x, dz = s.z - o.z, dd = dx * dx + dz * dz;
-        if (dd < bd) { bd = dd; best = o; }
+        const rd = this.roadDistance(s, o);
+        if (rd == null || rd > CONTACT) return;                    // не впритык на одной дороге — не сцепляемся
+        if (rd < bd) { bd = rd; best = o; }
       });
       if (best) { s.foe = best; if (!best.foe) best.foe = s; }
     }

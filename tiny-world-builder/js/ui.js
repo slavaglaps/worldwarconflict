@@ -20,7 +20,7 @@ function buildPolRow(fid){
   const barCol=rel==='war'?'#e0533f':rel==='ally'?'#4fc77a':'#3aa6ff';
   const row=document.createElement('div'); row.className='pRow'; row.dataset.rel=rel;
   row.innerHTML=
-    `<div class="fcell"><div class="hflag">${flagHexSVG(f.country,42)}</div>`+
+    `<div class="fcell"><div class="hflag">${flagHexSVG(f.country,46)}</div>`+
       `<div><div class="nm">${f.country}</div><div class="rstat" style="color:${rs[1]}">${rs[0]}</div></div></div>`+
     `<div class="ctr pwr"><div class="pnum">${pow}</div><div class="pbar"><i class="pbari" style="width:${_powBar(fid)}%;background:${barCol}"></i></div></div>`+
     `<div class="ctr big cCity">${_polNC(fid)}</div>`+
@@ -75,28 +75,6 @@ function refreshPol(){
 function openPol(){polWinOpen=true;buildPolWindow();document.getElementById('polWin').style.display='flex';}
 function closePol(){polWinOpen=false;document.getElementById('polWin').style.display='none';}
 document.getElementById('sbPol').onclick=()=>{polWinOpen?closePol():openPol();};
-
-/* ── боковое меню: остальные кнопки ── */
-let _cityFocus=-1;
-function _flyTo(x,z,r){ target.set(x,2,z); orbit.r=Math.min(orbit.r,r); applyCam(); }
-document.getElementById('sbMap').onclick=()=>{ target.set(GRID/2,2,GRID/2); orbit.r=240; applyCam(); };
-document.getElementById('sbCities').onclick=()=>{
-  const ls=cities.filter(c=>c.owner===PLAYER);
-  if(!ls.length){toast('Нет городов');return;}
-  _cityFocus=(_cityFocus+1)%ls.length; const c=ls[_cityFocus];
-  _flyTo(c.gx,c.gz,70); toast(`🏰 ${CITY_NAMES[c.idx]||'Город'} (${_cityFocus+1}/${ls.length})`);
-};
-document.getElementById('sbArmy').onclick=()=>{
-  const ls=cities.filter(c=>c.owner===PLAYER);
-  if(!ls.length){toast('Нет армий');return;}
-  const c=ls.reduce((a,b)=>b.units>a.units?b:a);
-  _flyTo(c.gx,c.gz,70); toast(`⚔ Крупнейший гарнизон: ${CITY_NAMES[c.idx]||'Город'} (${Math.round(c.units)})`);
-};
-document.getElementById('sbIntel').onclick=()=>{
-  const counts=FACTIONS.map(()=>0); for(const c of cities)counts[c.owner]++;
-  const top=FACTIONS.map((f,i)=>({i,n:counts[i]})).filter(o=>o.n>0).sort((a,b)=>b.n-a.n).slice(0,3);
-  toast('🔍 Лидеры: '+top.map((o,k)=>`${k+1}. ${FACTIONS[o.i].country} (${o.n})`).join('  ·  '));
-};
 document.getElementById('polClose').onclick=closePol;
 document.getElementById('polWin').addEventListener('click',e=>{if(e.target.id==='polWin')closePol();});
 
@@ -106,8 +84,30 @@ function showHeroTip(ev,ab){ const t=document.getElementById('techTip'); if(!t)r
   t.innerHTML=`<b>${ab.icon} ${ab.name}</b><div class="te">${ab.desc}</div><div class="ts2">${ab.kind==='active'?`Активная · КД ${ab.cd}с`:'Пассивная — всегда активна'}</div>`;
   t.style.display='block'; moveHeroTip(ev); }
 function moveHeroTip(ev){ const t=document.getElementById('techTip'); if(!t||t.style.display==='none')return;
-  t.style.left=Math.min(innerWidth-244,ev.clientX+14)+'px'; t.style.top=Math.max(8,ev.clientY-78)+'px'; }
+  const r=ev?.currentTarget?.getBoundingClientRect?.();
+  const cx=Number.isFinite(ev?.clientX)?ev.clientX:(r?r.left+r.width/2:innerWidth/2);
+  const cy=Number.isFinite(ev?.clientY)?ev.clientY:(r?r.top+r.height/2:innerHeight/2);
+  const w=t.offsetWidth||286, h=t.offsetHeight||90;
+  let x=cx+16, y=cy-h-14;
+  if(x+w>innerWidth-8)x=cx-w-16;
+  if(y<8)y=cy+16;
+  t.style.left=Math.max(8,x)+'px'; t.style.top=Math.max(8,Math.min(innerHeight-h-8,y))+'px'; }
 function hideHeroTip(){ const t=document.getElementById('techTip'); if(t)t.style.display='none'; }
+const HERO_RARITY={
+  sterling:{label:'Легендарный',marks:'◆◆◆',col:'#d4a64d'},
+  hans:{label:'Редкий',marks:'◆◆',col:'#5d9cc7'},
+  vance:{label:'Эпический',marks:'◆◆◆',col:'#8a62c9'},
+  gold:{label:'Обычный',marks:'◆',col:'#9aa1a8'},
+  volk:{label:'Эпический',marks:'◆◆◆',col:'#8a62c9'},
+  storm:{label:'Мифический',marks:'◆◆◆',col:'#d56e42'},
+};
+function bindHeroAbilityTip(el,ab){
+  el.title=`${ab.name} — ${ab.desc}`;
+  el.tabIndex=0;
+  for(const e of ['mouseenter','pointerenter','focus'])el.addEventListener(e,ev=>showHeroTip(ev,ab));
+  for(const e of ['mousemove','pointermove'])el.addEventListener(e,moveHeroTip);
+  for(const e of ['mouseleave','pointerleave','blur'])el.addEventListener(e,hideHeroTip);
+}
 // полная пересборка панели (только при смене состава героев / рестарте — не в тике!)
 function buildHeroBar(){
   const bar=document.getElementById('heroBar'); if(!bar)return; bar.innerHTML='';
@@ -120,9 +120,7 @@ function buildHeroBar(){
     h._abEls={};
     for(const ab of d.abilities){
       const el=document.createElement('div'); el.className='ab'+(ab.kind==='passive'?' passive':''); el.textContent=ab.icon;
-      el.addEventListener('mouseenter',ev=>showHeroTip(ev,ab));
-      el.addEventListener('mousemove',moveHeroTip);
-      el.addEventListener('mouseleave',hideHeroTip);
+      bindHeroAbilityTip(el,ab);
       if(ab.kind==='active'){
         const ai=actives.indexOf(ab);
         const cdov=document.createElement('div'); cdov.className='cd'; cdov.style.display='none'; el.appendChild(cdov);
@@ -155,18 +153,35 @@ function refreshHeroBar(){
 function buildHeroPick(){
   const list=document.getElementById('heroList'); if(!list)return; list.innerHTML='';
   const hs=heroSlots[PLAYER]||[]; const owned=new Set(hs.map(h=>h.id)); const free=hs.length<HERO_SLOTS_MAX;
+  const mp=document.getElementById('heroMp'); if(mp)mp.textContent=Math.floor(manpower[PLAYER]||0);
+  const fs=document.getElementById('heroFreeSlots'); if(fs)fs.textContent=Math.max(0,HERO_SLOTS_MAX-hs.length);
+  const ms=document.getElementById('heroMaxSlots'); if(ms)ms.textContent=HERO_SLOTS_MAX;
   for(const d of HEROES){
-    const row=document.createElement('div'); row.className='hpick';
-    const av=document.createElement('div'); av.className='av'; av.style.background=d.col; av.textContent=d.face;
+    const rarity=HERO_RARITY[d.id]||{label:'Герой',marks:'◆',col:d.col};
+    const row=document.createElement('div'); row.className='hpick heroCardPick'; row.style.setProperty('--hero-col',d.col);
+    row.style.setProperty('--rarity-col',rarity.col);
+    if(d.portrait){ row.classList.add('hasPortrait'); row.style.setProperty('--hero-img',`url("${d.portrait}")`); }
+    if(owned.has(d.id))row.classList.add('owned');
+    if(!free&&!owned.has(d.id))row.classList.add('locked');
+    const portrait=document.createElement('div'); portrait.className='heroPortrait';
+    portrait.innerHTML=`<div class="heroRarity">${rarity.label}</div><div class="heroMarks">${rarity.marks}</div><div class="heroFace">${d.face}</div><div class="heroGlow"></div>`;
     const body=document.createElement('div'); body.className='body';
-    let abh='';
-    for(const ab of d.abilities) abh+=`<div class="abline ${ab.kind==='passive'?'pas':''}">${ab.icon} <span class="t">${ab.name}</span> — ${ab.desc} <small style="opacity:.7">${ab.kind==='active'?`(КД ${ab.cd}с)`:'(пассив)'}</small></div>`;
-    body.innerHTML=`<div class="nm">${d.name}</div><div class="abs">${abh}</div>`;
+    const passive=d.abilities.find(a=>a.kind==='passive')||d.abilities[0];
+    body.innerHTML=`<div class="nm">${d.name}</div><div class="heroRole"><span>${passive.icon}</span>${passive.name}</div>`;
+    const abs=document.createElement('div'); abs.className='abs';
+    for(const ab of d.abilities){
+      const el=document.createElement('div'); el.className='heroPickAb '+(ab.kind==='passive'?'passive':'active');
+      el.innerHTML=`<span>${ab.icon}</span>`;
+      bindHeroAbilityTip(el,ab);
+      el.addEventListener('click',ev=>{ ev.stopPropagation(); showHeroTip(ev,ab); });
+      abs.appendChild(el);
+    }
+    body.appendChild(abs);
     const btn=document.createElement('button'); btn.className='summon';
     if(owned.has(d.id)){ btn.textContent='✓ Призван'; btn.classList.add('dis'); }
-    else { btn.innerHTML=`Призвать · 👥${HERO_SUMMON_MP}`; if(!free||(manpower[PLAYER]||0)<HERO_SUMMON_MP)btn.classList.add('dis');
+    else { btn.innerHTML=`Призвать · 👥 ${HERO_SUMMON_MP}`; if(!free||(manpower[PLAYER]||0)<HERO_SUMMON_MP)btn.classList.add('dis');
       btn.addEventListener('click',()=>summonHero(d.id)); }
-    row.appendChild(av); row.appendChild(body); row.appendChild(btn); list.appendChild(row);
+    row.appendChild(portrait); row.appendChild(body); row.appendChild(btn); list.appendChild(row);
   }
 }
 function summonHero(id){
@@ -206,4 +221,3 @@ document.getElementById('peaceOfferNo').onclick=declinePlayerPeace;
 
 /* ── ИИ и конец игры — в серверном Sim (бывшие aiUpdate/aiActFaction/checkEnd удалены) ── */
 let factionTimer=[];
-

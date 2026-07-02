@@ -3,32 +3,32 @@ let HERO_SLOTS_MAX=3;   // потолок слотов (клиентский, с
 let heroSlots=[];   // [fid] -> [{id, cd:[активка1,активка2]}] (макс 3); пока использует игрок
 let heroBuffs=[];   // {fid,key,add,until} — временные баффы от активок (истекают по gameTime)
 const HEROES=[
-  {id:'sterling', name:'Маршал Стерлинг', face:'🪖', col:'#3c6e3c', cost:35, abilities:[
+  {id:'sterling', name:'Маршал Стерлинг', face:'🪖', portrait:'assets/heroes/hero-sterling.jpg', col:'#3c6e3c', cost:35, abilities:[
     {kind:'passive', icon:'🛡', name:'Несокрушимость', desc:'+20% обороне всех городов', pass:[{key:'def',add:0.20}]},
     {kind:'active', icon:'🧱', name:'Стальная стена', desc:'+120% обороне городов на 18с', cd:50, fx:{type:'buff',key:'def',add:1.2,dur:18}},
     {kind:'active', icon:'🎖', name:'Окопаться', desc:'+18 гарнизона всем твоим городам', cd:40, fx:{type:'garrison',amount:18}},
   ]},
-  {id:'hans', name:'Генерал Ханс', face:'🎗', col:'#5a6b7a', cost:40, abilities:[
+  {id:'hans', name:'Генерал Ханс', face:'🎗', portrait:'assets/heroes/hero-hans.jpg', col:'#5a6b7a', cost:40, abilities:[
     {kind:'passive', icon:'⚔', name:'Бронекулак', desc:'+20% атаке армии', pass:[{key:'atk',add:0.20}]},
     {kind:'active', icon:'⚡', name:'Блицкриг', desc:'+70% атаке армии на 16с', cd:55, fx:{type:'buff',key:'atk',add:0.7,dur:16}},
     {kind:'active', icon:'🛞', name:'Танковый клин', desc:'+70% скорости армии на 14с', cd:45, fx:{type:'buff',key:'speed',add:0.7,dur:14}},
   ]},
-  {id:'vance', name:'Генерал Вэнс', face:'🪖', col:'#9a8a4a', cost:35, abilities:[
+  {id:'vance', name:'Генерал Вэнс', face:'🪖', portrait:'assets/heroes/hero-vance.jpg', col:'#9a8a4a', cost:35, abilities:[
     {kind:'passive', icon:'🏃', name:'Молниеносность', desc:'+25% скорости армии', pass:[{key:'speed',add:0.25}]},
     {kind:'active', icon:'👟', name:'Форсированный марш', desc:'+90% скорости армии на 16с', cd:45, fx:{type:'buff',key:'speed',add:0.9,dur:16}},
     {kind:'active', icon:'📣', name:'Боевой клич', desc:'+50% атаке армии на 18с', cd:50, fx:{type:'buff',key:'atk',add:0.5,dur:18}},
   ]},
-  {id:'gold', name:'Канцлер Гольд', face:'💼', col:'#caa24a', cost:45, abilities:[
+  {id:'gold', name:'Канцлер Гольд', face:'💼', portrait:'assets/heroes/hero-gold.jpg', col:'#caa24a', cost:45, abilities:[
     {kind:'passive', icon:'💰', name:'Золотой век', desc:'+25% дохода голды', pass:[{key:'eco',add:0.25}]},
     {kind:'active', icon:'🪙', name:'Золотой дождь', desc:'+400 голды мгновенно', cd:40, fx:{type:'gold',amount:400}},
     {kind:'active', icon:'📈', name:'Военные облигации', desc:'+120% дохода голды на 25с', cd:60, fx:{type:'buff',key:'eco',add:1.2,dur:25}},
   ]},
-  {id:'volk', name:'Комиссар Вольк', face:'🎖', col:'#8a3f3f', cost:40, abilities:[
+  {id:'volk', name:'Комиссар Вольк', face:'🎖', portrait:'assets/heroes/hero-volk.jpg', col:'#8a3f3f', cost:40, abilities:[
     {kind:'passive', icon:'👥', name:'Народная армия', desc:'+25% манпауэра', pass:[{key:'prod',add:0.25}]},
     {kind:'active', icon:'📢', name:'Тотальная мобилизация', desc:'манпауэр до максимума', cd:50, fx:{type:'manpower'}},
     {kind:'active', icon:'🎖', name:'Призыв резерва', desc:'+12 гарнизона всем городам', cd:45, fx:{type:'garrison',amount:12}},
   ]},
-  {id:'storm', name:'Маршал Шторм', face:'✈', col:'#3a6fa0', cost:50, abilities:[
+  {id:'storm', name:'Маршал Шторм', face:'✈', portrait:'assets/heroes/hero-storm.jpg', col:'#3a6fa0', cost:50, abilities:[
     {kind:'passive', icon:'✈', name:'Господство в воздухе', desc:'+25% урона бомб, +20% прочности самолётов', pass:[{key:'bd',add:0.25},{key:'ph',add:0.20}]},
     {kind:'active', icon:'💥', name:'Ковровая бомбардировка', desc:'−40 гарнизона вражескому городу (цель авиации/ближайший)', cd:80, fx:{type:'airstrike',amount:40}},
     {kind:'active', icon:'🛡', name:'Воздушный щит', desc:'+50% прочности самолётов на 20с', cd:60, fx:{type:'buff',key:'ph',add:0.5,dur:20}},
@@ -152,7 +152,7 @@ const COUNTRIES=[
 // политические цвета: нейтральные страны — свой цвет, игрок/враг — цвет владельца
 const COUNTRY_COLOR={
   'Иберия':0xe0b23a, 'Италия':0x55b84a, 'Германия':0x8a93a0, 'Бельгия':0xe07b2e,
-  'Австро-Венгерская империя':0xb86fb0, 'Польша':0x7a5bc4, 'Скандинавия':0x3fb0c0,
+  'Австро-Венгерская империя':0xb86fb0, 'Польша':0x7a5bc4, 'Скандинавия':0x3fb0c0, 'Северная империя':0x3fb0c0,
   'Украина':0x9ab84a, 'Британия':0x2f7fd0, 'Франция':0x2f7fd0, 'Россия':0xd0463a, 'Турция':0xd0463a,
 };
 const TERR_PLAYER=new T3.Color(0x2f7fd0), TERR_ENEMY=new T3.Color(0xd0463a), TERR_NEUTRAL=new T3.Color(0x9aa6b2);

@@ -1,7 +1,79 @@
-/* ── squads: рой мини-юнитов, число кружочков ∝ размеру армии ── */
-const UNIT_GEO=new T3.SphereGeometry(0.12,8,7);
-// сколько видимых юнитов на армию данного размера
-function unitsForCount(n){ return Math.max(1,Math.min(18,Math.round(n/6)+1)); }
+/* ── squads: рой мини-юнитов, число фигурок ∝ размеру армии ── */
+const UNIT_FALLBACK_GEO=new T3.SphereGeometry(0.12,8,7);
+const UNIT_GEO=UNIT_FALLBACK_GEO; // fallback, пока KayKit-модели не загрузились
+const UNIT_ASSET={
+  blue:'assets/hex-kit/units/blue/unit_blue_accent.gltf',
+  red:'assets/hex-kit/units/red/unit_red_accent.gltf',
+  green:'assets/hex-kit/units/green/unit_green_accent.gltf',
+  yellow:'assets/hex-kit/units/yellow/unit_yellow_accent.gltf',
+  neutral:'assets/hex-kit/units/neutral/unit.gltf',
+};
+const UNIT_PALETTE=[
+  {key:'blue',color:new T3.Color(0x3f6fc8)},
+  {key:'red',color:new T3.Color(0xc14a3a)},
+  {key:'green',color:new T3.Color(0x3f9e7e)},
+  {key:'yellow',color:new T3.Color(0xcaa233)},
+];
+const UNIT_MODEL_SCALE=0.581;   // 0.3875 ×1.5 — модельки крупнее на 50%
+const unitModelCache={};
+let unitModelPromise=null;
+function unitKeyForOwner(owner){
+  const hex=OWNER_COL&&OWNER_COL[owner]!=null?OWNER_COL[owner]:null;
+  if(hex==null)return 'neutral';
+  const c=new T3.Color(hex);
+  const spread=Math.max(c.r,c.g,c.b)-Math.min(c.r,c.g,c.b);
+  if(spread<0.12)return 'neutral';
+  let best=UNIT_PALETTE[0].key, bd=Infinity;
+  for(const p of UNIT_PALETTE){
+    const dr=c.r-p.color.r, dg=c.g-p.color.g, db=c.b-p.color.b;
+    const d=dr*dr+dg*dg+db*db;
+    if(d<bd){bd=d;best=p.key;}
+  }
+  return best;
+}
+function prepareUnitModel(root){
+  root.traverse(o=>{
+    if(!o.isMesh)return;
+    o.castShadow=false; o.receiveShadow=true; o.userData.perfGroup='units';
+    if(o.material){
+      o.material=o.material.clone();
+      o.material.metalness=0;
+      o.material.roughness=0.82;
+    }
+  });
+  return root;
+}
+function ensureUnitModels(){
+  if(unitModelPromise)return unitModelPromise;
+  if(!T3.GLTFLoader)return Promise.resolve(unitModelCache);
+  const loader=new T3.GLTFLoader();
+  const jobs=Object.entries(UNIT_ASSET).map(([key,path])=>new Promise(res=>{
+    loader.load(path,gltf=>{unitModelCache[key]=prepareUnitModel(gltf.scene);res();},
+      undefined,err=>{console.warn('[unit] model skipped:',key,err);res();});
+  }));
+  unitModelPromise=Promise.all(jobs).then(()=>unitModelCache);
+  return unitModelPromise;
+}
+function unitBatchSource(owner){
+  const key=unitKeyForOwner(owner);
+  const root=unitModelCache[key]||unitModelCache.neutral;
+  if(!root)return null;
+  root.updateWorldMatrix&&root.updateWorldMatrix(true,true);
+  let mesh=null;
+  root.traverse(o=>{if(!mesh&&o.isMesh)mesh=o;});
+  if(!mesh)return null;
+  return {
+    key,
+    geo:mesh.geometry,
+    mat:mesh.material,
+    local:mesh.matrixWorld?mesh.matrixWorld.clone():new T3.Matrix4(),
+    scale:UNIT_MODEL_SCALE,
+  };
+}
+ensureUnitModels();
+// 1 боец армии = 1 фигурка (как в Mushroom Wars). SWARM_MAX — perf-бэкстоп на гигантские армии.
+const SWARM_MAX=90;
+function unitsForCount(n){ return Math.max(1,Math.min(SWARM_MAX,Math.round(n))); }
 /* Squad — в серверном Sim (отряды рендерятся призраками-роями, см. ghostSwarm в loop.js) */
 
 /* ── корабли: свободное движение по воде + морской бой ──────── */
@@ -154,6 +226,18 @@ function spawnMuzzle(ship){
   const m=new T3.Mesh(new T3.SphereGeometry(0.25,8,6),new T3.MeshBasicMaterial({color:0xfff0c0,transparent:true,opacity:.9}));
   m.position.set(ship.pos.x,WATER_Y_SHIP+0.6,ship.pos.z); scene.add(m); fx.push({mesh:m,life:0.18,max:0.18,grow:3});
 }
+// 🚶 пыль марша: тусклый пуф под бегущей колонной (реюз fx-пула updateMissiles)
+function spawnMarchDust(x,y,z){
+  const d=new T3.Mesh(new T3.SphereGeometry(0.11,6,5),new T3.MeshBasicMaterial({color:0xa6977c,transparent:true,opacity:.38}));
+  d.position.set(x,y+0.06,z); scene.add(d); fx.push({mesh:d,life:0.45,max:0.45,grow:1.8});
+}
+// ⚔ искра сшибки в полевом бою: маленькая жёлтая вспышка + редкая пыль (дешёвая, реюз fx-пула updateMissiles)
+function spawnClashFX(x,y,z){
+  const m=new T3.Mesh(new T3.SphereGeometry(0.09,6,5),new T3.MeshBasicMaterial({color:Math.random()<0.5?0xfff3c0:0xffd870,transparent:true,opacity:.95}));
+  m.position.set(x,y+0.32+Math.random()*0.25,z); scene.add(m); fx.push({mesh:m,life:0.22,max:0.22,grow:2.2});
+  if(Math.random()<0.45){ const d=new T3.Mesh(new T3.SphereGeometry(0.14,6,5),new T3.MeshBasicMaterial({color:0x9a8a70,transparent:true,opacity:.5}));
+    d.position.set(x+(Math.random()-0.5)*0.3,y+0.12,z+(Math.random()-0.5)*0.3); scene.add(d); fx.push({mesh:d,life:0.5,max:0.5,grow:1.6}); }
+}
 function updateMissiles(dt){
   for(let i=missiles.length-1;i>=0;i--)if(missiles[i].update(dt))missiles.splice(i,1);
   for(let i=fx.length-1;i>=0;i--){const e=fx[i];e.life-=dt;
@@ -285,4 +369,3 @@ function airOrderLabel(){
 }
 /* Plane + spawnPlane — в серверном Sim (юниты рендерятся призраками) */
 /* airBattles — в серверном Sim (воздушный бой считает серверный сим) */
-

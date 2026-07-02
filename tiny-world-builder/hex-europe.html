@@ -74,11 +74,34 @@
   #cityEditor .row2 { display: grid; grid-template-columns: 1fr 92px; gap: 6px; }
   #cityEditor .danger { color: #ffd1ca; border-color: rgba(231,76,60,.38); }
   #cityEditor .good { color: #d8ffe7; border-color: rgba(76,201,120,.38); }
-  #cityLabels {
+  #lightEditor {
+    position: fixed; top: 12px; right: 12px; z-index: 60; width: 340px; max-height: calc(100vh - 24px);
+    color: #e8edf2; background: rgba(16,20,27,.86); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 10px; padding: 10px; display: none; gap: 9px; flex-direction: column;
+    backdrop-filter: blur(6px); box-shadow: 0 12px 32px rgba(0,0,0,.28); user-select: none; overflow: auto;
+  }
+  #lightEditor.on { display: flex; }
+  #lightEditor .title { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700; }
+  #lightEditor fieldset { border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 8px; display: grid; gap: 7px; }
+  #lightEditor legend { padding: 0 5px; color: #b9c6d4; font-size: 11px; font-weight: 700; }
+  #lightEditor label { display: grid; grid-template-columns: 112px 1fr 48px; gap: 7px; align-items: center; font-size: 11px; color: #b9c6d4; }
+  #lightEditor input, #lightEditor select, #lightEditor button {
+    width: 100%; background: rgba(28,36,47,.92); color: #e8edf2; border: 1px solid rgba(255,255,255,.14);
+    border-radius: 7px; padding: 6px 8px; font-size: 11px;
+  }
+  #lightEditor input[type="color"] { height: 30px; padding: 2px; }
+  #lightEditor input[type="checkbox"] { width: auto; justify-self: start; }
+  #lightEditor button { cursor: pointer; }
+  #lightEditor button:hover { background: rgba(46,59,76,.96); }
+  #lightEditor .title button { width: auto; min-width: 76px; }
+  #lightEditor .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  #lightEditor .meta { color: #93a1b0; font-size: 11px; line-height: 1.35; }
+  #cityLabels, #heightLabels {
     position: fixed; inset: 0; z-index: 9; pointer-events: none; display: none;
     overflow: hidden;
   }
   #cityLabels.on { display: block; }
+  #heightLabels.on { display: block; }
   .city-label {
     position: absolute; transform: translate(-50%, -100%); white-space: nowrap;
     padding: 2px 5px; border-radius: 5px; background: rgba(12,16,22,.58);
@@ -86,6 +109,15 @@
     text-shadow: 0 1px 2px #000, 0 0 5px rgba(0,0,0,.72);
     border: 1px solid rgba(255,255,255,.18);
   }
+  .height-label {
+    position: absolute; transform: translate(-50%, -50%); min-width: 28px; text-align: center;
+    padding: 2px 5px; border-radius: 5px; background: rgba(8,12,17,.64);
+    color: #f8fbff; font-size: 10px; font-weight: 800; line-height: 1.1;
+    font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000;
+    border: 1px solid rgba(255,255,255,.2);
+  }
+  .height-label.road { background: rgba(255,198,73,.74); color: #21170a; text-shadow: 0 1px 1px rgba(255,255,255,.35); }
+  .height-label.water { background: rgba(57,158,218,.68); }
   .city-label.selected {
     background: rgba(255,159,67,.82); color: #1a1110; text-shadow: 0 1px 1px rgba(255,255,255,.5);
     border-color: rgba(255,255,255,.45);
@@ -102,6 +134,8 @@
   #editor .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   #editor .height-row { display: grid; grid-template-columns: 1fr 78px 1fr 1fr; gap: 6px; align-items: center; }
   #editor .height-row input { text-align: center; font-variant-numeric: tabular-nums; }
+  #editor .height-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  #editor .height-presets button { font-variant-numeric: tabular-nums; }
   #edPalette {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-height: 270px; overflow: auto;
     padding-right: 2px;
@@ -127,7 +161,9 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="vignette" style="position:fixed;inset:0;z-index:8;pointer-events:none;background:radial-gradient(ellipse 80% 80% at 50% 48%, transparent 45%, rgba(5,8,12,0.4) 100%)"></div>
 <div id="cityLabels"></div>
+<div id="heightLabels"></div>
 <div id="hud">
   <div style="font-weight:600;color:#fff;margin-bottom:5px">Hex Europe · KayKit-декор</div>
   <div class="row"><span class="k">FPS</span><span class="v" id="fps">—</span></div>
@@ -142,15 +178,67 @@
 <div id="ctrl">
   <button id="bRot" class="on">авто-вращение</button>
   <button id="bDecor" class="on">декор</button>
-  <button id="bTint" class="on">окраска</button>
   <button id="bWater">вода</button>
   <button id="bGraph">граф</button>
+  <button id="bHeight">высоты</button>
   <button id="bEdit">редактор</button>
   <button id="bDecorEdit">декор-редактор</button>
   <button id="bCityEdit">города</button>
+  <button id="bLightEdit">свет</button>
   <button id="bSaveMap">сохранить карту</button>
   <button id="bTop">вид сверху</button>
   <span id="mapSaveStatus"></span>
+</div>
+<div id="lightEditor">
+  <div class="title"><span>Редактор света</span><button id="lightReset" type="button">сброс</button></div>
+  <fieldset>
+    <legend>Рендер</legend>
+    <label><span>экспозиция</span><input id="lightExposure" type="range" min="0.1" max="2.5" step="0.01"><b id="lightExposureV"></b></label>
+    <label><span>tone mapping</span><select id="lightTone"><option value="ACESFilmic">ACES</option><option value="Linear">Linear</option><option value="Reinhard">Reinhard</option><option value="Cineon">Cineon</option><option value="None">None</option></select><b></b></label>
+    <label><span>фон</span><input id="lightBg" type="color"><b></b></label>
+    <label><span>туман</span><input id="lightFog" type="checkbox"><b></b></label>
+    <label><span>тип тумана</span><select id="lightFogType"><option value="linear">Linear</option><option value="exp2">Exp2</option></select><b></b></label>
+    <label><span>цвет тумана</span><input id="lightFogColor" type="color"><b></b></label>
+    <label><span>плотность</span><input id="lightFogDensity" type="range" min="0" max="0.02" step="0.0001"><b id="lightFogDensityV"></b></label>
+    <label><span>near</span><input id="lightFogNear" type="range" min="0" max="3000" step="10"><b id="lightFogNearV"></b></label>
+    <label><span>far</span><input id="lightFogFar" type="range" min="0" max="5000" step="10"><b id="lightFogFarV"></b></label>
+  </fieldset>
+  <fieldset>
+    <legend>Небо</legend>
+    <label><span>верх</span><input id="lightHemiSky" type="color"><b></b></label>
+    <label><span>низ</span><input id="lightHemiGround" type="color"><b></b></label>
+    <label><span>сила</span><input id="lightHemiIntensity" type="range" min="0" max="3" step="0.01"><b id="lightHemiIntensityV"></b></label>
+  </fieldset>
+  <fieldset>
+    <legend>Солнце</legend>
+    <label><span>цвет</span><input id="lightSunColor" type="color"><b></b></label>
+    <label><span>сила</span><input id="lightSunIntensity" type="range" min="0" max="5" step="0.01"><b id="lightSunIntensityV"></b></label>
+    <label><span>X</span><input id="lightSunX" type="range" min="-1.5" max="1.5" step="0.01"><b id="lightSunXV"></b></label>
+    <label><span>Y</span><input id="lightSunY" type="range" min="0" max="2" step="0.01"><b id="lightSunYV"></b></label>
+    <label><span>Z</span><input id="lightSunZ" type="range" min="-1.5" max="1.5" step="0.01"><b id="lightSunZV"></b></label>
+    <label><span>цель X</span><input id="lightSunTargetX" type="range" min="-0.8" max="0.8" step="0.01"><b id="lightSunTargetXV"></b></label>
+    <label><span>цель Y</span><input id="lightSunTargetY" type="range" min="-0.2" max="0.8" step="0.01"><b id="lightSunTargetYV"></b></label>
+    <label><span>цель Z</span><input id="lightSunTargetZ" type="range" min="-0.8" max="0.8" step="0.01"><b id="lightSunTargetZV"></b></label>
+  </fieldset>
+  <fieldset>
+    <legend>Тени</legend>
+    <label><span>включены</span><input id="lightShadow" type="checkbox"><b></b></label>
+    <label><span>тип</span><select id="lightShadowType"><option value="PCFSoft">PCF Soft</option><option value="PCF">PCF</option><option value="Basic">Basic</option></select><b></b></label>
+    <label><span>map size</span><select id="lightShadowMap"><option>512</option><option>1024</option><option>2048</option><option>4096</option></select><b></b></label>
+    <label><span>радиус</span><input id="lightShadowRadius" type="range" min="0" max="8" step="0.1"><b id="lightShadowRadiusV"></b></label>
+    <label><span>bias</span><input id="lightShadowBias" type="range" min="-0.01" max="0.01" step="0.0001"><b id="lightShadowBiasV"></b></label>
+    <label><span>normal bias</span><input id="lightShadowNormalBias" type="range" min="0" max="0.2" step="0.001"><b id="lightShadowNormalBiasV"></b></label>
+    <label><span>камера</span><input id="lightShadowSize" type="range" min="0.1" max="1.5" step="0.01"><b id="lightShadowSizeV"></b></label>
+    <div class="row2">
+      <label><span>near</span><input id="lightShadowNear" type="range" min="0.1" max="50" step="0.1"><b id="lightShadowNearV"></b></label>
+      <label><span>far</span><input id="lightShadowFar" type="range" min="0.5" max="6" step="0.01"><b id="lightShadowFarV"></b></label>
+    </div>
+  </fieldset>
+  <div class="row2">
+    <button id="lightCopy" type="button">копировать JSON</button>
+    <button id="lightApplyDefault" type="button">сохранить</button>
+  </div>
+  <div class="meta" id="lightMeta">настройки применяются сразу</div>
 </div>
   <div id="decorEditor">
   <div class="title"><span>Редактор декора</span><span id="decorEdCount">0</span></div>
@@ -220,9 +308,14 @@
   </div>
   <div class="height-row">
     <button id="edHeightDown" title="Опустить hex">- высота</button>
-    <input id="edHeight" type="number" min="-3" max="6" step="0.25" value="0" aria-label="Смещение высоты hex" />
+    <input id="edHeight" type="number" min="-3" max="8" step="0.25" value="0" aria-label="Итоговая высота hex" />
     <button id="edHeightUp" title="Поднять hex">+ высота</button>
     <button id="edHeight0" title="Сбросить высоту">сброс</button>
+  </div>
+  <div class="height-presets" aria-label="Пресеты итоговой высоты hex">
+    <button type="button" data-height-preset="0.5" title="Поставить итоговую высоту hex 0.5">h 0.5</button>
+    <button type="button" data-height-preset="1.25" title="Поставить итоговую высоту hex 1.25">h 1.25</button>
+    <button type="button" data-height-preset="2" title="Поставить итоговую высоту hex 2">h 2</button>
   </div>
   <select id="edTileCountry" aria-label="Страна тайла"></select>
   <div class="grid">
@@ -455,6 +548,7 @@
   const COUNTRY_BIOME = {
     'Испания': 'desert',
     'Португалия': 'desert',
+    'Иберия': 'desert',
     'Франция': 'summer',
     'Британия': 'darkForest',
     'Германия': 'basalt',
@@ -487,6 +581,7 @@
     'Финляндия': 'winter',
     'Дания': 'winter',
     'Норвегия': 'winter',
+    'Северная империя': 'winter',
   };
   const BIOME_TINT = {
     default: new THREE.Color(0xffffff),
@@ -558,6 +653,10 @@
     winter: new THREE.Color(0xf4fbff),
   };
   const biomeForCountry = (country) => COUNTRY_BIOME[country] || 'default';
+  const TEXTURE_BIOMES = new Set(['desert', 'summer', 'winter']);
+  const biomeTextureKey = (biome) => TEXTURE_BIOMES.has(biome) ? biome : 'default';
+  const hasPackBiomeTexture = (biome) => TEXTURE_BIOMES.has(biome) && !!BIOME_TEXTURES[biome];
+  const renderBiomeColor = (biome, fallback = WHITE) => hasPackBiomeTexture(biome) ? WHITE : fallback;
   const biomeModel = (base, biome) => {
     if (!base || biome === 'default') return base;
     const key = '__' + biome;
@@ -566,9 +665,7 @@
     if (biome === 'desert' && BIOME_TEXTURES.desert) mat.map = BIOME_TEXTURES.desert;
     else if (biome === 'summer' && BIOME_TEXTURES.summer) mat.map = BIOME_TEXTURES.summer;
     else if (biome === 'winter' && BIOME_TEXTURES.winter) mat.map = BIOME_TEXTURES.winter;
-    if (biome !== 'desert' && biome !== 'summer' && biome !== 'winter' && BIOME_TINT[biome]) {
-      mat.color = BIOME_TINT[biome].clone();
-    }
+    if (mat.color) mat.color = WHITE.clone();
     base[key] = { geo: base.geo, mat };
     return base[key];
   };
@@ -576,23 +673,54 @@
     if (!base || !biome || biome === 'default') return base;
     const key = '__road_' + biome;
     if (base[key]) return base[key];
-    const source = biomeModel(M.grass, biome);
-    const mat = base.mat.clone();
-    if (source?.mat?.map) mat.map = source.mat.map;
-    mat.color = (BIOME_ROAD_TINT[biome] || BIOME_TINT[biome] || BIOME_TINT.default).clone();
+    const mat = cloneMapMaterial(base.mat, biomeTextureKey(biome));
+    if (mat.color) mat.color = roadInstanceColor({ col: BIOME_TINT[biome] || BIOME_TINT.default }, biome);
+    mat.needsUpdate = true;
     base[key] = { geo: base.geo, mat };
     return base[key];
   };
+  const cloneMapMaterial = (baseMat, textureBiome) => {
+    const mat = baseMat.clone();
+    const source = textureBiome && textureBiome !== 'default' ? biomeModel(M.grass, textureBiome) : null;
+    if (source?.mat?.map) mat.map = source.mat.map;
+    else mat.map = baseMat.map || null;
+    if (mat.color) mat.color = WHITE.clone();
+    mat.needsUpdate = true;
+    return mat;
+  };
+  const landBatchModel = (textureBiome) => {
+    const key = '__batch_land_' + textureBiome;
+    if (M.grass[key]) return M.grass[key];
+    M.grass[key] = { geo: M.grass.geo, mat: cloneMapMaterial(M.grass.mat, textureBiome) };
+    return M.grass[key];
+  };
+  const roadBatchModel = (base, textureBiome) => {
+    if (!base) return base;
+    const key = '__batch_road_' + textureBiome;
+    if (base[key]) return base[key];
+    base[key] = { geo: base.geo, mat: cloneMapMaterial(base.mat, textureBiome) };
+    return base[key];
+  };
+  const roadInstanceColor = (cell, biome) => renderBiomeColor(
+    biome,
+    cell?.col || (biome && biome !== 'default' ? (BIOME_TINT[biome] || BIOME_TINT.default).clone() : WHITE),
+  );
   const biomeTileModel = (base, biome, assetKey = '') => {
     if (!base || !biome || biome === 'default') return base;
-    if (String(assetKey).startsWith('coast')) return biomeModel(M.grass, biome);
+    if (String(assetKey).startsWith('coast')) return base;   // coast рисуем сырой моделью (песок), без biome-текстуры — как запечённые/игра
     const key = '__tile_' + biome;
     if (base[key]) return base[key];
-    const source = biomeModel(M.grass, biome);
-    const mat = base.mat.clone();
-    if (source?.mat?.map) mat.map = source.mat.map;
-    if (source?.mat?.color) mat.color = source.mat.color.clone();
+    const mat = cloneMapMaterial(base.mat, biomeTextureKey(biome));
+    if (mat.color) mat.color = renderBiomeColor(biome, (BIOME_TINT[biome] || BIOME_TINT.default).clone());
     base[key] = { geo: base.geo, mat };
+    return base[key];
+  };
+  const tileBatchModel = (base, textureBiome, assetKey = '') => {
+    if (!base) return base;
+    if (String(assetKey).startsWith('coast')) return base;
+    const key = '__batch_tile_' + textureBiome;
+    if (base[key]) return base[key];
+    base[key] = { geo: base.geo, mat: cloneMapMaterial(base.mat, textureBiome) };
     return base[key];
   };
   const isBiomeDecorAsset = (asset) => /^(treesA|treesB|tree1|mtnA|mtnB|mtnC|rockA|rockC)$/.test(asset)
@@ -604,7 +732,9 @@
     const source = biomeModel(M.grass, biome);
     const mat = base.mat.clone();
     if (source?.mat?.map) mat.map = source.mat.map;
-    mat.color = biome === 'darkForest'
+    mat.color = hasPackBiomeTexture(biome)
+      ? WHITE.clone()
+      : biome === 'darkForest'
       ? new THREE.Color(0x2f7a45)
       : (BIOME_TINT[biome] || BIOME_TINT.default).clone();
     base[key] = { geo: base.geo, mat };
@@ -673,6 +803,17 @@
   const ESTEP = 0.26;
   const FLOOR = -1;
   const baseNoise = (q, r) => vnoise(q * 0.05, r * 0.055) * 0.85 + vnoise(q * 0.14, r * 0.15) * 0.3;
+  const ROAD_CITY_HEIGHT_LEVELS = [0.5, 1.25, 2];
+  const snapRoadTerrainLevel = (value) => {
+    const v = Number(value) || 0;
+    let best = ROAD_CITY_HEIGHT_LEVELS[0], bestDist = Math.abs(v - best);
+    for (let i = 1; i < ROAD_CITY_HEIGHT_LEVELS.length; i++) {
+      const d = Math.abs(v - ROAD_CITY_HEIGHT_LEVELS[i]);
+      if (d <= bestDist) { best = ROAD_CITY_HEIGHT_LEVELS[i]; bestDist = d; }
+    }
+    return best;
+  };
+  const snapTerrainLevel = (value) => Math.round((Number(value) || 0) / ESTEP) * ESTEP;
 
   // 4) сетка (pointy-top)
   const SQ3 = Math.sqrt(3);
@@ -734,7 +875,7 @@
   for (const c of land) {
     let e = baseNoise(c.q, c.r) + Math.min(c.cdist * 0.085, 0.7);
     if (c.mnt) e += 0.55 + vnoise(c.q * 0.3, c.r * 0.3) * 0.5;
-    c.elev = Math.round(Math.min(e, 1.9) / ESTEP) * ESTEP;
+    c.elev = snapTerrainLevel(Math.min(e, 1.9));
   }
 
   // 4c) РЕКИ настоящими тайлами hex_river_*: редкие длинные русла с меандрами.
@@ -927,7 +1068,117 @@
       }
     }
   };
-  paintCityBiomeAuras();
+  const bakedTileOverrides = [];
+  const bakedTileSet = new Set();
+  const bakedCountryForBiome = {
+    desert: 'Иберия',
+    summer: 'Франция',
+    winter: 'Северная империя',
+    dark_forest: 'Британия',
+    autumn: 'Германия',
+    terracotta: 'Италия',
+    volcanic: 'Россия',
+    oasis: 'Турция',
+    imperial: 'Австро-Венгерская империя',
+    highland: 'Польша',
+  };
+  const resetFromGameMapTiles = () => {
+    if (!GAME_MAP || !Array.isArray(GAME_MAP.tiles) || !GAME_MAP.tiles.length) return false;
+    land.length = 0; sea.length = 0; river.length = 0;
+    cellMap.clear();
+    for (const k of Object.keys(facCells)) delete facCells[k];
+    bakedTileOverrides.length = 0; bakedTileSet.clear();
+
+    for (const t of GAME_MAP.tiles) {
+      const q = t[0], r = t[1], isWater = !!t[2], elev = t[3], colHex = t[4];
+      const rivKey = t[5], rivRy = t[6] || 0, roadKey = t[7], roadRy = t[8] || 0;
+      const tileKey = t[9], tileRy = t[10] || 0, biome = t[11] || 'default', tileYOffset = Number(t[12]) || 0;
+      const wx = SQ3 * Rg * (q + (r & 1) * 0.5) - ox;
+      const wz = 1.5 * Rg * r - oz;
+      const lng = B.minX + ((wx + ox) / worldW) * lngSpan;
+      const lat = B.maxY - ((wz + oz) / worldH) * latSpan;
+      const reg = regionAt(lng, lat);
+      const country = isWater && !rivKey ? 'Море' : (reg && reg.name) || bakedCountryForBiome[biome] || 'Нейтральные';
+      let col;
+      if (biome && biome !== 'default') col = (BIOME_TINT[biome] || BIOME_TINT.default).clone();
+      else if (typeof colHex === 'number' && colHex >= 0) col = new THREE.Color(colHex);
+      else col = BIOME_TINT.default.clone();
+
+      const c = {
+        wx, wz, q, r, lng, lat,
+        name: country,
+        biome,
+        mnt: inRange(lng, lat),
+        col,
+        elev: typeof elev === 'number' ? elev : 0,
+        water: isWater,
+      };
+      if (rivKey && M[rivKey]) {
+        c.water = true;
+        c.river = true;
+        c.rivModel = M[rivKey];
+        c.rivRy = rivRy;
+        c.rivY = c.elev;
+        river.push(c);
+        cellMap.set(ckey(q, r), c);
+      } else if (isWater) {
+        sea.push(c);
+      } else {
+        land.push(c);
+        cellMap.set(ckey(q, r), c);
+        (facCells[country] || (facCells[country] = [])).push(c);
+      }
+      if (roadKey && M[roadKey]) {
+        c.road = true;
+        c.roadModel = M[roadKey];
+        c.roadRy = roadRy;
+        c.roadBiome = biome;
+        c.roadYOffset = isSlopedTileAsset(roadKey) ? tileYOffset : 0;
+      }
+      if (tileKey && !roadKey && M[tileKey] && !isWater) {
+        const k = ckey(q, r);
+        bakedTileSet.add(k);
+        c.tileModel = M[tileKey];
+        c.tileKey = tileKey;
+        c.tileRy = tileRy;
+        c.tileBiome = biome;
+        c.tileYOffset = tileYOffset;
+        bakedTileOverrides.push(c);
+      }
+    }
+    for (const c of land) c.coast = neighbors(c.q, c.r).some(n => !n);
+    return true;
+  };
+  const usingGameMapTiles = resetFromGameMapTiles();
+  if (!usingGameMapTiles) paintCityBiomeAuras();
+  const applyBakedMapTiles = () => {
+    if (!GAME_MAP || !Array.isArray(GAME_MAP.tiles)) return;
+    for (const t of GAME_MAP.tiles) {
+      const q = t[0], r = t[1], isWater = t[2], elev = t[3], colHex = t[4];
+      const roadKey = t[7], tileKey = t[9], tileRy = t[10] || 0, biome = t[11] || 'default', tileYOffset = Number(t[12]) || 0;
+      const c = cellMap.get(ckey(q, r));
+      if (!c || isWater) continue;
+      if (biome && biome !== 'default') {
+        c.biome = biome;
+        c.col = (BIOME_TINT[biome] || BIOME_TINT.default).clone();
+      } else if (typeof colHex === 'number' && colHex >= 0) {
+        c.col = new THREE.Color(colHex);
+      }
+      if (typeof elev === 'number') c.elev = elev;
+      if (roadKey && M[roadKey]) c.roadYOffset = isSlopedTileAsset(roadKey) ? tileYOffset : 0;
+      if (tileKey && !roadKey && M[tileKey]) {
+        const key = ckey(q, r);
+        if (bakedTileSet.has(key)) continue;
+        bakedTileSet.add(key);
+        c.tileModel = M[tileKey];
+        c.tileKey = tileKey;
+        c.tileRy = tileRy;
+        c.tileBiome = biome;
+        c.tileYOffset = tileYOffset;
+        bakedTileOverrides.push(c);
+      }
+    }
+  };
   const applyBakedRoadTileBiomes = () => {
     if (!GAME_MAP || !Array.isArray(GAME_MAP.tiles)) return;
     for (const t of GAME_MAP.tiles) {
@@ -936,12 +1187,94 @@
       const c = cellMap.get(ckey(t[0], t[1]));
       if (!c || c.water) continue;
       c.biome = biome;
-      c.col = t[4] != null && t[4] >= 0
-        ? new THREE.Color(t[4])
-        : (BIOME_TINT[biome] || BIOME_TINT.default).clone();
+      c.col = (BIOME_TINT[biome] || BIOME_TINT.default).clone();
     }
   };
+  applyBakedMapTiles();
   applyBakedRoadTileBiomes();
+  const isRoadLevelCell = (c) => !!(c && !c.water && (c.roadModel || c.bridgeModel));
+  const nearestCityTerrainCell = (city) => {
+    const p = cityToGame(city);
+    let best = null, bd = Infinity;
+    for (const c0 of land) {
+      const c = cellGame(c0);
+      const d = (c.gameGX - p.gx) ** 2 + (c.gameGZ - p.gz) ** 2;
+      if (d < bd) { bd = d; best = c; }
+    }
+    return best;
+  };
+  const nearestRoadTerrainLevel = (start) => {
+    if (!start) return 0;
+    if (isRoadLevelCell(start)) return snapRoadTerrainLevel(start.elev);
+    const queue = [{ c: start, d: 0 }];
+    const seen = new Set([ckey(start.q, start.r)]);
+    let best = null;
+    for (let qi = 0; qi < queue.length; qi++) {
+      const cur = queue[qi];
+      if (isRoadLevelCell(cur.c)) {
+        const dist = (cur.c.wx - start.wx) ** 2 + (cur.c.wz - start.wz) ** 2;
+        if (!best || cur.d < best.d || (cur.d === best.d && dist < best.dist)) {
+          best = { c: cur.c, d: cur.d, dist };
+        }
+      }
+      if (cur.d >= 6) continue;
+      for (const n of neighbors(cur.c.q, cur.c.r)) {
+        if (!n || n.water || n.river) continue;
+        const nk = ckey(n.q, n.r);
+        if (seen.has(nk)) continue;
+        seen.add(nk);
+        queue.push({ c: n, d: cur.d + 1 });
+      }
+    }
+    return snapRoadTerrainLevel((best && best.c ? best.c : start).elev);
+  };
+  const normalizeRoadAndCityTerrainLevels = () => {
+    for (const c of land) {
+      if (isRoadLevelCell(c)) c.elev = snapRoadTerrainLevel(c.elev);
+    }
+    const isRoadTransition = (c) => c && c.roadModel === M.roadALow;
+    const seenRoad = new Set();
+    for (const start of land) {
+      if (!start.roadModel || isRoadTransition(start)) continue;
+      const startKey = ckey(start.q, start.r);
+      if (seenRoad.has(startKey)) continue;
+      const queue = [start], comp = [];
+      seenRoad.add(startKey);
+      for (let qi = 0; qi < queue.length; qi++) {
+        const cur = queue[qi];
+        comp.push(cur);
+        for (const n of neighbors(cur.q, cur.r)) {
+          if (!n || !n.roadModel || isRoadTransition(n)) continue;
+          const nk = ckey(n.q, n.r);
+          if (seenRoad.has(nk)) continue;
+          seenRoad.add(nk);
+          queue.push(n);
+        }
+      }
+      if (!comp.length) continue;
+      const counts = new Map();
+      for (const c of comp) counts.set(c.elev, (counts.get(c.elev) || 0) + 1);
+      const level = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+      for (const c of comp) c.elev = level;
+    }
+    for (const city of CITY_LIST) {
+      const root = nearestCityTerrainCell(city);
+      if (!root) continue;
+      const level = nearestRoadTerrainLevel(root);
+      const halo = [root].concat(neighbors(root.q, root.r).filter(Boolean));
+      for (const c of halo) {
+        if (!c || c.water || c.river) continue;
+        c.elev = level;
+      }
+    }
+  };
+  normalizeRoadAndCityTerrainLevels();
+  const normalizeRoadSlopeTransitions = () => {
+    for (const c of land) {
+      if (c.roadModel === M.roadAHigh) c.roadModel = M.roadALow;
+    }
+  };
+  normalizeRoadSlopeTransitions();
   // тип речного тайла + поворот по рёбрам. Используем весь KayKit river-набор:
   // прямые, curvy-прямые, изгибы, T/развилки/кресты на редких стыках.
   const riverShapes = [
@@ -979,6 +1312,7 @@
     return { model: best.model, ry: -bestK * PI3 };
   };
   for (const c of river) {
+    if (usingGameMapTiles && c.rivModel) continue;
     const ch = chooseRiverShape(allRiverEdgeDirs(c), c);
     c.rivModel = ch.model; c.rivRy = ch.ry;
   }
@@ -989,22 +1323,127 @@
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.outputEncoding = THREE.sRGBEncoding;
-  renderer.shadowMap.enabled = false;   // тени отключены
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.66;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#0e1116');
-  scene.fog = new THREE.Fog('#0e1116', worldW * 0.95, worldW * 2.4);
+  scene.background = new THREE.Color('#3485a8');
+  scene.fog = new THREE.Fog('#a1bed9', 0, 230);
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, worldW * 6);
-  scene.add(new THREE.HemisphereLight('#dbeaff', '#39434f', 0.9));
-  const sun = new THREE.DirectionalLight('#fff6e8', 1.15);
-  sun.position.set(-worldW * 0.35, worldW * 0.7, worldW * 0.32);
-  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  const scam = sun.shadow.camera, S = worldW * 0.62;
-  scam.left = -S; scam.right = S; scam.top = S; scam.bottom = -S; scam.near = 1; scam.far = worldW * 3; scam.updateProjectionMatrix();
-  scene.add(sun);
+  const hemi = new THREE.HemisphereLight('#ffffff', '#0026bd', 0.85);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight('#e6c1c1', 0.67);
+  sun.position.set(worldW * -0.42, worldW * 0.4, worldW * -0.09);
+  sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+  const scam = sun.shadow.camera, S = worldW * 0.5;
+  scam.left = -S; scam.right = S; scam.top = S; scam.bottom = -S; scam.near = 1; scam.far = worldW * 2.42; scam.updateProjectionMatrix();
+  scene.add(sun); scene.add(sun.target);
+  const LIGHT_KEY = 'hexEuropeLightSettings.gameSync.v2';
+  const lightDefaults = {
+    exposure: 0.66,
+    tone: 'ACESFilmic',
+    background: '#3485a8',
+    fog: true,
+    fogType: 'linear',
+    fogColor: '#a1bed9',
+    fogDensity: 0.0018,
+    fogNear: 0,
+    fogFar: 230,
+    hemiSky: '#ffffff',
+    hemiGround: '#0026bd',
+    hemiIntensity: 0.85,
+    sunColor: '#e6c1c1',
+    sunIntensity: 0.67,
+    sunX: -0.42,
+    sunY: 0.4,
+    sunZ: -0.09,
+    sunTargetX: 0.15,
+    sunTargetY: 0.01,
+    sunTargetZ: 0,
+    shadow: true,
+    shadowType: 'PCFSoft',
+    shadowMap: 4096,
+    shadowRadius: 2.1,
+    shadowBias: 0.0002,
+    shadowNormalBias: 0.024,
+    shadowSize: 0.5,
+    shadowNear: 1,
+    shadowFar: 2.42
+  };
+  const readLightSettings = () => {
+    try { return { ...lightDefaults, ...(JSON.parse(localStorage.getItem(LIGHT_KEY) || '{}') || {}) }; }
+    catch (_) { return { ...lightDefaults }; }
+  };
+  let lightState = readLightSettings();
+  const toneMappings = {
+    None: THREE.NoToneMapping,
+    Linear: THREE.LinearToneMapping,
+    Reinhard: THREE.ReinhardToneMapping,
+    Cineon: THREE.CineonToneMapping,
+    ACESFilmic: THREE.ACESFilmicToneMapping
+  };
+  const saveLightSettings = () => localStorage.setItem(LIGHT_KEY, JSON.stringify(lightState));
+  const num = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
+  const applyLightSettings = (save = true) => {
+    renderer.toneMapping = toneMappings[lightState.tone] ?? THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = num(lightState.exposure, lightDefaults.exposure);
+    renderer.shadowMap.enabled = !!lightState.shadow;
+    renderer.shadowMap.type = ({
+      Basic: THREE.BasicShadowMap,
+      PCF: THREE.PCFShadowMap,
+      PCFSoft: THREE.PCFSoftShadowMap
+    })[lightState.shadowType] ?? THREE.PCFSoftShadowMap;
+    renderer.shadowMap.needsUpdate = true;
+    scene.background = new THREE.Color(lightState.background || lightDefaults.background);
+    if (lightState.fog) {
+      scene.fog = lightState.fogType === 'exp2'
+        ? new THREE.FogExp2(lightState.fogColor || lightDefaults.fogColor, num(lightState.fogDensity, lightDefaults.fogDensity))
+        : new THREE.Fog(
+          lightState.fogColor || lightDefaults.fogColor,
+          num(lightState.fogNear, lightDefaults.fogNear),
+          num(lightState.fogFar, lightDefaults.fogFar)
+        );
+    } else {
+      scene.fog = null;
+    }
+    hemi.color.set(lightState.hemiSky || lightDefaults.hemiSky);
+    hemi.groundColor.set(lightState.hemiGround || lightDefaults.hemiGround);
+    hemi.intensity = num(lightState.hemiIntensity, lightDefaults.hemiIntensity);
+    sun.color.set(lightState.sunColor || lightDefaults.sunColor);
+    sun.intensity = num(lightState.sunIntensity, lightDefaults.sunIntensity);
+    sun.position.set(
+      worldW * num(lightState.sunX, lightDefaults.sunX),
+      worldW * num(lightState.sunY, lightDefaults.sunY),
+      worldW * num(lightState.sunZ, lightDefaults.sunZ)
+    );
+    sun.target.position.set(
+      worldW * num(lightState.sunTargetX, lightDefaults.sunTargetX),
+      worldW * num(lightState.sunTargetY, lightDefaults.sunTargetY),
+      worldW * num(lightState.sunTargetZ, lightDefaults.sunTargetZ)
+    );
+    sun.target.updateMatrixWorld();
+    sun.castShadow = !!lightState.shadow;
+    const sm = num(lightState.shadowMap, lightDefaults.shadowMap);
+    if (sun.shadow.mapSize.x !== sm || sun.shadow.mapSize.y !== sm) {
+      sun.shadow.mapSize.set(sm, sm);
+      if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    }
+    sun.shadow.radius = num(lightState.shadowRadius, lightDefaults.shadowRadius);
+    sun.shadow.bias = num(lightState.shadowBias, lightDefaults.shadowBias);
+    sun.shadow.normalBias = num(lightState.shadowNormalBias, lightDefaults.shadowNormalBias);
+    const ss = worldW * num(lightState.shadowSize, lightDefaults.shadowSize);
+    scam.left = -ss; scam.right = ss; scam.top = ss; scam.bottom = -ss;
+    scam.near = num(lightState.shadowNear, lightDefaults.shadowNear);
+    scam.far = worldW * num(lightState.shadowFar, lightDefaults.shadowFar);
+    scam.updateProjectionMatrix();
+    if (save) saveLightSettings();
+  };
+  applyLightSettings(false);
 
   // 6) тайлы (инстансы) — высота тайла + «юбка» растянута до общего дна (y=-1), без щелей
   const dummy = new THREE.Object3D(), WHITE = new THREE.Color(0xffffff);
-  function buildTiles(model, list, tinted) {
+  function buildTiles(model, list) {
     const m = new THREE.InstancedMesh(model.geo, model.mat, list.length);
     m.castShadow = true; m.receiveShadow = true;
     m.userData.cells = list;
@@ -1015,45 +1454,418 @@
       const top = c.water ? (c.elev || 0) - 0.2 : (c.elev || 0);   // реки утоплены в русло (но видны)
       const sy = top - FLOOR;                                       // тянем низ до дна
       dummy.position.set(c.wx, top, c.wz); dummy.rotation.set(0, 0, 0); dummy.scale.set(HEXS, sy, HEXS); dummy.updateMatrix();
-      m.setMatrixAt(i, dummy.matrix); m.setColorAt(i, tinted ? c.col : WHITE);
+      m.setMatrixAt(i, dummy.matrix); m.setColorAt(i, renderBiomeColor(c.biome || 'default', c.col || WHITE));
     }
     m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true;
     return m;
   }
   function buildLandTiles() {
-    const byBiome = new Map();
+    const byTexture = new Map();
     for (const c of land) {
-      const biome = c.biome || 'default';
-      (byBiome.get(biome) || byBiome.set(biome, []).get(biome)).push(c);
+      const textureKey = biomeTextureKey(c.biome || 'default');
+      (byTexture.get(textureKey) || byTexture.set(textureKey, []).get(textureKey)).push(c);
     }
     const meshes = [];
-    for (const [biome, list] of byBiome) meshes.push(buildTiles(biomeModel(M.grass, biome), list, true));
+    for (const [textureKey, list] of byTexture) meshes.push(buildTiles(landBatchModel(textureKey), list));
     return meshes;
   }
   const landMeshes = buildLandTiles();
-  const seaMesh = buildTiles(M.water, sea, false);
-  const pickTargets = landMeshes.concat(seaMesh);
+  function hideBaseTile(c) {
+    if (!c || c.tileInstance == null || !c.tileMesh) return;
+    dummy.position.set(c.wx, FLOOR - 10, c.wz);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(0.0001, 0.0001, 0.0001);
+    dummy.updateMatrix();
+    c.tileMesh.setMatrixAt(c.tileInstance, dummy.matrix);
+  }
+  function buildBakedTileOverrides() {
+    if (!bakedTileOverrides.length) return;
+    const buckets = new Map();
+    for (const c of bakedTileOverrides) {
+      // coast → сырая модель (песок, tileRy ориентирует пляж на море). grassBottom/grassSlope →
+      // biome-модель (winter→снег, desert→песок, прочее → tint), РОВНО как игра (tileBatchModel +
+      // pack-biome) и ручной путь редактора (biomeTileModel). Иначе редактор расходится с игрой.
+      const isCoast = String(c.tileKey || '').startsWith('coast');
+      const biome = c.tileBiome && c.tileBiome !== 'default' ? c.tileBiome : '';
+      const model = (isCoast || !biome) ? c.tileModel : tileBatchModel(c.tileModel, biomeTextureKey(biome), c.tileKey);
+      const col = (isCoast || !biome) ? WHITE : renderBiomeColor(biome, (BIOME_TINT[biome] || WHITE).clone());
+      const key = (c.tileKey || '') + '|' + (biome || 'default');
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = { model, col, list: [] };
+        buckets.set(key, bucket);
+      }
+      bucket.list.push(c);
+      hideBaseTile(c);
+    }
+    for (const { model, col, list } of buckets.values()) {
+      if (!model || !list.length) continue;
+      const m = new THREE.InstancedMesh(model.geo, model.mat, list.length);
+      m.castShadow = false; m.receiveShadow = true;
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i];
+        c.tileOverrideMesh = m;
+        c.tileOverrideInstance = i;
+        const isSloped = isSlopedTileAsset(c.tileKey);
+        const top = (c.elev || 0) + (isSloped ? (Number(c.tileYOffset) || 0) : 0);
+        const scaleTop = isSloped ? (c.elev || 0) : top;
+        const sy = Math.max(0.05, scaleTop - FLOOR);
+        dummy.position.set(c.wx, top, c.wz);
+        dummy.rotation.set(0, c.tileRy || 0, 0);
+        dummy.scale.set(HEXS, sy, HEXS);
+        dummy.updateMatrix();
+        m.setMatrixAt(i, dummy.matrix);
+        m.setColorAt(i, col || WHITE);
+      }
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      m.userData.cells = list;
+      pickTargets.push(m);
+      scene.add(m);
+    }
+    for (const mesh of landMeshes) mesh.instanceMatrix.needsUpdate = true;
+  }
+  // ── ВОДА: WaterFlowMap (low-poly-waterfall) — flowmap-поток, инжект в ОСВЕЩЁННЫЙ MeshStandard ──
+  const SEA_Y = -0.2;
+  const dudvMap = new THREE.TextureLoader().load('assets/water-dudv.png');
+  dudvMap.wrapS = dudvMap.wrapT = THREE.RepeatWrapping;
+  // depth-таргет: глубина сцены без воды → пиксельно точная пена прямо по кромке воды (RGBA-packed)
+  const _dpr = renderer.getPixelRatio();
+  const foamRT = new THREE.WebGLRenderTarget(Math.max(2, Math.floor(innerWidth * _dpr)), Math.max(2, Math.floor(innerHeight * _dpr)));
+  foamRT.texture.minFilter = foamRT.texture.magFilter = THREE.NearestFilter;
+  foamRT.texture.generateMipmaps = false; foamRT.stencilBuffer = false;
+  const foamDepthMat = new THREE.MeshDepthMaterial();
+  foamDepthMat.depthPacking = THREE.RGBADepthPacking; foamDepthMat.blending = THREE.NoBlending;
+  // карта близости к берегу (BFS) → надёжная пена (depth на нашей геометрии глубину у кромки не даёт)
+  const coastTex = (() => {
+    // маска вода/суша, растеризованная ПО ХЕКСАМ с ×2 разрешением → кромка точнее, пена тоньше/чётче
+    const seaSet = new Set(); for (const c of sea) seaSet.add(ckey(c.q, c.r));
+    const knownSet = new Set(seaSet);
+    for (const c of land) knownSet.add(ckey(c.q, c.r));
+    for (const c of river) knownSet.add(ckey(c.q, c.r));
+    // хексы-«пропасти» (удалённый тайл) → метим как речную воду: пены нет, видно течение шейдера
+    const riverSet = new Set();
+    try {
+      const raw = localStorage.getItem('hexEuropeManualEdits:v1');
+      // «пропасть» = удалённый тайл ИЛИ безводный речной тайл (rivXW) — сквозь русло видно плоскость воды
+      if (raw) for (const e of (JSON.parse(raw).edits || [])) if (e && (e.asset === 'delete' || /^riv/.test(e.asset))) riverSet.add(ckey(e.q, e.r));
+    } catch (_) {}
+    const RES = 2, W = COLS * RES, H = ROWS * RES, data = new Uint8Array(W * H * 4);
+    const colStep = SQ3 * Rg;
+    for (let ty = 0; ty < H; ty++) {
+      const worldZ = -oz + ((ty + 0.5) / H) * worldH;
+      const r = Math.round((worldZ + oz) / (1.5 * Rg));
+      const half = (r & 1) * 0.5;
+      for (let tx = 0; tx < W; tx++) {
+        const worldX = -ox + ((tx + 0.5) / W) * worldW;
+        const q = Math.round((worldX + ox) / colStep - half);
+        const k = ckey(q, r), isRiver = riverSet.has(k);
+        const v = (!knownSet.has(k) || seaSet.has(k) || isRiver) ? 255 : 0;   // неизвестное за картой = открытое море
+        const i = (tx + ty * W) * 4;
+        data[i] = v; data[i + 1] = isRiver ? 255 : 0; data[i + 2] = 0; data[i + 3] = 255;   // G: флаг реки → пену гасим
+      }
+    }
+    const tx2 = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
+    tx2.minFilter = tx2.magFilter = THREE.LinearFilter; tx2.generateMipmaps = false;   // без мипмапов: иначе флаг реки (G) усредняется с сушей → пена лезет в узкие реки
+    tx2.wrapS = tx2.wrapT = THREE.ClampToEdgeWrapping; tx2.needsUpdate = true; return tx2;
+  })();
+  const waterFX = {
+    uTime: { value: 0 }, tDudv: { value: dudvMap },
+    tDepth: { value: foamRT.texture }, resolution: { value: new THREE.Vector2(foamRT.width, foamRT.height) },
+    tCoast: { value: coastTex }, uMapMin: { value: new THREE.Vector2(-ox, -oz) }, uMapSize: { value: new THREE.Vector2(worldW, worldH) },
+    cameraNear: { value: camera.near }, cameraFar: { value: camera.far },
+    uColorDeep: { value: new THREE.Color(0x007052) },
+    uColorShallow: { value: new THREE.Color(0x06535b) },
+    uColorFoam: { value: new THREE.Color(0xe8f8ff) },
+    flowSpeed: { value: 0.02 }, flowScale: { value: 0.01 }, flowStrength: { value: 0.05 },
+    flowContrast: { value: 8.0 }, noiseScale: { value: 3.7 }, noiseStrength: { value: 0.5 },
+    // ── РЕКА: отдельный набор параметров (выбирается по флагу реки cmask.g) ──
+    rColorDeep: { value: new THREE.Color(0x1a6f7d) },
+    rColorShallow: { value: new THREE.Color(0x57c2d2) },
+    rFlowSpeed: { value: 0.18 }, rFlowScale: { value: 0.06 }, rFlowStrength: { value: 0.35 },
+    rFlowContrast: { value: 4.0 }, rNoiseScale: { value: 7.0 }, rNoiseStrength: { value: 0.4 },
+    shoreFoamWidth: { value: 10.5 }, shoreFoamSharp: { value: 1.0 },
+    foamScale: { value: 0.135 }, foamSpeed: { value: 0.025 },
+  };
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.0 });
+  waterMat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, waterFX);
+    sh.vertexShader = 'varying vec3 vPos; varying vec3 vWorldPos;\n' +
+      sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vPos = position; vWorldPos = (modelMatrix * vec4(position,1.0)).xyz;');
+    sh.fragmentShader = `
+      uniform float uTime; uniform sampler2D tDudv; uniform float cameraNear, cameraFar;
+      uniform vec3 uColorDeep, uColorShallow, uColorFoam;
+      uniform float flowSpeed, flowScale, flowStrength, flowContrast, noiseScale, noiseStrength, shoreFoamWidth, shoreFoamSharp, foamScale, foamSpeed;
+      uniform vec3 rColorDeep, rColorShallow;
+      uniform float rFlowSpeed, rFlowScale, rFlowStrength, rFlowContrast, rNoiseScale, rNoiseStrength;
+      varying vec3 vPos; varying vec3 vWorldPos;
+      vec3 mod289v3(vec3 x){ return x - floor(x*(1.0/289.0))*289.0; }
+      vec4 mod289v4(vec4 x){ return x - floor(x*(1.0/289.0))*289.0; }
+      vec4 permute4(vec4 x){ return mod289v4(((x*34.0)+10.0)*x); }
+      vec4 taylorInvSqrt4(vec4 r){ return 1.79284291400159 - 0.85373472095314*r; }
+      vec3 fade3(vec3 t){ return t*t*t*(t*(t*6.0-15.0)+10.0); }
+      float cnoise(vec3 P){
+        vec3 Pi0=floor(P), Pi1=Pi0+vec3(1.0); Pi0=mod289v3(Pi0); Pi1=mod289v3(Pi1);
+        vec3 Pf0=fract(P), Pf1=Pf0-vec3(1.0);
+        vec4 ix=vec4(Pi0.x,Pi1.x,Pi0.x,Pi1.x), iy=vec4(Pi0.yy,Pi1.yy);
+        vec4 iz0=Pi0.zzzz, iz1=Pi1.zzzz;
+        vec4 ixy=permute4(permute4(ix)+iy), ixy0=permute4(ixy+iz0), ixy1=permute4(ixy+iz1);
+        vec4 gx0=ixy0*(1.0/7.0), gy0=fract(floor(gx0)*(1.0/7.0))-0.5; gx0=fract(gx0);
+        vec4 gz0=vec4(0.5)-abs(gx0)-abs(gy0), sz0=step(gz0,vec4(0.0));
+        gx0-=sz0*(step(0.0,gx0)-0.5); gy0-=sz0*(step(0.0,gy0)-0.5);
+        vec4 gx1=ixy1*(1.0/7.0), gy1=fract(floor(gx1)*(1.0/7.0))-0.5; gx1=fract(gx1);
+        vec4 gz1=vec4(0.5)-abs(gx1)-abs(gy1), sz1=step(gz1,vec4(0.0));
+        gx1-=sz1*(step(0.0,gx1)-0.5); gy1-=sz1*(step(0.0,gy1)-0.5);
+        vec3 g000=vec3(gx0.x,gy0.x,gz0.x), g100=vec3(gx0.y,gy0.y,gz0.y),
+             g010=vec3(gx0.z,gy0.z,gz0.z), g110=vec3(gx0.w,gy0.w,gz0.w),
+             g001=vec3(gx1.x,gy1.x,gz1.x), g101=vec3(gx1.y,gy1.y,gz1.y),
+             g011=vec3(gx1.z,gy1.z,gz1.z), g111=vec3(gx1.w,gy1.w,gz1.w);
+        vec4 n0=taylorInvSqrt4(vec4(dot(g000,g000),dot(g010,g010),dot(g100,g100),dot(g110,g110)));
+        g000*=n0.x; g010*=n0.y; g100*=n0.z; g110*=n0.w;
+        vec4 n1=taylorInvSqrt4(vec4(dot(g001,g001),dot(g011,g011),dot(g101,g101),dot(g111,g111)));
+        g001*=n1.x; g011*=n1.y; g101*=n1.z; g111*=n1.w;
+        float v000=dot(g000,Pf0), v100=dot(g100,vec3(Pf1.x,Pf0.yz)),
+              v010=dot(g010,vec3(Pf0.x,Pf1.y,Pf0.z)), v110=dot(g110,vec3(Pf1.xy,Pf0.z)),
+              v001=dot(g001,vec3(Pf0.xy,Pf1.z)), v101=dot(g101,vec3(Pf1.x,Pf0.y,Pf1.z)),
+              v011=dot(g011,vec3(Pf0.x,Pf1.yz)), v111=dot(g111,Pf1);
+        vec3 fz=fade3(Pf0);
+        vec4 nz=mix(vec4(v000,v100,v010,v110),vec4(v001,v101,v011,v111),fz.z);
+        vec2 nyz=mix(nz.xy,nz.zw,fz.y);
+        return 2.2*mix(nyz.x,nyz.y,fz.x);
+      }
+      uniform sampler2D tDepth; uniform vec2 resolution;
+      uniform sampler2D tCoast; uniform vec2 uMapMin, uMapSize;
+      float unpackD(vec4 v){ return dot(v, vec4(1.0/(256.0*256.0*256.0), 1.0/(256.0*256.0), 1.0/256.0, 1.0)); }
+      float perspViewZ(float d){ return (cameraNear*cameraFar)/((cameraFar-cameraNear)*d - cameraFar); }
+      float streamNoise(vec2 uv, float t){
+        vec2 s=vec2(uv.x*3.0, uv.y*0.6);
+        return cnoise(vec3(s, 0.0))*0.5+0.5;   // непрерывно (скролл идёт через uv) → без рывков
+      }
+    ` + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      {
+        // ── флаг реки (G канала маски) → выбираем НАБОР параметров: море ↔ река ──
+        vec2 cuv = (vWorldPos.xz - uMapMin) / uMapSize;
+        float mapInside = step(0.0, cuv.x) * step(cuv.x, 1.0) * step(0.0, cuv.y) * step(cuv.y, 1.0);
+        vec4 cmask = mix(vec4(1.0, 0.0, 0.0, 1.0), texture2D(tCoast, cuv), mapInside);
+        float rF = cmask.g;                                           // 1 = речная вода (пропасть), 0 = море
+        float rKill = smoothstep(0.12, 0.5, rF);                      // порезче: любой намёк на реку → пену гасим полностью
+        float fSpeed = mix(flowSpeed, rFlowSpeed, rF);
+        float fScale = mix(flowScale, rFlowScale, rF);
+        float fStrength = mix(flowStrength, rFlowStrength, rF);
+        float fContrast = mix(flowContrast, rFlowContrast, rF);
+        float nScale = mix(noiseScale, rNoiseScale, rF);
+        float nStrength = mix(noiseStrength, rNoiseStrength, rF);
+        vec3 cDeep = mix(uColorDeep, rColorDeep, rF);
+        vec3 cShallow = mix(uColorShallow, rColorShallow, rF);
+        // ── текучая поверхность (flow, WaterFlowMap — как в low-poly-waterfall). Река = тот же поток, свои параметры/цвета ──
+        vec2 baseUv = vWorldPos.xz * fScale;
+        vec2 flowDir = texture2D(tDudv, baseUv * 0.25).rg * 2.0 - 1.0;
+        flowDir = mix(vec2(0.0, 1.0), flowDir, fStrength);
+        vec2 fuv = baseUv - flowDir * (uTime * fSpeed);
+        float streaks = pow(clamp(streamNoise(fuv * nScale, uTime), 0.0, 1.0), fContrast);
+        float broad = smoothstep(0.3, 0.7, cnoise(vec3(fuv * nScale * 0.4, 0.0)) * 0.5 + 0.5);
+        float surfaceMask = clamp(broad * nStrength + streaks * (1.0 - nStrength), 0.0, 1.0);
+        vec3 water = mix(cDeep, cShallow, surfaceMask);
+        // ── пена впритык к берегу (ТОЛЬКО море; в реке rF=1 → пены нет) ──
+        vec2 cdisp = texture2D(tDudv, vWorldPos.xz * foamScale - uTime * foamSpeed).rg * 2.0 - 1.0;
+        vec2 shoreUv = cuv + cdisp * 0.003;
+        float shoreInside = step(0.0, shoreUv.x) * step(shoreUv.x, 1.0) * step(0.0, shoreUv.y) * step(shoreUv.y, 1.0);
+        float wmask = mix(1.0, texture2D(tCoast, shoreUv).r, shoreInside);       // 1=море, 0=суша, 0.5=кромка
+        float w = clamp(shoreFoamWidth * 0.04, 0.02, 0.6);            // насколько пена уходит в воду ← slider
+        float landBias = mix(0.5, 0.42, shoreFoamSharp);              // сдвиг к суше (параллакс) ← резкость
+        float shoreFoam = smoothstep(0.5 + w, landBias, wmask) * (1.0 - rKill);
+        vec3 fc = mix(water, uColorFoam, shoreFoam);
+        // ── бегущие полосы свет/тень вдоль течения: делают анимацию явно видимой ──
+        float ripple = streamNoise(fuv * nScale * 1.5, uTime) - 0.5;   // [-0.5..0.5], дрейфует с uTime
+        float caps = 0.0;                                                   // без случайных белых полос пены в открытом море
+        fc *= (1.0 + ripple * 0.45 * (1.0 - shoreFoam));               // бегущая рябь — и на реке, и на море
+        fc = mix(fc, uColorFoam, caps * 0.30);
+        diffuseColor.rgb = fc * 0.5;
+        totalEmissiveRadiance = fc * 0.45 + uColorFoam * shoreFoam * 0.5 + uColorFoam * caps * 0.25;
+      }`);
+  };
+  const oceanSpan = Math.max(worldW, worldH) * 8;
+  const waterGeo = new THREE.PlaneGeometry(oceanSpan, oceanSpan);
+  waterGeo.rotateX(-Math.PI / 2);
+  const seaMesh = new THREE.Mesh(waterGeo, waterMat);
+  seaMesh.position.set(0, SEA_Y, 0);
+  seaMesh.renderOrder = -1;
+  seaMesh.frustumCulled = false;
+  const pickTargets = landMeshes.slice();
   scene.add(...landMeshes, seaMesh);
-  // речные тайлы hex_river_* — по модели, с поворотом по течению (без тинта: вода синяя)
+  buildBakedTileOverrides();
+  landMeshes.forEach((m) => m.layers.enable(1));   // террейн на слое 1 → дешёвый depth-проход для пены
+
+  // ── панель тюнинга воды (слайдеры + цвета, вживую) ──
+  (function buildWaterPanel() {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;top:12px;right:12px;z-index:30;width:236px;background:rgba(16,20,28,.93);border:1px solid #2a3340;border-radius:10px;padding:10px 12px;color:#e8edf2;font:12px/1.4 system-ui,sans-serif;';
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;font-weight:600;margin-bottom:8px;cursor:pointer;user-select:none;';
+    head.innerHTML = '<span>🌊 Вода</span><span id="wtT" style="opacity:.6">▾</span>';
+    const body = document.createElement('div');
+    head.onclick = () => { const v = body.style.display !== 'none'; body.style.display = v ? 'none' : ''; head.querySelector('#wtT').textContent = v ? '▸' : '▾'; };
+    wrap.appendChild(head); wrap.appendChild(body);
+    const sliders = [
+      ['flowSpeed', 'скорость', 0, 1, 0.01], ['flowScale', 'масштаб', 0.01, 0.25, 0.005],
+      ['flowStrength', 'закрутка', 0, 1, 0.05], ['flowContrast', 'контраст полос', 1, 8, 0.1],
+      ['noiseScale', 'масштаб шума', 0.5, 8, 0.1], ['noiseStrength', 'широкие разводы', 0, 1, 0.05],
+      ['shoreFoamWidth', 'ширина пены', 0, 20, 0.5], ['shoreFoamSharp', 'резкость пены', 0, 1, 0.05],
+      ['foamScale', 'масштаб пены', 0.005, 0.2, 0.005], ['foamSpeed', 'скорость пены', 0, 0.2, 0.005],
+    ];
+    for (const [key, label, min, max, step] of sliders) {
+      const row = document.createElement('div'); row.style.cssText = 'margin:7px 0;';
+      const val = document.createElement('span'); val.textContent = (+waterFX[key].value).toFixed(2); val.style.opacity = '.7';
+      const lab = document.createElement('div'); lab.style.cssText = 'display:flex;justify-content:space-between;'; lab.innerHTML = '<span>' + label + '</span>'; lab.appendChild(val);
+      const inp = document.createElement('input'); inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = waterFX[key].value; inp.style.cssText = 'width:100%;accent-color:#3a8fd6;';
+      inp.oninput = () => { waterFX[key].value = parseFloat(inp.value); val.textContent = parseFloat(inp.value).toFixed(2); };
+      row.appendChild(lab); row.appendChild(inp); body.appendChild(row);
+    }
+    for (const [key, label] of [['uColorDeep', 'глубокий'], ['uColorShallow', 'мелкий / полосы'], ['uColorFoam', 'пена']]) {
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin:7px 0;';
+      const inp = document.createElement('input'); inp.type = 'color'; inp.value = '#' + waterFX[key].value.getHexString(); inp.style.cssText = 'width:38px;height:22px;border:none;background:none;cursor:pointer;';
+      inp.oninput = () => waterFX[key].value.set(inp.value);
+      row.innerHTML = '<span style="opacity:.85">' + label + '</span>'; row.appendChild(inp); body.appendChild(row);
+    }
+    // ── секция РЕКА (отдельные параметры течения для хексов-пропастей) ──
+    const rHead = document.createElement('div');
+    rHead.style.cssText = 'margin-top:11px;padding-top:9px;border-top:1px solid #2a3340;font-weight:600;opacity:.92;';
+    rHead.textContent = '🏞 Река (отдельно)';
+    body.appendChild(rHead);
+    const rSliders = [
+      ['rFlowSpeed', 'скорость', 0, 1, 0.01], ['rFlowScale', 'масштаб', 0.01, 0.25, 0.005],
+      ['rFlowStrength', 'закрутка', 0, 1, 0.05], ['rFlowContrast', 'контраст полос', 1, 8, 0.1],
+      ['rNoiseScale', 'масштаб шума', 0.5, 12, 0.1], ['rNoiseStrength', 'широкие разводы', 0, 1, 0.05],
+    ];
+    for (const [key, label, min, max, step] of rSliders) {
+      const row = document.createElement('div'); row.style.cssText = 'margin:7px 0;';
+      const val = document.createElement('span'); val.textContent = (+waterFX[key].value).toFixed(2); val.style.opacity = '.7';
+      const lab = document.createElement('div'); lab.style.cssText = 'display:flex;justify-content:space-between;'; lab.innerHTML = '<span>' + label + '</span>'; lab.appendChild(val);
+      const inp = document.createElement('input'); inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = waterFX[key].value; inp.style.cssText = 'width:100%;accent-color:#3a8fd6;';
+      inp.oninput = () => { waterFX[key].value = parseFloat(inp.value); val.textContent = parseFloat(inp.value).toFixed(2); };
+      row.appendChild(lab); row.appendChild(inp); body.appendChild(row);
+    }
+    for (const [key, label] of [['rColorDeep', 'река: глубокий'], ['rColorShallow', 'река: мелкий']]) {
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin:7px 0;';
+      const inp = document.createElement('input'); inp.type = 'color'; inp.value = '#' + waterFX[key].value.getHexString(); inp.style.cssText = 'width:38px;height:22px;border:none;background:none;cursor:pointer;';
+      inp.oninput = () => waterFX[key].value.set(inp.value);
+      row.innerHTML = '<span style="opacity:.85">' + label + '</span>'; row.appendChild(inp); body.appendChild(row);
+    }
+    const btn = document.createElement('button'); btn.textContent = 'скопировать значения';
+    btn.style.cssText = 'margin-top:9px;width:100%;padding:6px;background:#23344a;color:#cfe3f5;border:1px solid #345;border-radius:6px;cursor:pointer;font:11px system-ui;';
+    btn.onclick = () => { const o = {}; for (const [k] of sliders) o[k] = +(+waterFX[k].value).toFixed(3); for (const [k] of rSliders) o[k] = +(+waterFX[k].value).toFixed(3); o.deep = '#' + waterFX.uColorDeep.value.getHexString(); o.shallow = '#' + waterFX.uColorShallow.value.getHexString(); o.foam = '#' + waterFX.uColorFoam.value.getHexString(); o.rDeep = '#' + waterFX.rColorDeep.value.getHexString(); o.rShallow = '#' + waterFX.rColorShallow.value.getHexString(); const s = JSON.stringify(o, null, 2); if (navigator.clipboard) navigator.clipboard.writeText(s); console.log('water params:\n' + s); btn.textContent = 'скопировано ✓'; setTimeout(() => btn.textContent = 'скопировать значения', 1200); };
+    body.appendChild(btn);
+    document.body.appendChild(wrap);
+  })();
+  // ── flow-шейдер ПРЯМО на материал речного тайла, маска по синим (водяным) пикселям атласа ──
+  //    Течёт только русло (по реальной геометрии канала); суша остаётся текстурой. Параметры/цвета — речные (waterFX.r*).
+  const _riverNoiseGLSL = `
+    vec3 mod289v3(vec3 x){ return x - floor(x*(1.0/289.0))*289.0; }
+    vec4 mod289v4(vec4 x){ return x - floor(x*(1.0/289.0))*289.0; }
+    vec4 permute4(vec4 x){ return mod289v4(((x*34.0)+10.0)*x); }
+    vec4 taylorInvSqrt4(vec4 r){ return 1.79284291400159 - 0.85373472095314*r; }
+    vec3 fade3(vec3 t){ return t*t*t*(t*(t*6.0-15.0)+10.0); }
+    float cnoise(vec3 P){
+      vec3 Pi0=floor(P), Pi1=Pi0+vec3(1.0); Pi0=mod289v3(Pi0); Pi1=mod289v3(Pi1);
+      vec3 Pf0=fract(P), Pf1=Pf0-vec3(1.0);
+      vec4 ix=vec4(Pi0.x,Pi1.x,Pi0.x,Pi1.x), iy=vec4(Pi0.yy,Pi1.yy);
+      vec4 iz0=Pi0.zzzz, iz1=Pi1.zzzz;
+      vec4 ixy=permute4(permute4(ix)+iy), ixy0=permute4(ixy+iz0), ixy1=permute4(ixy+iz1);
+      vec4 gx0=ixy0*(1.0/7.0), gy0=fract(floor(gx0)*(1.0/7.0))-0.5; gx0=fract(gx0);
+      vec4 gz0=vec4(0.5)-abs(gx0)-abs(gy0), sz0=step(gz0,vec4(0.0));
+      gx0-=sz0*(step(0.0,gx0)-0.5); gy0-=sz0*(step(0.0,gy0)-0.5);
+      vec4 gx1=ixy1*(1.0/7.0), gy1=fract(floor(gx1)*(1.0/7.0))-0.5; gx1=fract(gx1);
+      vec4 gz1=vec4(0.5)-abs(gx1)-abs(gy1), sz1=step(gz1,vec4(0.0));
+      gx1-=sz1*(step(0.0,gx1)-0.5); gy1-=sz1*(step(0.0,gy1)-0.5);
+      vec3 g000=vec3(gx0.x,gy0.x,gz0.x), g100=vec3(gx0.y,gy0.y,gz0.y), g010=vec3(gx0.z,gy0.z,gz0.z), g110=vec3(gx0.w,gy0.w,gz0.w),
+           g001=vec3(gx1.x,gy1.x,gz1.x), g101=vec3(gx1.y,gy1.y,gz1.y), g011=vec3(gx1.z,gy1.z,gz1.z), g111=vec3(gx1.w,gy1.w,gz1.w);
+      vec4 n0=taylorInvSqrt4(vec4(dot(g000,g000),dot(g010,g010),dot(g100,g100),dot(g110,g110)));
+      g000*=n0.x; g010*=n0.y; g100*=n0.z; g110*=n0.w;
+      vec4 n1=taylorInvSqrt4(vec4(dot(g001,g001),dot(g011,g011),dot(g101,g101),dot(g111,g111)));
+      g001*=n1.x; g011*=n1.y; g101*=n1.z; g111*=n1.w;
+      float v000=dot(g000,Pf0), v100=dot(g100,vec3(Pf1.x,Pf0.yz)), v010=dot(g010,vec3(Pf0.x,Pf1.y,Pf0.z)), v110=dot(g110,vec3(Pf1.xy,Pf0.z)),
+            v001=dot(g001,vec3(Pf0.xy,Pf1.z)), v101=dot(g101,vec3(Pf1.x,Pf0.y,Pf1.z)), v011=dot(g011,vec3(Pf0.x,Pf1.yz)), v111=dot(g111,Pf1);
+      vec3 fz=fade3(Pf0);
+      vec4 nz=mix(vec4(v000,v100,v010,v110),vec4(v001,v101,v011,v111),fz.z);
+      vec2 nyz=mix(nz.xy,nz.zw,fz.y);
+      return 2.2*mix(nyz.x,nyz.y,fz.x);
+    }
+    float streamNoise(vec2 uv, float t){ vec2 s=vec2(uv.x*3.0, uv.y*0.6); return cnoise(vec3(s,0.0))*0.5+0.5; }`;
+  const applyRiverFlow = (mat) => {
+    if (!mat || mat.userData.__riverFlow) return mat;
+    mat.userData.__riverFlow = true;
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, waterFX);
+      sh.vertexShader = 'attribute vec2 aFlowDir;\nvarying vec3 vWorldPosR;\nvarying vec2 vFlowDir;\n' + sh.vertexShader.replace('#include <begin_vertex>',
+        `#include <begin_vertex>
+        vFlowDir = aFlowDir;
+        #ifdef USE_INSTANCING
+          vWorldPosR = (modelMatrix * instanceMatrix * vec4(position,1.0)).xyz;
+        #else
+          vWorldPosR = (modelMatrix * vec4(position,1.0)).xyz;
+        #endif`);
+      sh.fragmentShader = `
+        uniform float uTime; uniform sampler2D tDudv;
+        uniform vec3 rColorDeep, rColorShallow;
+        uniform float rFlowSpeed, rFlowScale, rFlowStrength, rFlowContrast, rNoiseScale, rNoiseStrength;
+        varying vec3 vWorldPosR; varying vec2 vFlowDir;
+        ${_riverNoiseGLSL}
+      ` + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          float blueness = diffuseColor.b - max(diffuseColor.r, diffuseColor.g);
+          float waterMask = smoothstep(0.05, 0.2, blueness);              // синие пиксели атласа = вода
+          if (waterMask > 0.001) {
+            vec2 dir = length(vFlowDir) > 0.01 ? normalize(vFlowDir) : vec2(0.0, 1.0);   // downstream на тайл (константа → без сетки/квадратов)
+            vec2 perp = vec2(-dir.y, dir.x);
+            vec2 baseUv = vWorldPosR.xz * rFlowScale;
+            vec2 jit = texture2D(tDudv, baseUv * 0.25).rg * 2.0 - 1.0;
+            vec2 flowVec = mix(dir, jit, rFlowStrength);
+            vec2 fuv = baseUv - flowVec * (uTime * rFlowSpeed);
+            vec2 auv = vec2(dot(fuv, perp), dot(fuv, dir));             // координаты вдоль/поперёк русла → струи по течению
+            float streaks = pow(clamp(streamNoise(auv * rNoiseScale, uTime), 0.0, 1.0), rFlowContrast);
+            float broad = smoothstep(0.3, 0.7, cnoise(vec3(auv * rNoiseScale * 0.4, 0.0)) * 0.5 + 0.5);
+            float sm = clamp(broad * rNoiseStrength + streaks * (1.0 - rNoiseStrength), 0.0, 1.0);
+            vec3 flowCol = mix(rColorDeep, rColorShallow, sm);
+            diffuseColor.rgb = mix(diffuseColor.rgb, flowCol, waterMask);
+          }
+        }`);
+    };
+    mat.needsUpdate = true;
+    return mat;
+  };
+  // downstream-направление на каждый речной хекс (BFS от моря) → per-instance аттрибут aFlowDir (константа на тайл → без сетки)
+  const rivFlowDir = (() => {
+    const nb = (q, r) => (r & 1)
+      ? [[q+1,r],[q-1,r],[q+1,r-1],[q,r-1],[q+1,r+1],[q,r+1]]
+      : [[q+1,r],[q-1,r],[q,r-1],[q-1,r-1],[q,r+1],[q-1,r+1]];
+    const seaSet = new Set(); for (const c of sea) seaSet.add(ckey(c.q, c.r));
+    const rivSet = new Set(); for (const c of river) if (c.rivModel) rivSet.add(ckey(c.q, c.r));
+    const dist = new Map(), queue = [];
+    for (const k of rivSet) { const c = cellMap.get(k); if (!c) continue; for (const [nq, nr] of nb(c.q, c.r)) if (seaSet.has(ckey(nq, nr))) { dist.set(k, 1); queue.push(k); break; } }
+    for (let h = 0; h < queue.length; h++) { const k = queue[h], c = cellMap.get(k), d = dist.get(k); for (const [nq, nr] of nb(c.q, c.r)) { const nk = ckey(nq, nr); if (rivSet.has(nk) && !dist.has(nk)) { dist.set(nk, d + 1); queue.push(nk); } } }
+    const dir = new Map();
+    for (const k of rivSet) { const c = cellMap.get(k); if (!c) continue; const d = dist.has(k) ? dist.get(k) : 1e9; let dx = 0, dz = 0;
+      for (const [nq, nr] of nb(c.q, c.r)) { const nk = ckey(nq, nr), nc = cellMap.get(nk); if (!nc) continue; const nd = seaSet.has(nk) ? 0 : (dist.has(nk) ? dist.get(nk) : 1e9); if (nd < d) { dx += nc.wx - c.wx; dz += nc.wz - c.wz; } }
+      if (dx === 0 && dz === 0) for (const [nq, nr] of nb(c.q, c.r)) { const nc = cellMap.get(ckey(nq, nr)); if (nc && rivSet.has(ckey(nq, nr))) { dx = nc.wx - c.wx; dz = nc.wz - c.wz; break; } }
+      const len = Math.hypot(dx, dz); dir.set(k, len > 1e-4 ? [dx / len, dz / len] : [0, 1]); }
+    for (let p = 0; p < 3; p++) { const nx = new Map(); for (const [k, dd] of dir) { const c = cellMap.get(k); let sx = dd[0], sz = dd[1]; for (const [nq, nr] of nb(c.q, c.r)) { const nd = dir.get(ckey(nq, nr)); if (nd) { sx += nd[0]; sz += nd[1]; } } const l = Math.hypot(sx, sz); nx.set(k, l > 1e-4 ? [sx / l, sz / l] : dd); } for (const [k, dd] of nx) dir.set(k, dd); }
+    return dir;
+  })();
+  // речные тайлы hex_river_* — по модели; вода → flow-шейдер (маска по синему), течение по руслу (aFlowDir)
   { const byModel = new Map();
     for (const c of river) { if (!c.rivModel) continue; (byModel.get(c.rivModel) || byModel.set(c.rivModel, []).get(c.rivModel)).push(c); }
     for (const [model, list] of byModel) {
-      const m = new THREE.InstancedMesh(model.geo, model.mat, list.length);
+      const m = new THREE.InstancedMesh(model.geo, applyRiverFlow(model.mat), list.length);
       m.castShadow = true; m.receiveShadow = true;
+      const fa = new Float32Array(list.length * 2);
       for (let i = 0; i < list.length; i++) { const c = list[i], top = (c.elev || 0), sy = top - FLOOR;
         dummy.position.set(c.wx, top, c.wz); dummy.rotation.set(0, c.rivRy || 0, 0); dummy.scale.set(HEXS, sy, HEXS); dummy.updateMatrix();
-        m.setMatrixAt(i, dummy.matrix); c.rivMesh = m; c.rivInstance = i; }
+        m.setMatrixAt(i, dummy.matrix); c.rivMesh = m; c.rivInstance = i;
+        const d = rivFlowDir.get(ckey(c.q, c.r)) || [0, 1]; fa[i * 2] = d[0]; fa[i * 2 + 1] = d[1]; }
+      model.geo.setAttribute('aFlowDir', new THREE.InstancedBufferAttribute(fa, 2));
       m.instanceMatrix.needsUpdate = true; m.userData.cells = list; pickTargets.push(m); scene.add(m);
     }
   }
-  const applyTint = (on) => {
-    for (const mesh of landMeshes) {
-      const cells = mesh.userData.cells || [];
-      for (let i = 0; i < cells.length; i++) mesh.setColorAt(i, on ? cells[i].col : WHITE);
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    }
-  };
-
   // 7) ДЕКОР — рассадка
   const P = { treesA: [], treesB: [], tree1: [], mtnA: [], mtnB: [], mtnC: [], rockA: [], rockC: [], castle: [], home: [], tower: [] };
   const occupied = new Set(), key = (c) => c.q * 100000 + c.r;
@@ -1103,7 +1915,7 @@
     const isCapital = !seenCountry.has(country);
     seenCountry.add(country);
     c.cityName = name; c.cityCountry = country; c.citySize = size; c.cityIndex = i; c.capital = isCapital;
-    P.castle.push({ x: c.wx, y: c.elev || 0, z: c.wz, yaw: h2(i + 19, size + 3) * 0.5, s: isCapital ? 0.68 : 0.48 + size * 0.05 });
+    if (!usingGameMapTiles) P.castle.push({ x: c.wx, y: c.elev || 0, z: c.wz, yaw: h2(i + 19, size + 3) * 0.5, s: isCapital ? 0.68 : 0.48 + size * 0.05 });
     occupied.add(key(c)); castleCells.push(c); cityCellsByIndex[i] = c;
     if (isCapital) capCells.push(c);
   }
@@ -1113,6 +1925,10 @@
   const roadPaths = [];   // маршруты дорог по парам городов (для путей юнитов в игре): {a,b,pts:[[wx,wz]...]}
   const cellsByEditKey = new Map();
   for (const c of land.concat(river, sea)) cellsByEditKey.set(c.q + ',' + c.r, c);
+  const gameAuthoredTileKeys = new Set();
+  if (GAME_MAP && Array.isArray(GAME_MAP.tiles)) {
+    for (const t of GAME_MAP.tiles) if (t[7] || t[9]) gameAuthoredTileKeys.add(t[0] + ',' + t[1]);
+  }
   const cellByWorldKey = new Map();
   const worldCellKey = (wx, wz) => Math.round(wx * 1000) + ',' + Math.round(wz * 1000);
   for (const c of cellsByEditKey.values()) cellByWorldKey.set(worldCellKey(c.wx, c.wz), c);
@@ -1594,22 +2410,29 @@
       if (!c.roadModel) continue;
       const countryBiome = c.name && c.name !== 'Море' ? biomeForCountry(c.name) : '';
       const biome = (c.roadBiome && c.roadBiome !== 'default') ? c.roadBiome : ((countryBiome && countryBiome !== 'default') ? countryBiome : (c.biome || 'default'));
-      const model = biomeRoadModel(c.roadModel, biome);
-      let byBiome = byModel.get(c.roadModel);
-      if (!byBiome) { byBiome = new Map(); byModel.set(c.roadModel, byBiome); }
-      const key = biome;
-      const bucket = byBiome.get(key) || byBiome.set(key, { model, list: [] }).get(key);
+      const textureKey = biomeTextureKey(biome);
+      const model = roadBatchModel(c.roadModel, textureKey);
+      c.renderRoadBiome = biome;
+      let byTexture = byModel.get(c.roadModel);
+      if (!byTexture) { byTexture = new Map(); byModel.set(c.roadModel, byTexture); }
+      const bucket = byTexture.get(textureKey) || byTexture.set(textureKey, { model, list: [] }).get(textureKey);
       bucket.list.push(c);
     }
     const roadBuckets = [];
-    for (const byBiome of byModel.values()) for (const bucket of byBiome.values()) roadBuckets.push(bucket);
+    for (const byTexture of byModel.values()) for (const bucket of byTexture.values()) roadBuckets.push(bucket);
     for (const { model, list } of roadBuckets) {
       const m = new THREE.InstancedMesh(model.geo, model.mat, list.length);
       m.castShadow = false; m.receiveShadow = true;
-      for (let i = 0; i < list.length; i++) { const c = list[i], top = (c.elev || 0), sy = top - FLOOR;
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i], isSloped = c.roadModel === M.roadAHigh || c.roadModel === M.roadALow;
+        const top = (c.elev || 0) + (isSloped ? (Number(c.roadYOffset) || 0) : 0);
+        const scaleTop = isSloped ? (c.elev || 0) : top;
+        const sy = Math.max(0.05, scaleTop - FLOOR);
         dummy.position.set(c.wx, top, c.wz); dummy.rotation.set(0, c.roadRy || 0, 0); dummy.scale.set(HEXS, sy, HEXS); dummy.updateMatrix();
-        m.setMatrixAt(i, dummy.matrix); c.roadMesh = m; c.roadInstance = i; }
-      m.instanceMatrix.needsUpdate = true; m.userData.cells = list; pickTargets.push(m); scene.add(m);
+        m.setMatrixAt(i, dummy.matrix);
+        m.setColorAt(i, roadInstanceColor(c, c.renderRoadBiome || c.biome || 'default'));
+        c.roadMesh = m; c.roadInstance = i; }
+      m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; m.userData.cells = list; pickTargets.push(m); scene.add(m);
     }
   }
   if (seaRoadLinks.length) {
@@ -1757,29 +2580,60 @@
 
   // 7b) природа: скалы ТОЛЬКО по морскому берегу, горы в горных зонах, леса
   let mtn = 0, forest = 0, cliff = 0;
-  for (const c of land) {
-    if (occupied.has(key(c))) continue;
-    if (c.road || c.bridge) continue;
-    // ── морской берег: чистая трава, без скал/деревьев/мусора ──
-    if (c.coast) continue;
-    // ── горные зоны: без каменных пиков вообще — только зелёные лесистые возвышенности ──
-    // ── леса (в горных зонах гуще → зелёные склоны; возвышенности зеленее); скал на равнинах НЕТ ──
-    const fv = vnoise(c.q * 0.17, c.r * 0.16) + c.elev * 0.06 + (c.mnt ? 0.2 : 0);
-    if (fv > 0.58 && h2(c.q + 9, c.r + 9) < 0.37) { put(h2(c.q + 4, c.r + 8) < 0.6 ? P.treesA : P.treesB, c, 0.85, 0.35); forest++; }
-    else if (h2(c.q + 3, c.r + 7) < 0.02) put(P.tree1, c, 0.7, 0.6);
+  const seedGameMapDecor = () => {
+    if (!usingGameMapTiles || !GAME_MAP || !Array.isArray(GAME_MAP.decor)) return false;
+    for (const d of GAME_MAP.decor) {
+      if (!Array.isArray(d) || !M[d[0]]) continue;
+      const asset = d[0], c = nearestCellByWorld(d[1], d[2]);
+      const item = {
+        x: d[1], z: d[2], y: d[3] || 0,
+        yaw: d[4] || 0,
+        s: d[5] != null ? d[5] : 1,
+        biome: d[6] || 'default',
+        q: c ? c.q : null,
+        r: c ? c.r : null
+      };
+      (P[asset] || (P[asset] = [])).push(item);
+      if (asset.includes('tree')) forest++;
+      else if (asset.includes('mtn') || asset.includes('mountain') || asset.includes('hill')) mtn++;
+      else if (asset.includes('rock')) cliff++;
+    }
+    return true;
+  };
+  if (!seedGameMapDecor()) {
+    for (const c of land) {
+      if (occupied.has(key(c))) continue;
+      if (c.road || c.bridge) continue;
+      // ── морской берег: чистая трава, без скал/деревьев/мусора ──
+      if (c.coast) continue;
+      // ── горные зоны: без каменных пиков вообще — только зелёные лесистые возвышенности ──
+      // ── леса (в горных зонах гуще → зелёные склоны; возвышенности зеленее); скал на равнинах НЕТ ──
+      const fv = vnoise(c.q * 0.17, c.r * 0.16) + c.elev * 0.06 + (c.mnt ? 0.2 : 0);
+      if (fv > 0.58 && h2(c.q + 9, c.r + 9) < 0.37) { put(h2(c.q + 4, c.r + 8) < 0.6 ? P.treesA : P.treesB, c, 0.85, 0.35); forest++; }
+      else if (h2(c.q + 3, c.r + 7) < 0.02) put(P.tree1, c, 0.7, 0.6);
+    }
   }
 
   // 7c) инстансы декора
   const decor = new THREE.Group(); scene.add(decor);
   const generatedTreeAssets = new Set(['treesA', 'treesB', 'tree1']);
   const generatedTreeByKey = new Map();
+  const generatedDecorByKey = new Map();
   for (const asset of generatedTreeAssets) {
     for (const item of P[asset]) generatedTreeByKey.set(item.q + ',' + item.r, { asset, item });
+  }
+  for (const asset in P) {
+    for (const item of P[asset]) {
+      if (item.q == null || item.r == null) continue;
+      const k = item.q + ',' + item.r;
+      if (!generatedDecorByKey.has(k)) generatedDecorByKey.set(k, []);
+      generatedDecorByKey.get(k).push({ asset, item });
+    }
   }
   let decorCount = 0;
   for (const k in P) {
     const list = P[k]; if (!list.length) continue;
-    if (generatedTreeAssets.has(k)) { decorCount += list.length; continue; }
+    if (!usingGameMapTiles && generatedTreeAssets.has(k)) { decorCount += list.length; continue; }
     const byBiome = {};
     for (const item of list) (byBiome[item.biome || 'default'] || (byBiome[item.biome || 'default'] = [])).push(item);
     for (const biome in byBiome) {
@@ -1787,7 +2641,7 @@
       const model = biomeDecorModel(M[k], biome, k);
       const m = new THREE.InstancedMesh(model.geo, model.mat, biomeList.length);
       m.castShadow = true; m.receiveShadow = true;
-      for (let i = 0; i < biomeList.length; i++) { const c = biomeList[i]; const s = c.s * HEXS; dummy.position.set(c.x, c.y || 0, c.z); dummy.rotation.set(0, c.yaw, 0); dummy.scale.set(s, s, s); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); }
+      for (let i = 0; i < biomeList.length; i++) { const c = biomeList[i]; c.decorMesh = m; c.decorInstance = i; const s = c.s * HEXS; dummy.position.set(c.x, c.y || 0, c.z); dummy.rotation.set(0, c.yaw, 0); dummy.scale.set(s, s, s); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); }
       m.instanceMatrix.needsUpdate = true; decor.add(m); decorCount += biomeList.length;
     }
   }
@@ -1819,6 +2673,11 @@
     };
     // ── ручные правки рельефа (localStorage editState.edits) запекаются В карту ──
     const tEdits = (typeof editState !== 'undefined' && editState.edits) ? editState.edits : new Map();
+    const manualTileKeys = new Set(tEdits.keys());
+    // незатронутые клетки печатаем 1:1 из загруженной игровой карты → re-bake идемпотентен
+    // (иначе теряются coast-оверрайды/биомы при пере-запекании). Источник правды = hex-map.json.
+    const origByQR = (typeof GAME_MAP !== 'undefined' && GAME_MAP && Array.isArray(GAME_MAP.tiles))
+      ? (() => { const mm = new Map(); for (const t of GAME_MAP.tiles) mm.set(ek(t[0], t[1]), t); return mm; })() : null;
     const biomeOfCell = (c) => {
       const e = tEdits.get(ek(c.q, c.r));
       if (e && e.asset === 'countryLand') return e.biome || (typeof biomeForCountry === 'function' ? biomeForCountry(e.country) : (c.biome || 'default'));
@@ -1839,7 +2698,9 @@
         if (e.asset === 'countryLand') {
           const country = e.country || c.name || '';
           const biome = e.biome || (typeof biomeForCountry === 'function' ? biomeForCountry(country) : (c.biome || 'default'));
-          const col = e.col != null ? e.col : (typeof countryTileHex === 'function' ? countryTileHex(country) : colOf(c));
+          const col = typeof biomeTileHex === 'function'
+            ? biomeTileHex(biome, country)
+            : (typeof countryTileHex === 'function' ? countryTileHex(country) : colOf(c));
           const elev = c.water ? Math.max(c.elev || 0, 0.52) : (c.elev || 0);
           tiles.push([c.q, c.r, 0, r3(elev + h), col, '', 0, '', 0, '', 0, biome || 'default']);
           return;
@@ -1854,7 +2715,8 @@
         if (e.asset.startsWith('road')) {
           const elev = c.water ? Math.max(c.elev || 0, 0.52) : (c.elev || 0);
           const biome = effectiveBiomeForCell(c, e);
-          tiles.push([c.q, c.r, 0, r3(elev + h), effectiveColorForCell(c, e), '', 0, e.asset, r4(deg2rad(e.rot)), '', 0, biome || 'default']);
+          const slopeOffset = isSlopedTileAsset(e.asset) ? h : 0;
+          tiles.push([c.q, c.r, 0, r3(elev + (slopeOffset ? 0 : h)), effectiveColorForCell(c, e), '', 0, e.asset, r4(deg2rad(e.rot)), '', 0, biome || 'default', r3(slopeOffset)]);
           return;
         }
         if (e.asset === 'grass') {
@@ -1867,12 +2729,14 @@
         if (TILE_RE.test(e.asset)) {
           const elev = c.water && !isWaterTileAsset(e.asset) ? Math.max(c.elev || 0, 0.52) : (c.elev || 0);
           const biome = effectiveBiomeForCell(c, e);
-          tiles.push([c.q, c.r, 0, r3(elev + h), effectiveColorForCell(c, e), '', 0, '', 0, e.asset, r4(deg2rad(e.rot)), biome || 'default']);
+          const slopeOffset = isSlopedTileAsset(e.asset) ? h : 0;
+          tiles.push([c.q, c.r, 0, r3(elev + (slopeOffset ? 0 : h)), effectiveColorForCell(c, e), '', 0, '', 0, e.asset, r4(deg2rad(e.rot)), biome || 'default', r3(slopeOffset)]);
           return;
         }
         decor.push([e.asset, r3(c.wx), r3(c.wz), r3((c.elev || 0) + h), r4(deg2rad(e.rot)), r3(1), biomeOfCell(c)]);  // здание/природа поверх + база остаётся
       }
-      tiles.push(baseRow(c, water));
+      const ot = origByQR && origByQR.get(ek(c.q, c.r));    // незатронутая клетка → исходный тайл 1:1 (без потери coast/biome)
+      tiles.push(ot ? ot.slice() : baseRow(c, water));
     };
     for (const c of land) pushCell(c, false);
     for (const c of river) pushCell(c, true);
@@ -1909,15 +2773,29 @@
     }
     // декор: генерённый (БЕЗ замков на городах — их рисует игра), минус удалённый, плюс ручной (localStorage)
     const removed = (typeof decorEditState !== 'undefined' && decorEditState.removedGenerated) ? decorEditState.removedGenerated : new Set();
+    const editedDecor = (typeof decorEditState !== 'undefined' && decorEditState.edits) ? decorEditState.edits : new Map();
     for (const k in P) {
       if (k === 'castle') continue;                                                          // ← дубль с городами игры убран
-      for (const it of P[k]) { if (it.q != null && removed.has(ek(it.q, it.r))) continue; decor.push([k, r3(it.x), r3(it.z), r3(it.y), r4(it.yaw), r3(it.s != null ? it.s : 1), it.biome || 'default']); }
+      for (const it of P[k]) {
+        if (it.q != null) {
+          const dk = ek(it.q, it.r);
+          if (removed.has(dk) || editedDecor.has(dk)) continue;
+        }
+        decor.push([k, r3(it.x), r3(it.z), r3(it.y), r4(it.yaw), r3(it.s != null ? it.s : 1), it.biome || 'default']);
+      }
     }
     if (typeof decorEditState !== 'undefined' && decorEditState.edits) for (const d of decorEditState.edits.values()) {
       if (d && d.asset && String(d.asset).startsWith('bridge')) continue;
       const c = (typeof findCellByQR === 'function') ? findCellByQR(d.q, d.r) : null; if (!c) continue;
       const h = (typeof normalizeDecorHeight === 'function' ? normalizeDecorHeight(d.height) : (d.height || 0));
       decor.push([d.asset, r3(c.wx), r3(c.wz), r3((c.elev || 0) + h), r4(deg2rad(d.rot)), r3(d.scale != null ? d.scale : 1), biomeOfCell(c)]);
+    }
+    // дедуп декора: один и тот же ассет в одной точке (генерённый + ручной наложились) → один экземпляр.
+    // Без этого половина деревьев дублируется (z-fighting, лишняя геометрия). Сохраняет порядок.
+    if (decor.length) {
+      const seenDecor = new Set(); let w = 0;
+      for (let i = 0; i < decor.length; i++) { const d = decor[i], k = d[0] + '@' + d[1] + ',' + d[2]; if (seenDecor.has(k)) continue; seenDecor.add(k); decor[w++] = d; }
+      decor.length = w;
     }
     const hasBridgeTile = (c) => {
       if (!c) return false;
@@ -2280,22 +3158,181 @@
       const biome = typeof biomeForCountry === 'function' ? biomeForCountry(country) : '';
       return isKnownBiome(biome) ? biome : '';
     };
+    const tileNeighborQR = (q, r) => (r & 1)
+      ? [[q + 1, r], [q - 1, r], [q + 1, r - 1], [q, r - 1], [q + 1, r + 1], [q, r + 1]]
+      : [[q + 1, r], [q - 1, r], [q, r - 1], [q - 1, r - 1], [q, r + 1], [q - 1, r + 1]];
+    const tileByQR = new Map(tiles.map(t => [ek(t[0], t[1]), t]));
+    const isManualTileRow = (t) => !!(t && manualTileKeys.has(ek(t[0], t[1])));
+    const isRoadTileRow = (t) => !!(t && !t[2] && String(t[7] || '').startsWith('road'));
+    const snapTileElevation = (t) => {
+      if (!t || t[2] || isManualTileRow(t)) return;
+      t[3] = r3(snapRoadTerrainLevel(t[3]));
+    };
+    const nearestRoadTileLevel = (q, r) => {
+      const start = tileByQR.get(ek(q, r));
+      if (!start) return 0;
+      if (isRoadTileRow(start)) return r3(snapRoadTerrainLevel(start[3]));
+      const queue = [{ q, r, d: 0 }];
+      const seen = new Set([ek(q, r)]);
+      let best = null;
+      for (let qi = 0; qi < queue.length; qi++) {
+        const cur = queue[qi];
+        const t = tileByQR.get(ek(cur.q, cur.r));
+        if (isRoadTileRow(t)) {
+          const dist = (cur.q - q) ** 2 + (cur.r - r) ** 2;
+          if (!best || cur.d < best.d || (cur.d === best.d && dist < best.dist)) {
+            best = { t, d: cur.d, dist };
+          }
+        }
+        if (cur.d >= 6) continue;
+        for (const [nq, nr] of tileNeighborQR(cur.q, cur.r)) {
+          const nk = ek(nq, nr);
+          if (seen.has(nk)) continue;
+          const nt = tileByQR.get(nk);
+          if (!nt || nt[2] || nt[5]) continue;
+          seen.add(nk);
+          queue.push({ q: nq, r: nr, d: cur.d + 1 });
+        }
+      }
+      return r3(snapRoadTerrainLevel((best && best.t ? best.t : start)[3]));
+    };
+    const normalizeRoadAndCityTileLevels = () => {
+      for (const t of tiles) {
+        if (isRoadTileRow(t)) snapTileElevation(t);
+      }
+      const isRoadTransitionRow = (t) => isRoadTileRow(t) && t[7] === 'roadALow';
+      const seenRoadRows = new Set();
+      for (const start of tiles) {
+        if (!isRoadTileRow(start) || isRoadTransitionRow(start) || isManualTileRow(start)) continue;
+        const startKey = ek(start[0], start[1]);
+        if (seenRoadRows.has(startKey)) continue;
+        const queue = [start], comp = [];
+        seenRoadRows.add(startKey);
+        for (let qi = 0; qi < queue.length; qi++) {
+          const cur = queue[qi];
+          comp.push(cur);
+          for (const [q, r] of tileNeighborQR(cur[0], cur[1])) {
+            const n = tileByQR.get(ek(q, r));
+            if (!isRoadTileRow(n) || isRoadTransitionRow(n) || isManualTileRow(n)) continue;
+            const nk = ek(q, r);
+            if (seenRoadRows.has(nk)) continue;
+            seenRoadRows.add(nk);
+            queue.push(n);
+          }
+        }
+        if (!comp.length) continue;
+        const counts = new Map();
+        for (const t of comp) counts.set(t[3], (counts.get(t[3]) || 0) + 1);
+        const level = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+        for (const t of comp) if (!isManualTileRow(t)) t[3] = level;
+      }
+      const cityHaloKeys = new Map();
+      for (const cc of cityCellsByIndex) {
+        if (!cc) continue;
+        const level = nearestRoadTileLevel(cc.q, cc.r);
+        cityHaloKeys.set(ek(cc.q, cc.r), level);
+        for (const n of neighbors(cc.q, cc.r)) if (n) cityHaloKeys.set(ek(n.q, n.r), level);
+      }
+      for (const [k, level] of cityHaloKeys) {
+        const t = tileByQR.get(k);
+        if (!t || t[2] || t[5] || isManualTileRow(t)) continue;
+        t[3] = level;
+      }
+      for (const t of tiles) {
+        if (!isRoadTileRow(t)) continue;
+        if (isManualTileRow(t)) continue;
+        if (t[7] === 'roadAHigh') t[7] = 'roadALow';
+      }
+    };
     const normalizeTileBiome = (t) => {
-      if (!t || t[2]) return;
-      if (isKnownBiome(t[11])) return;
+      if (!t || t[2] || isManualTileRow(t)) return;
       const country = nearestCityCountryByQR(t[0], t[1]);
-      const biome = biomeForNearestCountry(country);
+      const biome = isKnownBiome(t[11]) ? t[11] : biomeForNearestCountry(country);
       if (!biome) return;
       t[4] = typeof biomeTileHex === 'function' ? biomeTileHex(biome, country) : t[4];
       t[11] = biome;
     };
+    normalizeRoadAndCityTileLevels();
     for (const t of tiles) normalizeTileBiome(t);
+    // ── убираем «осиротевшие» coast-тайлы: песчаный берег посреди суши без воды/реки рядом → обычная трава.
+    //    Игра и так подменяет coast→траву (hex-world), а редактор рисует песок → давний рассинхрон. Чиним в источнике.
+    {
+      const waterSet = new Set(), rivSet = new Set();
+      for (const t of tiles) { if (t[2]) waterSet.add(t[0] + ',' + t[1]); if (t[5]) rivSet.add(t[0] + ',' + t[1]); }
+      for (const t of tiles) {
+        if (!t[9] || !String(t[9]).startsWith('coast')) continue;                 // только coast-оверрайды
+        if (isManualTileRow(t)) continue;
+        const hasWater = tileNeighborQR(t[0], t[1]).some(([q, r]) => waterSet.has(q + ',' + r) || rivSet.has(q + ',' + r));
+        if (!hasWater) { t[9] = ''; t[10] = 0; }                                   // нет воды рядом → песок не нужен, делаем траву
+      }
+    }
     for (const d of decor) {
       if (!d || isKnownBiome(d[6])) continue;
       const biome = biomeForNearestCountry(nearestCityCountryByWorld(d[1], d[2]));
       if (biome) d[6] = biome;
     }
     return { meta: { B, worldW, worldH, R, HEXS, FLOOR, lngSpan, latSpan }, names: NAMES, tiles, bridges, decor, roads };
+  };
+  const summarizeHexMap = (map) => ({
+    tiles: Array.isArray(map?.tiles) ? map.tiles.length : 0,
+    roadTiles: Array.isArray(map?.tiles) ? map.tiles.filter(t => t && t[7]).length : 0,
+    tileOverrides: Array.isArray(map?.tiles) ? map.tiles.filter(t => t && t[9]).length : 0,
+    bridges: Array.isArray(map?.bridges) ? map.bridges.length : 0,
+    decor: Array.isArray(map?.decor) ? map.decor.length : 0,
+  });
+  const saveLocalHexMapSnapshot = (map, reason = 'manual-save') => {
+    const latestKey = 'hexEuropeMapBackup:latest:v1';
+    const previousKey = 'hexEuropeMapBackup:previous:v1';
+    const metaKey = 'hexEuropeMapBackup:meta:v1';
+    const payload = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      reason,
+      summary: summarizeHexMap(map),
+      map,
+    };
+    const text = JSON.stringify(payload);
+    const oldLatest = localStorage.getItem(latestKey);
+    try {
+      if (oldLatest) localStorage.setItem(previousKey, oldLatest);
+      localStorage.setItem(latestKey, text);
+    } catch (e) {
+      try {
+        localStorage.removeItem(previousKey);
+        localStorage.setItem(latestKey, text);
+      } catch (e2) {
+        console.error('Local map backup failed:', e2);
+        throw e2;
+      }
+    }
+    localStorage.setItem(metaKey, JSON.stringify({
+      latest: { savedAt: payload.savedAt, reason, ...payload.summary },
+      previous: oldLatest ? (() => {
+        try { const p = JSON.parse(oldLatest); return { savedAt: p.savedAt, reason: p.reason, ...(p.summary || {}) }; }
+        catch (_) { return null; }
+      })() : null,
+    }));
+    return payload.summary;
+  };
+  window.getLocalHexMapBackup = function getLocalHexMapBackup(which = 'latest') {
+    const key = which === 'previous' ? 'hexEuropeMapBackup:previous:v1' : 'hexEuropeMapBackup:latest:v1';
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  };
+  window.getLocalHexMapBackupMeta = function getLocalHexMapBackupMeta() {
+    const raw = localStorage.getItem('hexEuropeMapBackup:meta:v1');
+    return raw ? JSON.parse(raw) : null;
+  };
+  window.downloadLocalHexMapBackup = function downloadLocalHexMapBackup(which = 'latest') {
+    const backup = window.getLocalHexMapBackup(which);
+    if (!backup || !backup.map) return null;
+    const blob = new Blob([JSON.stringify(backup.map)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hex-map-local-backup-' + which + '-' + (backup.savedAt || '').replace(/[:.]/g, '-') + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    return backup.summary || summarizeHexMap(backup.map);
   };
   // «Сохранить в игру»: печёт карту (включая ручные правки) и пишет hex-map.json через dev-сервер
   window.saveHexMapToGame = async function saveHexMapToGame() {
@@ -2305,7 +3342,10 @@
       if (status) status.textContent = 'сохраняю...';
       if (btn) btn.disabled = true;
       if (typeof saveManualEdits === 'function') saveManualEdits();
-      const res = await fetch('/api/save-hex-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(window.bakeHexMap()) });
+      const map = window.bakeHexMap();
+      const localSummary = saveLocalHexMapSnapshot(map, 'before-save-hex-map');
+      if (status) status.textContent = 'локальный бэкап: ' + localSummary.tiles + ' клеток · сохраняю...';
+      const res = await fetch('/api/save-hex-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(map) });
       const j = await res.json();
       const text = j.ok ? ('✓ карта сохранена: ' + j.tiles + ' клеток, ' + (j.roads || 0) + ' дорог, ' + Math.round(j.bytes / 1024) + 'КБ') : ('✗ ' + (j.error || 'ошибка'));
       const el = $('edMeta'); if (el) el.textContent = text;
@@ -2320,10 +3360,42 @@
     }
   };
   window.downloadHexMap = function downloadHexMap() {
-    const blob = new Blob([JSON.stringify(window.bakeHexMap())], { type: 'application/json' });
+    const map = window.bakeHexMap();
+    saveLocalHexMapSnapshot(map, 'download-hex-map');
+    const blob = new Blob([JSON.stringify(map)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'hex-map.json'; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
+  // ── СИНХРОН С ИГРОЙ: полная перепаковка hex-map.json тяжёлая, поэтому не запускаем её после
+  //    каждого клика в редакторе. Быстрые правки сохраняются как editor edits, а в игру уходят
+  //    по кнопке «сохранить карту».
+  let _gameSyncTimer = null, _gameSyncing = false, _gameSyncQueued = false, _gameSyncDirty = false;
+  async function runGameSync() {
+    if (_gameSyncing) { _gameSyncQueued = true; return; }
+    _gameSyncing = true; _gameSyncDirty = false;
+    const el = $('edMeta');
+    try {
+      const map = window.bakeHexMap();
+      saveLocalHexMapSnapshot(map, 'game-sync');
+      const res = await fetch('/api/save-hex-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(map) });
+      const j = await res.json();
+      if (el) el.textContent = j.ok ? ('⟳ синхронизировано с игрой · ' + j.tiles + ' клеток, ' + (j.roads || 0) + ' дорог') : ('✗ синк: ' + (j.error || 'ошибка'));
+    } catch (e) {
+      if (el) el.textContent = '✗ синк с игрой не удался (нет dev-сервера): ' + (e.message || e);
+    } finally {
+      _gameSyncing = false;
+      if (_gameSyncQueued || _gameSyncDirty) { _gameSyncQueued = false; scheduleGameSync(); }
+    }
+  }
+  function scheduleGameSync() {
+    if (typeof usingGameMapTiles !== 'undefined' && !usingGameMapTiles) return;   // авто-синк только в режиме игровой карты
+    _gameSyncDirty = true;
+    const status = $('mapSaveStatus');
+    if (status) status.textContent = 'есть правки · нажми “сохранить карту”';
+    const meta = $('edMeta');
+    if (meta && editState.on) meta.textContent = 'есть правки · нажми “сохранить карту”, чтобы обновить игру';
+  }
+  window.scheduleGameSync = scheduleGameSync;
 
   // 8) камера — кадрируем по суше (Европа на весь экран, без лишнего моря)
   let lx0 = 1e9, lx1 = -1e9, lz0 = 1e9, lz1 = -1e9;
@@ -2453,7 +3525,6 @@
     ['coastDW', 'coast D waterless'],
     ['coastEW', 'coast E waterless'],
     ['roadA', 'road A straight'],
-    ['roadAHigh', 'road A slope high'],
     ['roadALow', 'road A slope low'],
     ['roadB', 'road B turn'],
     ['roadC', 'road C turn'],
@@ -2590,14 +3661,24 @@
     decorDefaultScale[d.key] = d.scale;
     decorDefaultHeight[d.key] = d.key.startsWith('nature_cloud_') ? 2.5 : d.height;
   }
-  const decorEditState = { on: false, asset: 'treesA', rot: 0, scale: 1, height: 0, offsetX: 0, offsetZ: 0, edits: new Map(), meshes: new Map(), hiddenBridges: new Map(), removedGenerated: new Set(), selected: null, selectedKey: null };
+  const decorEditState = { on: false, asset: 'treesA', rot: 0, scale: 1, height: 0, offsetX: 0, offsetZ: 0, edits: new Map(), meshes: new Map(), hiddenBridges: new Map(), hiddenGenerated: new Map(), removedGenerated: new Set(), selected: null, selectedKey: null };
   const cityEditState = { on: false, selected: 0, mode: 'move', dirty: false, addDraft: null };
   const deletePickMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
   const editKey = (q, r) => q + ',' + r;
   const normalizeEditHeight = (value) => Math.max(-3, Math.min(6, Math.round((Number(value) || 0) * 4) / 4));
+  const formatEditHeight = (value) => String(Math.round((Number(value) || 0) * 100) / 100);
+  const selectedBaseHeight = () => editState.selected ? (Number(editState.selected.elev) || 0) : 0;
+  const selectedFinalHeight = () => selectedBaseHeight() + (Number(editState.height) || 0);
+  const selectedHeightInputValue = () => {
+    const current = editState.selectedKey ? editState.edits.get(editState.selectedKey) : null;
+    const asset = (current && current.asset) || editState.asset;
+    return isSlopedTileAsset(asset) ? (Number(editState.height) || 0) : selectedFinalHeight();
+  };
+  const syncEditHeightInput = () => { $('edHeight').value = formatEditHeight(selectedHeightInputValue()); };
+  const offsetForFinalHeight = (value) => normalizeEditHeight((Number(value) || 0) - selectedBaseHeight());
   const editCellTop = (c, asset, height = 0) => {
     const offset = normalizeEditHeight(height);
-    const base = c.water ? (c.elev || 0) - 0.02 : (c.elev || 0) + 0.055;
+    const base = c.water ? (c.elev || 0) - 0.02 : (c.elev || 0);
     if (asset === 'water') return (c.elev || 0) - 0.18 + offset;
     if (asset.startsWith('riv')) return (c.elev || 0) + 0.02 + offset;
     if (asset.startsWith('bridge')) return (c.bridgeBankY || c.elev || 0) + 0.08 + offset;
@@ -2607,30 +3688,43 @@
   const setEditMeta = (txt) => { const el = $('edMeta'); if (el) el.textContent = txt; };
   const updateEditCount = () => { const el = $('edCount'); if (el) el.textContent = String(editState.edits.size); };
   const projectSaveQueues = { hex: Promise.resolve(), decor: Promise.resolve() };
+  const projectSaveTimers = { hex: null, decor: null };
+  const projectSaveLatest = { hex: null, decor: null };
   const saveProjectPayload = (kind, payload) => {
-    const endpoint = kind === 'hex' ? '/api/save-hex-europe-edits' : '/api/save-hex-europe-decor';
-    projectSaveQueues[kind] = projectSaveQueues[kind]
-      .catch(() => {})
-      .then(async () => {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload),
+    projectSaveLatest[kind] = payload;
+    clearTimeout(projectSaveTimers[kind]);
+    projectSaveTimers[kind] = setTimeout(() => {
+      const endpoint = kind === 'hex' ? '/api/save-hex-europe-edits' : '/api/save-hex-europe-decor';
+      const latest = projectSaveLatest[kind];
+      projectSaveQueues[kind] = projectSaveQueues[kind]
+        .catch(() => {})
+        .then(async () => {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(latest),
+          });
+          if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || ('HTTP ' + res.status));
+          return res.json();
+        })
+        .catch(err => {
+          const setMeta = kind === 'hex' ? setEditMeta : setDecorMeta;
+          setMeta('ошибка сохранения в проект: ' + err.message);
+          console.error('Project autosave failed:', kind, err);
         });
-        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || ('HTTP ' + res.status));
-        return res.json();
-      })
-      .catch(err => {
-        const setMeta = kind === 'hex' ? setEditMeta : setDecorMeta;
-        setMeta('ошибка сохранения в проект: ' + err.message);
-        console.error('Project autosave failed:', kind, err);
-      });
+    }, 900);
     return projectSaveQueues[kind];
   };
   const persistManualEdits = () => {
     const payload = { version: 1, updatedAt: new Date().toISOString(), edits: [...editState.edits.values()] };
-    localStorage.setItem(EDIT_KEY, JSON.stringify(payload));
+    try {
+      localStorage.setItem(EDIT_KEY, JSON.stringify(payload));
+    } catch (err) {
+      setEditMeta('ошибка localStorage: ' + (err.message || err));
+      console.error('Manual hex localStorage save failed:', err);
+    }
     saveProjectPayload('hex', payload);
+    scheduleGameSync();                  // правка → пометить карту грязной; полная перепаковка только по кнопке сохранения
     return payload;
   };
   const editHeightForCell = (c) => {
@@ -2657,6 +3751,7 @@
   const collectVisualEntries = (c) => {
     const out = [];
     if (c.tileMesh && c.tileInstance != null) out.push([c.tileMesh, c.tileInstance]);
+    if (c.tileOverrideMesh && c.tileOverrideInstance != null) out.push([c.tileOverrideMesh, c.tileOverrideInstance]);
     if (c.rivMesh && c.rivInstance != null) out.push([c.rivMesh, c.rivInstance]);
     if (c.roadMesh && c.roadInstance != null) out.push([c.roadMesh, c.roadInstance]);
     if (c.bridgeMesh && c.bridgeInstance != null) out.push([c.bridgeMesh, c.bridgeInstance]);
@@ -2715,17 +3810,50 @@
     hidden.mesh.instanceMatrix.needsUpdate = true;
     decorEditState.hiddenBridges.delete(k);
   };
+  const hideGeneratedDecorVisuals = (k) => {
+    if (decorEditState.hiddenGenerated.has(k)) return;
+    const entries = [];
+    for (const entry of generatedDecorByKey.get(k) || []) {
+      const item = entry.item;
+      if (!item || !item.decorMesh || item.decorInstance == null) continue;
+      const matrix = new THREE.Matrix4();
+      item.decorMesh.getMatrixAt(item.decorInstance, matrix);
+      dummy.position.set(item.x || 0, FLOOR - 20, item.z || 0);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(0.001, 0.001, 0.001);
+      dummy.updateMatrix();
+      item.decorMesh.setMatrixAt(item.decorInstance, dummy.matrix);
+      item.decorMesh.instanceMatrix.needsUpdate = true;
+      entries.push({ mesh: item.decorMesh, index: item.decorInstance, matrix });
+    }
+    if (entries.length) decorEditState.hiddenGenerated.set(k, entries);
+  };
+  const restoreGeneratedDecorVisuals = (k) => {
+    const entries = decorEditState.hiddenGenerated.get(k);
+    if (!entries) return;
+    for (const e of entries) {
+      e.mesh.setMatrixAt(e.index, e.matrix);
+      e.mesh.instanceMatrix.needsUpdate = true;
+    }
+    decorEditState.hiddenGenerated.delete(k);
+  };
   const modelKeyOf = (model) => {
     for (const k in M) if (M[k] === model) return k;
     return null;
   };
   const baseAssetForCell = (c) => {
     if (!c) return 'grass';
+    if (c.tileModel && c.tileKey) return c.tileKey;
     if (c.roadModel) return modelKeyOf(c.roadModel) || 'roadA';
     if (c.rivModel) return modelKeyOf(c.rivModel) || 'rivA';
     if (c.water) return 'water';
     return 'grass';
   };
+  function isSlopedTileAsset(asset) {
+    return asset === 'grassSlopeHigh' || asset === 'grassSlopeLow'
+    || asset === 'roadAHigh' || asset === 'roadALow'
+    || /sloped/i.test(String(asset || ''));
+  }
   const isLandTileAsset = (asset) => asset === 'grass' || asset === 'grassBottom' || asset === 'grassSlopeHigh' || asset === 'grassSlopeLow'
     || String(asset).startsWith('coast') || String(asset).startsWith('road');
   const isWaterTileAsset = (asset) => asset === 'water' || String(asset).startsWith('riv');
@@ -2755,6 +3883,15 @@
     const fallback = BIOME_COUNTRY_FALLBACK[biome || 'default'] || 'Нейтральные';
     return cityCountries.includes(fallback) ? fallback : (cityCountries[0] || fallback);
   };
+  const ensureBiomeOption = (biome) => {
+    const el = $('edBiome');
+    if (!el || !biome) return;
+    if ([...el.options].some(opt => opt.value === biome)) return;
+    const opt = document.createElement('option');
+    opt.value = biome;
+    opt.textContent = biome;
+    el.appendChild(opt);
+  };
   const biomeForCell = (c, existing = null) => {
     if (existing && existing.biome) return existing.biome;
     if (existing && existing.country) return biomeForCountry(existing.country);
@@ -2764,7 +3901,8 @@
     const el = $('edBiome');
     if (!el) return;
     const value = biome || 'default';
-    el.value = BIOME_OPTIONS.some(([key]) => key === value) ? value : 'default';
+    ensureBiomeOption(value);
+    el.value = value;
     editState.biome = el.value;
   };
   const landEditContext = (c, incoming = {}) => {
@@ -2774,7 +3912,7 @@
     const existingCountry = existing && existing.country;
     const baseCountry = countryForCell(c, existing);
     const country = incoming.country || existingCountry || (baseCountry && biomeForCountry(baseCountry) === biome ? baseCountry : countryForBiome(biome));
-    const color = incoming.col != null ? incoming.col : biomeTileHex(biome, country);
+    const color = biomeTileHex(biome, country);
     return { country, biome, col: color };
   };
   const displayInfoForCell = (c) => {
@@ -2803,11 +3941,11 @@
       const biome = ctx.biome;
       const baseModel = biomeModel(M.grass, biome);
       const mat = baseModel.mat.clone();
-      mat.color = biome && biome !== 'default' ? (BIOME_TINT[biome] || BIOME_TINT.default).clone() : countryTileColor(country);
+      mat.color = renderBiomeColor(biome, biome && biome !== 'default' ? (BIOME_TINT[biome] || BIOME_TINT.default).clone() : countryTileColor(country));
       const mesh = new THREE.Mesh(baseModel.geo, mat);
       mesh.castShadow = true; mesh.receiveShadow = true;
       const elev = c.water ? Math.max(c.elev || 0, 0.52) : (c.elev || 0);
-      const top = elev + 0.055 + height;
+      const top = elev + height;
       const sy = Math.max(0.05, top - FLOOR);
       mesh.position.set(c.wx, top, c.wz);
       mesh.scale.set(HEXS, sy, HEXS);
@@ -2869,11 +4007,17 @@
       : (/^(grass$|grassBottom|grassSlope|coast)/.test(edit.asset) ? biomeTileModel(model, renderBiome, edit.asset) : model);
     const mesh = new THREE.Mesh(renderModel.geo, renderModel.mat);
     mesh.castShadow = true; mesh.receiveShadow = true;
+    if (landCtx && mesh.material && mesh.material.color) {
+      mesh.material = mesh.material.clone();
+      mesh.material.color = renderBiomeColor(landCtx.biome, mesh.material.color.clone());
+    }
     const baseElev = landCtx && c.water ? Math.max(c.elev || 0, 0.52) : (c.elev || 0);
+    const isSloped = isSlopedTileAsset(edit.asset);
     const top = landCtx
-      ? baseElev + 0.055 + height
+      ? baseElev + height
       : editCellTop(c, edit.asset, height);
-    const sy = Math.max(0.05, top - FLOOR);
+    const scaleTop = isSloped ? baseElev : top;
+    const sy = Math.max(0.05, scaleTop - FLOOR);
     mesh.position.set(c.wx, top, c.wz);
     mesh.rotation.set(0, (edit.rot || 0) * Math.PI / 180, 0);
     const s = editScaleFor(edit.asset);
@@ -2931,7 +4075,9 @@
   const loadManualEdits = async () => {
     try {
       let saved = { edits: [] };
-      try { saved = await fetchJson('data/hex-europe-manual-edits.json'); } catch (_) {}
+      if (!usingGameMapTiles) {
+        try { saved = await fetchJson('data/hex-europe-manual-edits.json'); } catch (_) {}
+      }
       let local = null;
       const raw = localStorage.getItem(EDIT_KEY);
       if (raw) {
@@ -2941,8 +4087,10 @@
       const localTime = local ? (Date.parse(local.updatedAt || local.savedAt || '') || 0) : 0;
       const payload = local && localTime > savedTime ? local : saved;
       for (const edit of payload.edits || []) applyManualEdit(edit, true);
-      if (payload === saved) localStorage.setItem(EDIT_KEY, JSON.stringify(saved));
-      setEditMeta('загружено: ' + editState.edits.size + ' правок');
+      if (payload === saved && !usingGameMapTiles) {
+        try { localStorage.setItem(EDIT_KEY, JSON.stringify(saved)); } catch (_) {}
+      }
+      setEditMeta((usingGameMapTiles ? 'hex-map: ' : '') + 'загружено: ' + editState.edits.size + ' правок');
       updateEditCount();
     } catch (e) { setEditMeta('ошибка загрузки правок: ' + e.message); }
   };
@@ -3059,6 +4207,65 @@
       label.classList.toggle('selected', i === cityEditState.selected);
     }
   };
+  const heightLabelsLayer = $('heightLabels');
+  const heightLabelState = { on: false, last: 0, pool: [], max: 1400 };
+  const heightLabelCells = land.concat(river, sea);
+  const displayHeightForCell = (c) => (c ? (Number(c.elev) || 0) + editHeightForCell(c) : 0);
+  const formatTileHeight = (value) => {
+    const n = Math.round((Number(value) || 0) * 100) / 100;
+    return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+  };
+  const labelClassForCell = (c) => 'height-label' + (c && c.water ? ' water' : (hasRoadTile(c) ? ' road' : ''));
+  const ensureHeightLabel = (index) => {
+    let label = heightLabelState.pool[index];
+    if (!label) {
+      label = document.createElement('div');
+      label.className = 'height-label';
+      heightLabelsLayer.appendChild(label);
+      heightLabelState.pool[index] = label;
+    }
+    return label;
+  };
+  const updateHeightLabels = (now = performance.now(), force = false) => {
+    if (!heightLabelState.on) return;
+    if (!force && now - heightLabelState.last < 120) return;
+    heightLabelState.last = now;
+    const v = new THREE.Vector3();
+    const w = innerWidth, h = innerHeight;
+    const visible = [];
+    for (const c of heightLabelCells) {
+      if (!c) continue;
+      const y = displayHeightForCell(c) + (c.water ? 0.14 : 0.28);
+      v.set(c.wx, y, c.wz).project(camera);
+      if (v.z <= -1 || v.z >= 1 || v.x <= -1.04 || v.x >= 1.04 || v.y <= -1.04 || v.y >= 1.04) continue;
+      const dx = c.wx - ctr.x, dz = c.wz - ctr.z;
+      visible.push({ c, x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h, d: dx * dx + dz * dz });
+    }
+    visible.sort((a, b) => a.d - b.d);
+    const count = Math.min(visible.length, heightLabelState.max);
+    for (let i = 0; i < count; i++) {
+      const item = visible[i];
+      const label = ensureHeightLabel(i);
+      label.className = labelClassForCell(item.c);
+      label.textContent = formatTileHeight(displayHeightForCell(item.c));
+      label.style.display = 'block';
+      label.style.left = item.x.toFixed(1) + 'px';
+      label.style.top = item.y.toFixed(1) + 'px';
+    }
+    for (let i = count; i < heightLabelState.pool.length; i++) {
+      heightLabelState.pool[i].style.display = 'none';
+    }
+  };
+  const setHeightLabelsOpen = (on) => {
+    heightLabelState.on = !!on;
+    heightLabelsLayer.classList.toggle('on', heightLabelState.on);
+    $('bHeight').classList.toggle('on', heightLabelState.on);
+    if (!heightLabelState.on) {
+      for (const label of heightLabelState.pool) label.style.display = 'none';
+      return;
+    }
+    updateHeightLabels(0, true);
+  };
   const selectCityIndex = (idx) => {
     if (!CITY_LIST.length) return;
     cityEditState.selected = Math.max(0, Math.min(CITY_LIST.length - 1, Number(idx) || 0));
@@ -3165,8 +4372,14 @@
       edits: [...decorEditState.edits.values()].filter(e => !isBridgeDecorAsset(e && e.asset)),
       removedGenerated: [...decorEditState.removedGenerated].filter(k => !bridgeKeys.has(k)),
     };
-    localStorage.setItem(DECOR_EDIT_KEY, JSON.stringify(payload));
+    try {
+      localStorage.setItem(DECOR_EDIT_KEY, JSON.stringify(payload));
+    } catch (err) {
+      setDecorMeta('ошибка localStorage: ' + (err.message || err));
+      console.error('Manual decor localStorage save failed:', err);
+    }
     saveProjectPayload('decor', payload);
+    scheduleGameSync();                  // правка декора → пометить карту грязной; полная перепаковка только по кнопке сохранения
     return payload;
   };
   const removeManualDecorMesh = (k) => {
@@ -3187,6 +4400,7 @@
     const offsetZ = normalizeDecorOffset(edit.offsetZ);
     removeManualDecorMesh(k);
     if (String(edit.asset).startsWith('bridge') && c.bridgeModel) hideBridgeVisual(c, k);
+    hideGeneratedDecorVisuals(k);
     const renderModel = biomeDecorModel(model, effectiveBiomeForCell(c), edit.asset);
     const mesh = new THREE.Mesh(renderModel.geo, renderModel.mat);
     mesh.castShadow = true;
@@ -3214,7 +4428,8 @@
     decorEditState.edits.delete(k);
     restoreBridgeVisual(k);
     const c = findCellByQR(q, r);
-    if ((c && c.bridgeModel) || generatedTreeByKey.has(k)) decorEditState.removedGenerated.add(k);
+    if ((c && c.bridgeModel) || generatedDecorByKey.has(k)) decorEditState.removedGenerated.add(k);
+    hideGeneratedDecorVisuals(k);
     updateDecorCount();
     if (!silent) {
       persistManualDecor();
@@ -3224,6 +4439,7 @@
   const clearManualDecor = () => {
     for (const k of [...decorEditState.meshes.keys()]) removeManualDecorMesh(k);
     for (const k of [...decorEditState.hiddenBridges.keys()]) restoreBridgeVisual(k);
+    for (const k of [...decorEditState.hiddenGenerated.keys()]) restoreGeneratedDecorVisuals(k);
     decorEditState.edits.clear();
     decorEditState.removedGenerated.clear();
     localStorage.removeItem(DECOR_EDIT_KEY);
@@ -3240,34 +4456,43 @@
     scale: 1.025,
     height: (c.bridgeBankY || c.elev || 0) - (c.elev || 0) + 0.02,
   });
-  const treeDecorEdit = (entry) => ({
-    q: entry.item.q,
-    r: entry.item.r,
-    asset: entry.asset,
-    rot: ((entry.item.yaw || 0) * 180 / Math.PI + 360) % 360,
-    scale: entry.item.s || decorDefaultScale[entry.asset] || 1,
-    height: 0,
-  });
+  const generatedDecorEdit = (entry) => {
+    const item = entry.item;
+    const c = findCellByQR(item.q, item.r);
+    const baseY = c ? (c.elev || 0) + editHeightForCell(c) + 0.06 : 0;
+    return {
+      q: item.q,
+      r: item.r,
+      asset: entry.asset,
+      rot: ((item.yaw || 0) * 180 / Math.PI + 360) % 360,
+      scale: item.s || decorDefaultScale[entry.asset] || 1,
+      height: normalizeDecorHeight((item.y || 0) - baseY),
+      offsetX: c ? normalizeDecorOffset((item.x || 0) - c.wx) : 0,
+      offsetZ: c ? normalizeDecorOffset((item.z || 0) - c.wz) : 0,
+    };
+  };
   function seedGeneratedDecor() {
     for (const [k, entry] of generatedTreeByKey) {
       if (decorEditState.edits.has(k) || decorEditState.removedGenerated.has(k)) continue;
-      applyManualDecor(treeDecorEdit(entry), true);
+      applyManualDecor(generatedDecorEdit(entry), true);
     }
     updateDecorCount();
   }
   const loadManualDecor = async () => {
     try {
       let saved = { edits: [], removedGenerated: [] };
-      try { saved = await fetchJson('data/hex-europe-manual-decor.json'); } catch (_) {}
+      if (!usingGameMapTiles) {
+        try { saved = await fetchJson('data/hex-europe-manual-decor.json'); } catch (_) {}
+      }
       const raw = localStorage.getItem(DECOR_EDIT_KEY);
       const local = raw ? JSON.parse(raw) : { edits: [], removedGenerated: [] };
       const bridgeKeys = bridgeDecorKeySet();
       decorEditState.removedGenerated = new Set([...(saved.removedGenerated || []), ...(local.removedGenerated || [])].filter(k => !bridgeKeys.has(k)));
       for (const edit of saved.edits || []) if (!isBridgeDecorAsset(edit && edit.asset)) applyManualDecor(edit, true);
       for (const edit of local.edits || []) if (!isBridgeDecorAsset(edit && edit.asset)) applyManualDecor(edit, true);
-      seedGeneratedDecor();
+      if (!usingGameMapTiles) seedGeneratedDecor();
       updateDecorCount();
-      setDecorMeta('загружено: ' + decorEditState.edits.size + ' объектов');
+      setDecorMeta((usingGameMapTiles ? 'hex-map: ' : '') + 'загружено: ' + decorEditState.edits.size + ' правок');
     } catch (e) { setDecorMeta('ошибка загрузки декора: ' + e.message); }
   };
   const syncDecorInputs = () => {
@@ -3290,6 +4515,16 @@
       decorEditState.height = normalizeDecorHeight(existing.height);
       decorEditState.offsetX = normalizeDecorOffset(existing.offsetX);
       decorEditState.offsetZ = normalizeDecorOffset(existing.offsetZ);
+    } else if (generatedDecorByKey.has(k) && !decorEditState.removedGenerated.has(k)) {
+      const entry = (generatedDecorByKey.get(k) || []).find(e => decorDefaultScale[e.asset]) || generatedDecorByKey.get(k)[0];
+      const edit = generatedDecorEdit(entry);
+      applyManualDecor(edit, true);
+      decorEditState.asset = edit.asset;
+      decorEditState.rot = edit.rot || 0;
+      decorEditState.scale = normalizeDecorScale(edit.scale);
+      decorEditState.height = normalizeDecorHeight(edit.height);
+      decorEditState.offsetX = normalizeDecorOffset(edit.offsetX);
+      decorEditState.offsetZ = normalizeDecorOffset(edit.offsetZ);
     } else {
       decorEditState.rot = 0;
       decorEditState.scale = decorDefaultScale[decorEditState.asset] || 1;
@@ -3325,15 +4560,17 @@
     editState.selectedKey = k;
     editState.asset = existing ? editorAssetFromEdit(existing.asset, c) : baseAssetForCell(c);
     editState.rot = existing ? (existing.rot || 0) : baseRotForCell(c);
-    editState.height = existing ? normalizeEditHeight(existing.height) : 0;
-    $('edHeight').value = String(editState.height);
+    editState.height = existing && isSlopedTileAsset(existing.asset)
+      ? normalizeEditHeight(existing.height)
+      : (isSlopedTileAsset(editState.asset) ? normalizeEditHeight(c.tileYOffset || c.roadYOffset || 0) : 0);
+    syncEditHeightInput();
     syncTileCountrySelect(countryForCell(c, existing));
     syncBiomeSelect(biomeForCell(c, existing));
     renderEditorPalette();
     setSelectedOutline(c);
     $('editor').classList.add('on');
     setEditorAsset(editState.asset, false, false);
-    setEditMeta('выбран hex q' + c.q + ' r' + c.r + ' · ' + (existing ? existing.asset : editState.asset) + ' · ' + editState.rot + '° · h ' + editState.height);
+    setEditMeta('выбран hex q' + c.q + ' r' + c.r + ' · ' + (existing ? existing.asset : editState.asset) + ' · ' + editState.rot + '° · h ' + formatEditHeight(c.elev || 0) + (isSlopedTileAsset(existing ? existing.asset : editState.asset) ? ' · offset ' + formatEditHeight(editState.height) : ''));
   };
   const placeManualEdit = (e) => {
     const c = pickCellAt(e);
@@ -3342,6 +4579,7 @@
   const setEditorOpen = (on) => {
     if (on && decorEditState.on) setDecorEditorOpen(false);
     if (on && cityEditState.on) setCityEditorOpen(false);
+    if (on && lightEditorState.on) setLightEditorOpen(false);
     editState.on = on;
     $('editor').classList.toggle('on', on);
     if (!on) { selectedHexOutline.visible = false; hoverHexOutline.visible = false; }
@@ -3351,6 +4589,7 @@
   const setDecorEditorOpen = (on) => {
     if (on && editState.on) setEditorOpen(false);
     if (on && cityEditState.on) setCityEditorOpen(false);
+    if (on && lightEditorState.on) setLightEditorOpen(false);
     decorEditState.on = on;
     $('decorEditor').classList.toggle('on', on);
     $('bDecorEdit').classList.toggle('on', on);
@@ -3366,6 +4605,7 @@
   const setCityEditorOpen = (on) => {
     if (on && editState.on) setEditorOpen(false);
     if (on && decorEditState.on) setDecorEditorOpen(false);
+    if (on && lightEditorState.on) setLightEditorOpen(false);
     cityEditState.on = on;
     $('cityEditor').classList.toggle('on', on);
     $('bCityEdit').classList.toggle('on', on);
@@ -3380,6 +4620,142 @@
       updateCityLabels();
     }
   };
+  const lightEditorState = { on: false };
+  const fmtLight = (v, digits = 2) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return String(v ?? '');
+    return digits <= 0 ? String(Math.round(n)) : n.toFixed(digits).replace(/\.?0+$/, '');
+  };
+  const setLightControl = (id, value, digits = 2) => {
+    const el = $(id), out = $(id + 'V');
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = !!value;
+    else el.value = String(value);
+    if (out) out.textContent = fmtLight(value, digits);
+  };
+  const syncLightUI = () => {
+    setLightControl('lightExposure', lightState.exposure);
+    $('lightTone').value = lightState.tone;
+    $('lightBg').value = lightState.background;
+    $('lightFog').checked = !!lightState.fog;
+    $('lightFogType').value = lightState.fogType;
+    $('lightFogColor').value = lightState.fogColor;
+    setLightControl('lightFogDensity', lightState.fogDensity, 4);
+    setLightControl('lightFogNear', lightState.fogNear, 0);
+    setLightControl('lightFogFar', lightState.fogFar, 0);
+    $('lightHemiSky').value = lightState.hemiSky;
+    $('lightHemiGround').value = lightState.hemiGround;
+    setLightControl('lightHemiIntensity', lightState.hemiIntensity);
+    $('lightSunColor').value = lightState.sunColor;
+    setLightControl('lightSunIntensity', lightState.sunIntensity);
+    setLightControl('lightSunX', lightState.sunX);
+    setLightControl('lightSunY', lightState.sunY);
+    setLightControl('lightSunZ', lightState.sunZ);
+    setLightControl('lightSunTargetX', lightState.sunTargetX);
+    setLightControl('lightSunTargetY', lightState.sunTargetY);
+    setLightControl('lightSunTargetZ', lightState.sunTargetZ);
+    $('lightShadow').checked = !!lightState.shadow;
+    $('lightShadowType').value = lightState.shadowType;
+    $('lightShadowMap').value = String(lightState.shadowMap);
+    setLightControl('lightShadowRadius', lightState.shadowRadius);
+    setLightControl('lightShadowBias', lightState.shadowBias, 4);
+    setLightControl('lightShadowNormalBias', lightState.shadowNormalBias, 3);
+    setLightControl('lightShadowSize', lightState.shadowSize);
+    setLightControl('lightShadowNear', lightState.shadowNear);
+    setLightControl('lightShadowFar', lightState.shadowFar);
+  };
+  const setLightMeta = (txt) => { const el = $('lightMeta'); if (el) el.textContent = txt; };
+  const bindLightNumber = (id, key, digits = 2) => {
+    const el = $(id);
+    if (!el) return;
+    el.oninput = () => {
+      lightState[key] = num(el.value, lightDefaults[key]);
+      const out = $(id + 'V'); if (out) out.textContent = fmtLight(lightState[key], digits);
+      applyLightSettings();
+      setLightMeta('применено: ' + key);
+    };
+  };
+  const bindLightValue = (id, key) => {
+    const el = $(id);
+    if (!el) return;
+    el.oninput = el.onchange = () => {
+      lightState[key] = el.type === 'checkbox' ? !!el.checked : el.value;
+      applyLightSettings();
+      setLightMeta('применено: ' + key);
+    };
+  };
+  const setLightEditorOpen = (on) => {
+    if (on && editState.on) setEditorOpen(false);
+    if (on && decorEditState.on) setDecorEditorOpen(false);
+    if (on && cityEditState.on) setCityEditorOpen(false);
+    lightEditorState.on = on;
+    $('lightEditor').classList.toggle('on', on);
+    $('bLightEdit').classList.toggle('on', on);
+    if (on) {
+      auto = false;
+      $('bRot').classList.remove('on');
+      syncLightUI();
+      setLightMeta('настройки применяются сразу');
+    }
+  };
+  syncLightUI();
+  bindLightNumber('lightExposure', 'exposure');
+  bindLightValue('lightTone', 'tone');
+  bindLightValue('lightBg', 'background');
+  bindLightValue('lightFog', 'fog');
+  bindLightValue('lightFogType', 'fogType');
+  bindLightValue('lightFogColor', 'fogColor');
+  bindLightNumber('lightFogDensity', 'fogDensity', 4);
+  bindLightNumber('lightFogNear', 'fogNear', 0);
+  bindLightNumber('lightFogFar', 'fogFar', 0);
+  bindLightValue('lightHemiSky', 'hemiSky');
+  bindLightValue('lightHemiGround', 'hemiGround');
+  bindLightNumber('lightHemiIntensity', 'hemiIntensity');
+  bindLightValue('lightSunColor', 'sunColor');
+  bindLightNumber('lightSunIntensity', 'sunIntensity');
+  bindLightNumber('lightSunX', 'sunX');
+  bindLightNumber('lightSunY', 'sunY');
+  bindLightNumber('lightSunZ', 'sunZ');
+  bindLightNumber('lightSunTargetX', 'sunTargetX');
+  bindLightNumber('lightSunTargetY', 'sunTargetY');
+  bindLightNumber('lightSunTargetZ', 'sunTargetZ');
+  bindLightValue('lightShadow', 'shadow');
+  bindLightValue('lightShadowType', 'shadowType');
+  bindLightValue('lightShadowMap', 'shadowMap');
+  bindLightNumber('lightShadowRadius', 'shadowRadius');
+  bindLightNumber('lightShadowBias', 'shadowBias', 4);
+  bindLightNumber('lightShadowNormalBias', 'shadowNormalBias', 3);
+  bindLightNumber('lightShadowSize', 'shadowSize');
+  bindLightNumber('lightShadowNear', 'shadowNear');
+  bindLightNumber('lightShadowFar', 'shadowFar');
+  const resetLightToDefaults = () => {
+    lightState = { ...lightDefaults };
+    applyLightSettings();
+    syncLightUI();
+    setLightMeta('сброшено к дефолту');
+  };
+  const persistCurrentLight = () => {
+    applyLightSettings();
+    setLightMeta('текущие настройки сохранены');
+  };
+  const copyLightSettings = async () => {
+    const txt = JSON.stringify(lightState, null, 2);
+    try { await navigator.clipboard.writeText(txt); setLightMeta('JSON скопирован'); }
+    catch (_) { setLightMeta(txt); }
+  };
+  $('lightReset').onclick = resetLightToDefaults;
+  $('lightApplyDefault').onclick = persistCurrentLight;
+  $('lightCopy').onclick = copyLightSettings;
+  $('lightReset').addEventListener('click', resetLightToDefaults);
+  $('lightApplyDefault').addEventListener('click', persistCurrentLight);
+  $('lightCopy').addEventListener('click', copyLightSettings);
+  $('lightEditor').addEventListener('click', (e) => {
+    const action = e.target && e.target.closest ? e.target.closest('button') : null;
+    if (!action) return;
+    if (action.id === 'lightReset') resetLightToDefaults();
+    else if (action.id === 'lightApplyDefault') persistCurrentLight();
+    else if (action.id === 'lightCopy') copyLightSettings();
+  });
   const previewCanvas = document.createElement('canvas');
   previewCanvas.width = 96; previewCanvas.height = 96;
   const previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, antialias: true, alpha: true });
@@ -3395,7 +4771,18 @@
   const previewCamera = new THREE.OrthographicCamera(-1.45, 1.45, 1.45, -1.45, 0.1, 20);
   previewCamera.position.set(0.01, 5.2, 0.01);
   previewCamera.lookAt(0, 0, 0);
+  const assetPreviewCache = new Map();
   const renderAssetPreview = (asset, biome = 'default') => {
+    const cacheKey = asset + '|' + (biome || 'default');
+    const cached = assetPreviewCache.get(cacheKey);
+    if (cached) {
+      const img = document.createElement('img');
+      img.src = cached;
+      img.width = 96;
+      img.height = 96;
+      img.alt = '';
+      return img;
+    }
     const canvas = document.createElement('canvas');
     canvas.width = 96; canvas.height = 96;
     const ctx = canvas.getContext('2d');
@@ -3432,6 +4819,7 @@
     previewRenderer.render(previewScene, previewCamera);
     ctx.clearRect(0, 0, 96, 96);
     ctx.drawImage(previewCanvas, 0, 0);
+    assetPreviewCache.set(cacheKey, canvas.toDataURL('image/png'));
     return canvas;
   };
   const setEditorAsset = (asset, announce = true, applyToSelected = true) => {
@@ -3462,8 +4850,14 @@
       setEditMeta(applied && editState.selected ? 'заменен q' + editState.selected.q + ' r' + editState.selected.r + ' → ' + label : 'выбран: ' + label);
     }
   };
-  const renderEditorPalette = () => {
+  let renderedEditorPaletteBiome = null;
+  const renderEditorPalette = (force = false) => {
     const palette = $('edPalette');
+    if (!force && renderedEditorPaletteBiome === editState.biome && palette.children.length) {
+      document.querySelectorAll('#edPalette .asset-card').forEach(el => el.classList.toggle('on', el.dataset.asset === editState.asset));
+      return;
+    }
+    renderedEditorPaletteBiome = editState.biome;
     palette.innerHTML = '';
     for (const [value, label] of editCatalog) {
       const card = document.createElement('button');
@@ -3645,7 +5039,16 @@
   const applySelectedRotation = () => {
     const currentAsset = selectedCountryEditAsset();
     if (editState.selected && editState.asset !== 'erase' && editState.asset !== 'delete' && currentAsset !== 'countryLand' && currentAsset !== 'countrySea') {
-      applyManualEdit({ q: editState.selected.q, r: editState.selected.r, asset: editState.asset, rot: editState.rot, height: editState.height });
+      const ctx = isLandTileAsset(editState.asset) ? landEditContext(editState.selected, { biome: editState.biome }) : null;
+      applyManualEdit({
+        q: editState.selected.q,
+        r: editState.selected.r,
+        asset: editState.asset,
+        rot: editState.rot,
+        height: editState.height,
+        ...(ctx ? ctx : {}),
+      });
+      if (ctx) syncTileCountrySelect(ctx.country);
       setSelectedOutline(editState.selected);
     }
     setEditMeta('поворот: ' + editState.rot + '°');
@@ -3654,32 +5057,64 @@
   $('edRotR').onclick = () => { editState.rot = (editState.rot + 30) % 360; applySelectedRotation(); };
   $('edRot0').onclick = () => { editState.rot = 0; applySelectedRotation(); };
   const applySelectedHeight = (value) => {
-    editState.height = normalizeEditHeight(value);
-    $('edHeight').value = String(editState.height);
+    const currentAsset = editState.selected ? selectedCountryEditAsset() : editState.asset;
+    const isSloped = isSlopedTileAsset(currentAsset);
+    const finalHeight = Math.max(-3, Math.min(8, Math.round((Number(value) || 0) * 4) / 4));
+    editState.height = isSloped ? normalizeEditHeight(value) : 0;
+    if (editState.selected && !isSloped) editState.selected.elev = finalHeight;
+    syncEditHeightInput();
     if (editState.selected && editState.asset !== 'erase') {
-      const currentAsset = selectedCountryEditAsset();
       const selected = $('edTileCountry').value;
       const country = selected && selected !== 'Море' ? selected : (countryForCell(editState.selected) || cityCountries[0] || 'Нейтральные');
       const currentEdit = editState.selectedKey ? editState.edits.get(editState.selectedKey) : null;
       const currentBiome = currentEdit?.biome || editState.biome || biomeForCountry(country);
+      const ctx = isLandTileAsset(currentAsset) ? landEditContext(editState.selected, { country, biome: currentBiome }) : null;
       applyManualEdit({
         q: editState.selected.q,
         r: editState.selected.r,
         asset: currentAsset,
-        country: currentAsset === 'countryLand' ? country : undefined,
-        biome: currentAsset === 'countryLand' ? currentBiome : undefined,
-        col: currentAsset === 'countryLand' ? biomeTileHex(currentBiome, country) : undefined,
+        ...(ctx ? ctx : {}),
         rot: editState.rot,
         height: editState.height,
       });
+      if (ctx) syncTileCountrySelect(ctx.country);
       setSelectedOutline(editState.selected);
-      setEditMeta('высота: ' + editState.height + ' · q' + editState.selected.q + ' r' + editState.selected.r);
+      setEditMeta((isSloped ? 'offset горки: ' + formatEditHeight(editState.height) + ' · высота земли ' + formatEditHeight(selectedBaseHeight()) : 'высота: ' + formatEditHeight(finalHeight) + ' · offset 0') + ' · q' + editState.selected.q + ' r' + editState.selected.r);
     }
   };
-  $('edHeightDown').onclick = () => applySelectedHeight(editState.height - 0.25);
-  $('edHeightUp').onclick = () => applySelectedHeight(editState.height + 0.25);
-  $('edHeight0').onclick = () => applySelectedHeight(0);
+  $('edHeightDown').onclick = () => applySelectedHeight(selectedHeightInputValue() - 0.25);
+  $('edHeightUp').onclick = () => applySelectedHeight(selectedHeightInputValue() + 0.25);
+  $('edHeight0').onclick = () => {
+    editState.height = 0;
+    syncEditHeightInput();
+    if (editState.selected) {
+      const currentEdit = editState.selectedKey ? editState.edits.get(editState.selectedKey) : null;
+      const currentAsset = currentEdit?.asset || selectedCountryEditAsset();
+      if (isSlopedTileAsset(currentAsset)) {
+        applySelectedHeight(0);
+        return;
+      }
+      if (currentEdit) {
+        currentEdit.height = 0;
+        applyManualEdit(currentEdit);
+      }
+      setEditMeta('offset сброшен · итоговая высота ' + formatEditHeight(selectedFinalHeight()));
+    }
+  };
   $('edHeight').onchange = (e) => applySelectedHeight(e.target.value);
+  document.querySelectorAll('#editor [data-height-preset]').forEach(btn => {
+    btn.onclick = () => {
+      const preset = Number(btn.dataset.heightPreset);
+      if (!Number.isFinite(preset)) return;
+      if (!editState.selected) {
+        applySelectedHeight(preset);
+        setEditMeta('пресет высоты ' + preset + ' · выбери hex, чтобы применить как итоговый уровень');
+        return;
+      }
+      applySelectedHeight(preset);
+      setEditMeta((isSlopedTileAsset(selectedCountryEditAsset()) ? 'offset горки: ' : 'итоговая высота: ') + preset + (isSlopedTileAsset(selectedCountryEditAsset()) ? '' : ' · offset 0') + ' · q' + editState.selected.q + ' r' + editState.selected.r);
+    };
+  });
   $('edTileCountry').onchange = applyTileCountryChange;
   $('edMakeLand').onclick = applySelectedCountryLand;
   $('edMakeSea').onclick = applySelectedCountrySea;
@@ -3736,23 +5171,25 @@
       name = info.name;
       city = info.city;
     }
-    const kk = (name || '') + isLand;
+    const tileHeight = c ? formatTileHeight(displayHeightForCell(c)) : '';
+    const kk = (name || '') + isLand + ':' + tileHeight;
     if (kk !== hoverKey) {
       hoverKey = kk; const el2 = $('hover');
       if (!name) el2.innerHTML = '<span class="k">наведи на тайл</span>';
-      else { const fc = isLand && facColor[name]; const sw = fc ? '#' + fc.getHexString() : (isLand ? '#d2d6dd' : '#3b7fc4'); el2.innerHTML = '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:6px;background:' + sw + '"></span><span class="name">' + (city ? city.cityName : name) + '</span>' + (city ? '<div class="k">' + city.cityCountry + ' · размер ' + city.citySize + '</div>' : ''); }
+      else { const fc = isLand && facColor[name]; const sw = fc ? '#' + fc.getHexString() : (isLand ? '#d2d6dd' : '#3b7fc4'); el2.innerHTML = '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:6px;background:' + sw + '"></span><span class="name">' + (city ? city.cityName : name) + '</span><div class="k">h ' + tileHeight + (city ? ' · ' + city.cityCountry + ' · размер ' + city.citySize : '') + '</div>'; }
     }
   });
 
   // 10) кнопки + HUD
   $('bRot').onclick = function () { auto = !auto; this.classList.toggle('on', auto); };
   $('bDecor').onclick = function () { decor.visible = !decor.visible; this.classList.toggle('on', decor.visible); };
-  $('bTint').onclick = function () { const on = !this.classList.contains('on'); this.classList.toggle('on', on); applyTint(on); };
   $('bWater').onclick = function () { seaMesh.visible = !seaMesh.visible; this.classList.toggle('on', !seaMesh.visible); };
   $('bGraph').onclick = function () { graphOverlay.visible = !graphOverlay.visible; this.classList.toggle('on', graphOverlay.visible); };
+  $('bHeight').onclick = function () { setHeightLabelsOpen(!heightLabelState.on); };
   $('bEdit').onclick = function () { setEditorOpen(!editState.on); };
   $('bDecorEdit').onclick = function () { setDecorEditorOpen(!decorEditState.on); };
   $('bCityEdit').onclick = function () { setCityEditorOpen(!cityEditState.on); };
+  $('bLightEdit').onclick = function () { setLightEditorOpen(!lightEditorState.on); };
   $('bSaveMap').onclick = function () { window.saveHexMapToGame(); };
   $('bTop').onclick = function () { az = 0; el = 1.5; dist = worldW * 0.78; ctr.set(0, 0, 0); applyCam(); auto = false; $('bRot').classList.remove('on'); };
   $('hex').textContent = (land.length + sea.length + river.length).toLocaleString('ru') + ' (' + land.length.toLocaleString('ru') + ' суша · ' + river.length + ' реки · ' + road.length + ' дороги · ' + bridge.length + ' мосты · ' + ferryMarks.length + ' паромы)';
@@ -3763,8 +5200,10 @@
   addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
   // debug-хук (скриншоты при фоновой вкладке)
-  window.__hex = { render: () => renderer.render(scene, camera), top: () => { az = 0; el = 1.5; dist = worldW * 0.78; ctr.set(0, 0, 0); applyCam(); auto = false; }, iso: () => { el = 0.7; dist = worldW * 0.78; auto = false; applyCam(); }, tint: (on) => { applyTint(on); $('bTint').classList.toggle('on', on); }, decor: (v) => { decor.visible = v; },
+  window.__hex = { render: () => renderer.render(scene, camera), top: () => { az = 0; el = 1.5; dist = worldW * 0.78; ctr.set(0, 0, 0); applyCam(); auto = false; }, iso: () => { el = 0.7; dist = worldW * 0.78; auto = false; applyCam(); }, decor: (v) => { decor.visible = v; },
     look: (a, e, df, cx, cz) => { az = a; el = e; dist = worldW * df; ctr.set(cx || 0, 0, cz || 0); auto = false; applyCam(); renderer.render(scene, camera); }, W: () => worldW,
+    water: (o) => { const u = waterFX; if (!o) return { scale: u.flowScale.value, speed: u.flowSpeed.value, strength: u.flowStrength.value, contrast: u.flowContrast.value, noiseScale: u.noiseScale.value, noiseStrength: u.noiseStrength.value }; if (o.scale != null) u.flowScale.value = o.scale; if (o.speed != null) u.flowSpeed.value = o.speed; if (o.strength != null) u.flowStrength.value = o.strength; if (o.contrast != null) u.flowContrast.value = o.contrast; if (o.noiseScale != null) u.noiseScale.value = o.noiseScale; if (o.noiseStrength != null) u.noiseStrength.value = o.noiseStrength; if (o.foamWidth != null) u.shoreFoamWidth.value = o.foamWidth; if (o.foamSharp != null) u.shoreFoamSharp.value = o.foamSharp; if (o.deep) u.uColorDeep.value.set(o.deep); if (o.shallow) u.uColorShallow.value.set(o.shallow); if (o.foam) u.uColorFoam.value.set(o.foam); renderer.render(scene, camera); return { scale: u.flowScale.value, speed: u.flowSpeed.value }; },
+    heightLabels: (v) => { setHeightLabelsOpen(v == null ? !heightLabelState.on : !!v); return { on: heightLabelState.on, labels: heightLabelState.pool.length }; },
     state: () => ({ az, el, dist, ctr: [ctr.x, ctr.y, ctr.z], cam: [camera.position.x, camera.position.y, camera.position.z], auto }),
     roads: () => ({ graphRoadEdges: graphRoadEdgeCount, selectedRoadEdges: roadEdges.length, builtRoadEdges: roadPaths.length, source: roadsFromGameMap ? 'hex-map' : 'generated', failedRoadEdges: roadBuildFailures.slice(), extraFerryLinks: extraFerryLinks.slice(), roadTiles: road.length, bridges: bridge.length, seaRoadLinks: seaRoadLinks.length, ferryLinks: ferryLinks.length, reachable: networkReachable, groups: finalComps.length, cities: CITY_LIST.length }),
     edits: () => ({ edits: [...editState.edits.values()], hidden: editState.hidden.size, selected: editState.selected ? { q: editState.selected.q, r: editState.selected.r } : null }),
@@ -3780,8 +5219,10 @@
     const dt = Math.min(0.05, dtMs / 1000);
     const keyboardMoved = updateCameraKeys(dt);
     if (auto && !keyboardMoved) { az += dtMs * 0.00011; applyCam(); }
+    waterFX.uTime.value = t * 0.001;   // анимация воды (flowmap)
     renderer.render(scene, camera);
     updateCityLabels();
+    updateHeightLabels(t);
     acc += dtMs; frames++;
     if (acc >= 500) {
       $('fps').textContent = Math.round(frames * 1000 / acc);

@@ -7,6 +7,7 @@ document.getElementById('ovBtn').onclick=openCountryPick;  // «Играть с�
 // постоянные строки кнопок (не пересоздаются на каждом тике → клики не теряются)
 let panelCity=null, shipBuildRow=null, airRecallRow=null, aaUpgRow=null, yardShipRow=null, yardAirRow=null;
 const upgRows={}, buyRows={};
+function panelRowAccent(row,color){ row.style.setProperty('--row-accent',color); row.style.background=''; }
 function buildShip(yard,actor){
   if(MP.guest){ MP.cmd({cmd:'bship',c:yard.idx}); return; }   // гость → команда хосту
   const a=actor==null?PLAYER:actor, P=a===PLAYER;
@@ -98,13 +99,13 @@ function buildPanelRows(){
   const bb0=document.getElementById('buyRows'); bb0.innerHTML='';
   if(panelCity.isShipyard||panelCity.isAirport){ // верфь/аэропорт — одна кнопка постройки
     const air=panelCity.isAirport;
-    const row=document.createElement('div'); row.className='row'; row.style.background=air?'#7a6fd0':'#4a8fd0';
+    const row=document.createElement('div'); row.className='row'; panelRowAccent(row,air?'#7a6fd0':'#4a8fd0');
     row.innerHTML=`<span>${air?'✈ Построить самолёт':'⚓ Построить корабль'}</span><small></small>`;
     row.addEventListener('click',()=>{ if(!row.classList.contains('dis')&&panelCity){air?buildPlane(panelCity):buildShip(panelCity);} });
     bb0.appendChild(row); shipBuildRow=row;
     airRecallRow=null; aaUpgRow=null; yardShipRow=null; yardAirRow=null;
     if(air){ // кнопка отзыва авиации на базу (показывается только при активном приказе)
-      const rr=document.createElement('div'); rr.className='row'; rr.style.background='#c0563f'; rr.style.display='none';
+      const rr=document.createElement('div'); rr.className='row'; panelRowAccent(rr,'#c0563f'); rr.style.display='none';
       rr.innerHTML=`<span>✈ Отозвать на базу</span><small></small>`;
       rr.addEventListener('click',()=>{ if(!rr.classList.contains('dis'))recallAir(); });
       bb0.appendChild(rr); airRecallRow=rr;
@@ -114,33 +115,33 @@ function buildPanelRows(){
   shipBuildRow=null; airRecallRow=null;
   for(const tr of ['prod','def','atk']){
     const s=SPEC[tr];
-    const row=document.createElement('div'); row.className='row'; row.style.background=s.color;
+    const row=document.createElement('div'); row.className='row'; panelRowAccent(row,s.color);
     row.innerHTML=`<span>${s.icon} ${s.name}</span><small></small>`;
     // обработчик стабилен; читает panelCity на момент клика, проверяет .dis сам
     row.addEventListener('click',()=>{ if(!row.classList.contains('dis')&&panelCity){upgradeCity(panelCity,tr);updatePanel();} });
     ub.appendChild(row); upgRows[tr]=row;
   }
   // 🚀 зенитка (ПВО) — отдельная строка постройки
-  { const aaRow=document.createElement('div'); aaRow.className='row'; aaRow.style.background='#2f9e8f';
+  { const aaRow=document.createElement('div'); aaRow.className='row'; panelRowAccent(aaRow,'#2f9e8f');
     aaRow.innerHTML=`<span>🚀 Зенитка (ПВО)</span><small></small>`;
     aaRow.addEventListener('click',()=>{ if(!aaRow.classList.contains('dis')&&panelCity){buildAA(panelCity);updatePanel();} });
     ub.appendChild(aaRow); aaUpgRow=aaRow; }
   // ⚓ верфь (только прибрежные города) и ✈ аэродром — строятся как отдельный под-город рядом
   yardShipRow=null; yardAirRow=null;
   if(isCoastal(panelCity)){
-    const r=document.createElement('div'); r.className='row'; r.style.background='#4a8fd0';
+    const r=document.createElement('div'); r.className='row'; panelRowAccent(r,'#4a8fd0');
     r.innerHTML=`<span>⚓ Построить верфь</span><small></small>`;
     r.addEventListener('click',()=>{ if(!r.classList.contains('dis')&&panelCity)buildYard(panelCity,'ship'); });
     ub.appendChild(r); yardShipRow=r;
   }
-  { const r=document.createElement('div'); r.className='row'; r.style.background='#7a6fd0';
+  { const r=document.createElement('div'); r.className='row'; panelRowAccent(r,'#7a6fd0');
     r.innerHTML=`<span>✈ Построить аэродром</span><small></small>`;
     r.addEventListener('click',()=>{ if(!r.classList.contains('dis')&&panelCity)buildYard(panelCity,'air'); });
     ub.appendChild(r); yardAirRow=r;
   }
   const bb=document.getElementById('buyRows'); bb.innerHTML='';
   for(const spec of ['5','20','max']){
-    const row=document.createElement('div'); row.className='row'; row.style.background='#ff9a4a';
+    const row=document.createElement('div'); row.className='row'; panelRowAccent(row,'#ff9a4a');
     row.innerHTML=`<span>⚔ Купить ${spec==='max'?'максимум':'+'+spec}</span><small></small>`;
     row.addEventListener('click',()=>{ if(!row.classList.contains('dis')&&panelCity){buySoldiers(panelCity,spec);updatePanel();} });
     bb.appendChild(row); buyRows[spec]=row;
@@ -154,6 +155,7 @@ function updatePanel(){
   const c=sel[0]; p.style.display='block';
   const occ=!!c.occ;   // 🏴 оккупированный город: своя территория де-факто, но стройка/армия запрещены до аннексии
   const yard=c.isShipyard||c.isAirport;
+  p.classList.toggle('yardPanel',yard);
   if(c!==panelCity){ panelCity=c; if(yard)panelTab='army'; buildPanelRows(); }   // пересборка ТОЛЬКО при смене города
   const tiers=['prod','def','atk'].filter(tr=>c.branchTier(tr)>0).map(tr=>`${SPEC[tr].icon}${c.branchTier(tr)}`).join(' ');
   document.getElementById('pName').textContent=tiers?`${CITY_NAMES[c.idx]} · ${tiers}`:CITY_NAMES[c.idx];
@@ -163,7 +165,7 @@ function updatePanel(){
   if(yard)panelTab='army';
   tabUpgBtn.classList.toggle('active',panelTab==='upg');
   tabArmyBtn.classList.toggle('active',panelTab==='army');
-  document.getElementById('upgTab').style.display=(panelTab==='upg'&&!yard)?'block':'none';
+  document.getElementById('upgTab').style.display=(panelTab==='upg'&&!yard)?'grid':'none';
   document.getElementById('armyTab').style.display=panelTab==='army'?'block':'none';
 
   if(yard){ // верфь/аэропорт — очередь техники
@@ -250,6 +252,9 @@ const FLAG_SPECS={
   'Польша':{h:['#ffffff','#dc143c']},
   'Испания':{hw:[['#aa151b',1],['#f1bf00',2],['#aa151b',1]]},
   'Португалия':{vw:[['#046a38',2],['#da291c',3]],overlay:'<circle cx="18.2" cy="25" r="3.4" fill="#ffcc00" stroke="#fff" stroke-width="0.7"/>'},
+  'Иберия':{hw:[['#8c1d1d',1],['#f0bf3a',2],['#8c1d1d',1]],overlay:'<rect x="3" y="2" width="13" height="46" fill="#1f7a55" opacity=".82"/><circle cx="17.4" cy="25" r="3" fill="#f7d56a" stroke="#fff3bd" stroke-width="0.55"/>'},
+  'Северная империя':{field:'#173f76',overlay:_hcross('#f4d35e',6.2)+_hcross('#ffffff',2.2)},
+  'Австро-Венгерская империя':{hw:[['#1d1d1d',1],['#f1c232',1],['#ffffff',1],['#b81f32',1]],overlay:'<path d="M3 24.8h38" stroke="#6d5420" stroke-width="1.2" opacity=".55"/><circle cx="22" cy="25" r="3.2" fill="#d7ad43" stroke="#fff2bf" stroke-width="0.55"/>'},
   'Бенилюкс':{h:['#ae1c28','#ffffff','#21468b']},
   'Центр':{h:['#ed2939','#ffffff','#ed2939']},
   'Балканы':{h:['#c6363c','#0c4076','#ffffff']},

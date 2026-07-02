@@ -61,8 +61,8 @@
 <div id="panel" class="panelbox">
   <div class="title"><span id="pName">Город</span><span class="gold">💰<span id="pGold">0</span></span></div>
   <div id="tabs">
-    <button id="tabUpg" class="active">Прокачка</button>
-    <button id="tabArmy">Армия</button>
+    <button id="tabUpg" class="active">✦ Прокачка</button>
+    <button id="tabArmy">⚔ Армия</button>
   </div>
   <div id="upgTab"></div>
   <div id="armyTab" style="display:none">
@@ -76,46 +76,42 @@
 <div id="heroWin">
   <div id="heroCard" class="panelbox gpanel">
     <button id="heroClose">✕</button>
-    <h2>🎖 Выберите героя</h2>
-    <div id="heroSub">3 слота · призыв за политочки 🏛 · у каждого 1 пассивная и 2 активные способности</div>
+    <div id="heroHeader">
+      <h2>Герои</h2>
+      <div class="heroMpCard"><span>👥</span><b id="heroMp">0</b></div>
+    </div>
+    <div id="heroSub">Свободно <b id="heroFreeSlots">0</b> / <span id="heroMaxSlots">3</span></div>
     <div id="heroList"></div>
   </div>
 </div>
 
 <div id="countryWin">
   <div id="countryCard" class="panelbox gpanel">
-    <h2>🌍 За кого играть?</h2>
-    <div id="countrySub">Выберите страну — вы возглавите её на старте партии</div>
+    <div id="countryHead">
+      <span class="countryLine"></span>
+      <h2>Выбор страны</h2>
+      <span class="countryLine"></span>
+    </div>
+    <div id="countrySub">Выберите игровую фракцию и начните борьбу за Европу</div>
     <div id="countryList"></div>
+    <div id="countryFooter">
+      <div id="countryMode">
+        <b>Классическая партия</b>
+        <span>Остальные страны управляются ботами</span>
+      </div>
+      <button id="countryStart" type="button">Начать игру</button>
+    </div>
   </div>
 </div>
 
 <div id="overlay"><div class="ovCard gpanel"><div class="gstars">★ <b>★</b> ★</div><h1 id="ovTitle">Победа!</h1><button id="ovBtn" class="dbtn ally">Играть снова</button></div></div>
 
 <div id="sideMenu">
-  <div class="sbtn" id="sbMap" title="Обзор карты">
-    <div class="si"><svg viewBox="0 0 32 32"><polygon data-fill points="16,3 27,9.5 27,22.5 16,29 5,22.5 5,9.5" fill="#c2ccd6" stroke="#6c7884" stroke-width="1.5"/><polygon points="16,3 16,29 5,22.5 5,9.5" fill="#a9b4be"/><polygon points="16,9 22,12.5 22,19.5 16,23 10,19.5 10,12.5" fill="none" stroke="#5b6671" stroke-width="1"/></svg></div>
-    <div class="sl">Карта</div>
+  <div class="sbtn" id="sbTech" title="Технологии (T)" aria-label="Технологии">
+    <div class="si"><svg viewBox="0 0 42 42" aria-hidden="true"><g data-fill fill="#caa85e" stroke="#6f5c32" stroke-width="1.35" stroke-linejoin="round"><path d="M8 11.5c5.2-.8 9.2.2 13 3.3v18.6c-3.8-3-8-4-13-3.2z"/><path d="M34 11.5c-5.2-.8-9.2.2-13 3.3v18.6c3.8-3 8-4 13-3.2z"/></g><path d="M21 14.8v18.6" stroke="#8d733d" stroke-width="1.4"/><path d="M11 17.5c2.8-.2 5 .3 7.1 1.5M11 21.2c2.8-.2 5 .3 7.1 1.5M31 17.5c-2.8-.2-5 .3-7.1 1.5M31 21.2c-2.8-.2-5 .3-7.1 1.5" stroke="#3d341f" stroke-width="1.05" opacity=".65"/></svg></div>
   </div>
-  <div class="sbtn" id="sbCities" title="Мои города">
-    <div class="si"><svg viewBox="0 0 32 32"><g data-fill fill="#c2ccd6" stroke="#6c7884" stroke-width="1" stroke-linejoin="round"><polygon points="16,4 29,11 3,11"/><rect x="6" y="12" width="3" height="11"/><rect x="12" y="12" width="3" height="11"/><rect x="17" y="12" width="3" height="11"/><rect x="23" y="12" width="3" height="11"/><rect x="3" y="24" width="26" height="3"/></g></svg></div>
-    <div class="sl">Города</div>
-  </div>
-  <div class="sbtn" id="sbArmy" title="Крупнейший гарнизон">
-    <div class="si"><svg viewBox="0 0 32 32"><g data-fill fill="#c2ccd6" stroke="#6c7884" stroke-width="1" stroke-linejoin="round"><path d="M6 6l8 8-2 2-8-8z"/><path d="M26 6l-8 8 2 2 8-8z"/><path d="M6 26l8-8 2 2-8 8z"/><path d="M26 26l-8-8-2 2 8 8z"/></g></svg></div>
-    <div class="sl">Армия</div>
-  </div>
-  <div class="sbtn" id="sbTech" title="Технологии (T)">
-    <div class="si"><svg viewBox="0 0 32 32"><path data-fill d="M13 4h6v2h-1v6l6 11.5a2 2 0 0 1-1.8 3H9.8a2 2 0 0 1-1.8-3L14 12V6h-1z" fill="#c2ccd6" stroke="#6c7884" stroke-width="1.3" stroke-linejoin="round"/><path d="M11 18.5h10" stroke="#5b6671" stroke-width="1.1"/></svg></div>
-    <div class="sl">Технологии</div>
-  </div>
-  <div class="sbtn" id="sbPol" title="Политика (P)">
-    <div class="si"><svg viewBox="0 0 32 32"><g data-fill fill="#c2ccd6" stroke="#6c7884" stroke-width="1" stroke-linejoin="round"><polygon points="16,3 28,9 4,9"/><rect x="6" y="10" width="20" height="14"/><rect x="4" y="24" width="24" height="3"/></g><path d="M16 12l4.5 1.8v3c0 2.7-2.2 4.1-4.5 5-2.3-.9-4.5-2.3-4.5-5v-3z" fill="#9aa6b1" stroke="#5b6671" stroke-width="1" stroke-linejoin="round"/></svg></div>
-    <div class="sl">Политика</div>
-  </div>
-  <div class="sbtn" id="sbIntel" title="Разведка">
-    <div class="si"><svg viewBox="0 0 32 32"><g fill="none" stroke="#6c7884" stroke-width="1.3"><circle cx="16" cy="16" r="11"/><circle cx="16" cy="16" r="7"/><circle cx="16" cy="16" r="3"/></g><path data-fill d="M16 16 L25.5 9.5 A11 11 0 0 0 16 5 Z" fill="#c2ccd6" opacity=".88"/><circle cx="16" cy="16" r="1.7" fill="#c2ccd6"/></svg></div>
-    <div class="sl">Разведка</div>
+  <div class="sbtn" id="sbPol" title="Дипломатия (P)" aria-label="Дипломатия">
+    <div class="si"><svg viewBox="0 0 42 42" aria-hidden="true"><g data-fill fill="#caa85e" stroke="#6f5c32" stroke-width="1.35" stroke-linejoin="round" stroke-linecap="round"><path d="M6.5 18.6l7.4-6.1 6.3 5.9-7 7.3z"/><path d="M35.5 18.6l-7.4-6.1-6.3 5.9 7 7.3z"/><path d="M13.1 23.5l5.2-5.2c1.1-1.1 2.9-1.2 4.1-.2l1 .8 1.5-1.3c.9-.8 2.3-.7 3.2.2l5.2 5.4-6.4 6.8-4.5-3.7-2.4 2.2c-.9.8-2.3.8-3.2-.1l-3.7-3.4c-.4-.4-.4-1.1 0-1.5z"/></g><g fill="none" stroke="#3d341f" stroke-width="1.15" stroke-linecap="round" opacity=".72"><path d="M19.3 21.7l2.1 1.9c.6.5 1.4.5 2 .1l2.5-2.1"/><path d="M17.5 26.9l2.5 2.2"/><path d="M20.4 25.1l3.2 2.7"/><path d="M23.1 23.1l3.5 3"/></g></svg></div>
   </div>
 </div>
 <div id="polWin">
@@ -123,7 +119,7 @@
     <button id="polClose">✕</button>
     <div id="polHeader">
       <div class="phIcon"><svg viewBox="0 0 48 54"><polygon points="24,2 45,13.5 45,40.5 24,52 3,40.5 3,13.5" fill="#1c2620" stroke="#9aa07a" stroke-width="2.4"/><g stroke="#caa64a" stroke-width="2.4" stroke-linecap="round" fill="none"><path d="M16 16 L32 38"/><path d="M32 16 L16 38"/></g><g fill="#caa64a"><circle cx="16" cy="16" r="2.4"/><circle cx="32" cy="16" r="2.4"/></g></svg></div>
-      <div class="phTitle"><h2>Дипломатия / Фракции</h2><div class="phSub">Выстраивайте отношения, заключайте союзы и защищайте интересы.</div></div>
+      <div class="phTitle"><h2>Дипломатия</h2><div class="phSub">Выстраивайте отношения, заключайте союзы и защищайте интересы.</div></div>
       <div class="phPts">🏛 <b id="polPts">0</b> очк.</div>
     </div>
     <div id="polColhdr">
@@ -135,8 +131,13 @@
 <div id="techWin">
   <div id="techCard" class="panelbox" style="position:relative">
     <button id="techClose">✕</button>
-    <h2>🔬 Исследования</h2>
-    <div class="sub">Исследования идут во времени и занимают слоты · открывайте корабли, авиацию, башни</div>
+    <div id="techHeader">
+      <div class="techMark">ᚨ</div>
+      <div class="techTitle">
+        <h2>Исследования</h2>
+      </div>
+      <div class="techGoldCard"><span class="coin">◉</span><b id="techGold">0</b><span>зол.</span></div>
+    </div>
     <div id="techGrid"></div>
   </div>
 </div>

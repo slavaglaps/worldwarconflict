@@ -23,7 +23,7 @@ window.hexPreload = async function hexPreload() {
   const MAP = await fetchJson('hex-map.json');
 
   // какие модели реально нужны (а не все 200+ из names)
-  const used = new Set(['grass', 'water', 'castle', 'tower', 'home']);   // + модели зданий городов (KayKit) для hex-world
+  const used = new Set(['grass', 'water']);   // + модели зданий городов (KayKit) ниже, без старых fallback-дублей
   for (const t of MAP.tiles) { if (t[5]) used.add(t[5]); if (t[7]) used.add(t[7]); if (t[9]) used.add(t[9]); }
   for (const b of MAP.bridges) used.add(b[2]);
   for (const d of MAP.decor) used.add(d[0]);

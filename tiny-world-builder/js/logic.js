@@ -68,7 +68,8 @@ function hideDragArrow(){dragArrow.visible=dragArrowGlow.visible=false;}
 function newGame(){
   // remove old city/squad objects
   for(const c of cities){scene.remove(c.buildGroup);scene.remove(c.hit);scene.remove(c.ring);scene.remove(c.rangeRing);scene.remove(c.pring);scene.remove(c.bring);c.lab.remove();
-    if(c.siegeOrbs)for(const o in c.siegeOrbs){scene.remove(c.siegeOrbs[o].mesh);c.siegeOrbs[o].lab.remove();}}
+    if(c.siegeOrbs)for(const o in c.siegeOrbs){scene.remove(c.siegeOrbs[o].mesh);c.siegeOrbs[o].lab.remove();}
+    if(c._siegeLab){c._siegeLab.remove();c._siegeLab=null;}}
   for(const s of squads)s.destroy();
   for(const s of ships)s.destroy();
   for(const s of planes)s.destroy();
@@ -91,7 +92,7 @@ function newGame(){
   if(techWinOpen)closeTech(); closeDiplo(); if(polWinOpen)closePol(); closePeace();
   CITY_DATA.forEach((d,i)=>cities.push(new City(d[0],d[1],d[2],d[3],d[4],i)));
   // capital = first city of each country
-  for(const c of COUNTRIES){const city=cities.find(ci=>ci.country===c.name);if(city)city.capital=true;}
+  for(const f of FACTIONS){const city=cities.find(ci=>ci.country===f.country);if(city)city.capital=true;}
   manpower=FACTIONS.map((f,i)=>manpowerCap(i)); // старт с полным пулом (города уже созданы)
   assignRegions();
   scene.updateMatrixWorld(true); // хитбоксы кликабельны сразу, до первого кадра
@@ -120,8 +121,12 @@ function assignRegions(){
   }
   if(landTopIM.instanceColor)landTopIM.instanceColor.needsUpdate=true;
   // country control bonus
+  const checkedCountries=new Set();
   for(const country of COUNTRIES){
-    const cs=cities.filter(c=>c.country===country.name);
+    const cname=typeof canonicalCountry==='function'?canonicalCountry(country.name):country.name;
+    if(checkedCountries.has(cname))continue;
+    checkedCountries.add(cname);
+    const cs=cities.filter(c=>c.country===cname);
     if(cs.length===0)continue;
     const o=cs[0]?.owner;
     const ctrl=cs.every(c=>c.owner===o); // вся страна у одной фракции → бонус
@@ -129,7 +134,8 @@ function assignRegions(){
   }
 }
 function countryCtrl(countryName){
-  const cs=cities.filter(c=>c.country===countryName);
+  const cname=typeof canonicalCountry==='function'?canonicalCountry(countryName):countryName;
+  const cs=cities.filter(c=>c.country===cname);
   if(cs.length===0)return null;
   const o=cs[0]?.owner;
   return cs.every(c=>c.owner===o)?o:null;
@@ -189,52 +195,94 @@ function researchNode(id){
   if(!nodeReady(PLAYER,n)){toast('Нужно: '+n.req.filter(r=>!techHas(PLAYER,r)).map(r=>NODE[r].name).join(', '));return;}
   if(techRes[PLAYER].length>=slotCount(PLAYER)){toast('Нет свободных слотов исследования');return;}
   if(gold[PLAYER]<n.g){toast('Не хватает голды на исследование');return;}
+  if(MP.guest){ MP.cmd({cmd:'research',node:id}); return; }
   gold[PLAYER]-=n.g; techRes[PLAYER].push({id,t:0}); buildTechWindow();
 }
 function techSlotsInner(){
-  const sc=slotCount(PLAYER); let h=`<span class="tg">💰 ${gold[PLAYER]|0}</span>`;
+  const sc=slotCount(PLAYER); let h='<div class="techSlotRail">';
   for(let i=0;i<3;i++){
-    if(i>=sc){h+=`<div class="tslot lk">🔒 слот ${i+1} — нужна Лаборатория</div>`;continue;}
+    if(i>=sc){h+=`<div class="tslot lk"><span class="lock">▣</span><span>слот ${i+1} — нужна Лаборатория</span></div>`;continue;}
     const r=techRes[PLAYER][i];
     if(r){const n=NODE[r.id],pct=Math.min(100,r.t/n.t*100);
-      h+=`<div class="tslot ac"><div class="tsf" style="width:${pct}%"></div><span>${n.ic} ${n.name} · ${Math.ceil(n.t-r.t)}с</span></div>`;}
-    else h+=`<div class="tslot fr">слот ${i+1}: выберите узел</div>`;
+      h+=`<div class="tslot ac"><div class="tsf" style="width:${pct}%"></div><span class="slotIcon">${n.ic}</span><span>${n.name} · ${Math.ceil(n.t-r.t)}с</span></div>`;}
+    else h+=`<div class="tslot fr"><span>слот ${i+1}: выберите узел</span></div>`;
   }
-  return h;
+  return h+'</div>';
 }
 function techSVG(){
-  let s='<svg viewBox="0 0 680 460" class="techSvg" xmlns="http://www.w3.org/2000/svg">';
-  for(const k in TCOLS){const C=TCOLS[k];
-    s+=`<rect x="${C.x}" y="52" width="150" height="386" rx="10" fill="${C.c}" opacity="0.13"/>`;
-    s+=`<text x="${C.x+75}" y="74" text-anchor="middle" fill="${C.cb}" font-size="12" font-weight="700">${C.name}</text>`;}
-  s+='<line x1="40" y1="212" x2="664" y2="212" stroke="#1f2c38"/><line x1="40" y1="324" x2="664" y2="324" stroke="#1f2c38"/>';
-  s+='<text x="22" y="152" text-anchor="middle" fill="#3a4a5a" font-size="19">I</text><text x="20" y="274" text-anchor="middle" fill="#3a4a5a" font-size="19">II</text><text x="18" y="386" text-anchor="middle" fill="#3a4a5a" font-size="19">III</text>';
-  s+='<g stroke="#46586a" stroke-width="1.1" opacity="0.5">';
-  for(const n of NODES)for(const r of n.req){const pa=NODE[r];if(pa)s+=`<line x1="${pa.x}" y1="${pa.y}" x2="${n.x}" y2="${n.y}"/>`;}
+  const tx=x=>110+(x-80)*1.57, ty=y=>114+(y-100)*1.18;
+  const branchOrder=['war','eco','sci','ind'];
+  const tierY=[142,254,366,478,590,702];
+  const branchRows={
+    war:[['m1'],['m2','m3'],['m4','m5','m6'],['m7','m8','m9'],['m10','m12','m14'],['m11','m13','m15']],
+    eco:[['p1'],['p2','p3'],['p4','p5','p6'],['p7','p8','p9'],['p10','p11','p13'],['p12','p14','p15']],
+    sci:[['k1'],['k2','k3'],['k4','k5','k6'],['k7','k8','k9'],['k10','k11','k12'],['k13','k14','k15']],
+    ind:[['i1'],['i2','i3','i4'],['i5','i6','i7'],['i8','i9','i10'],['i11','i12'],['i13']],
+  };
+  const layout=new Map();
+  for(const k of branchOrder){
+    const rows=branchRows[k]||[];
+    for(let t=0;t<rows.length;t++){
+      const row=rows[t].map(id=>NODE[id]).filter(Boolean);
+      const cx=tx(TCOLS[k].x+75);
+      const step=row.length>2?66:74;
+      row.forEach((n,i)=>layout.set(n.id,{x:cx+(i-(row.length-1)/2)*step,y:tierY[t]}));
+    }
+  }
+  const pos=n=>layout.get(n.id)||{x:tx(n.x),y:ty(n.y)};
+  let s='<svg viewBox="0 42 1040 714" class="techSvg" preserveAspectRatio="xMidYMin meet" xmlns="http://www.w3.org/2000/svg">';
+  s+='<defs>';
+  s+='<filter id="techGlow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+  s+='<filter id="techSoft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.2"/></filter>';
+  s+='<linearGradient id="techLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6a6252"/><stop offset=".5" stop-color="#d0b481"/><stop offset="1" stop-color="#6a6252"/></linearGradient>';
+  s+='<radialGradient id="nodeCore" cx="45%" cy="35%" r="70%"><stop offset="0" stop-color="#28302c"/><stop offset=".68" stop-color="#151917"/><stop offset="1" stop-color="#090b0a"/></radialGradient>';
+  s+='</defs>';
+  for(const k of branchOrder){const C=TCOLS[k], x=tx(C.x+75);
+    const headY=66, fs=k==='ind'?13:(k==='eco'?14:15);
+    const labelWidth={war:55,eco:124,sci:76,ind:158}[k]||90;
+    const gap=16, iconR=18, groupW=iconR*2+gap+labelWidth;
+    const iconX=x-groupW/2+iconR, labelX=iconX+iconR+gap;
+    s+=`<g class="techBranchHead"><circle cx="${iconX}" cy="${headY}" r="${iconR}" fill="#101614" stroke="${C.cb}" stroke-width="1.7"/><text x="${iconX}" y="${headY+6}" text-anchor="middle" font-size="17" opacity=".95">${C.ic||''}</text><text x="${labelX}" y="${headY+6}" text-anchor="start" fill="${C.cb}" font-size="${fs}" font-family="Georgia,serif" font-weight="700" letter-spacing=".4">${C.name}</text></g>`;
+  }
+  s+='<g stroke-linecap="round">';
+  for(const n of NODES)for(const r of n.req){const pa=NODE[r];if(pa){
+    const st=nodeState(n), pst=nodeState(pa), active=(st==='done'||st==='inprog')&&(pst==='done'||pst==='inprog');
+    const a=pos(pa), b=pos(n);
+    s+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${active?'url(#techLine)':'#776c5c'}" stroke-width="${active?2.2:1.15}" opacity="${active ? .82 : .42}"/>`;
+  }}
   s+='</g>';
   for(const n of NODES){
     const C=TCOLS[n.col], st=nodeState(n);
-    let fill='#0f1822',stroke='#243240',sw=1.2,op=0.45,cls='';
-    let bottom=`<text x="${n.x}" y="${n.y+11}" text-anchor="middle" font-size="9" font-weight="700" fill="#caa64a">${n.g}</text>`;
-    if(st==='done'){fill='#16331f';stroke=C.cb;sw=2.2;op=1;bottom=`<text x="${n.x}" y="${n.y+12}" text-anchor="middle" font-size="11" fill="#3fd089">✓</text>`;}
-    else if(st==='avail'){fill='#1a2735';stroke=C.c;sw=1.7;op=0.95;bottom=`<text x="${n.x}" y="${n.y+11}" text-anchor="middle" font-size="9" font-weight="700" fill="#ffcf66">${n.g}</text>`;}
-    else if(st==='inprog'){fill='#2a2113';stroke='#ff8a3a';sw=2.2;op=1;cls='inprog';bottom=`<text x="${n.x}" y="${n.y+12}" text-anchor="middle" font-size="9" fill="#ffb877">⏳</text>`;}
+    const {x,y}=pos(n);
+    let fill='url(#nodeCore)',stroke='#6c604f',sw=1.4,op=0.45,cls=st,halo=.18,doneBadge='';
+    let bottom=`<text x="${x}" y="${y+30}" text-anchor="middle" font-size="10" font-weight="900" fill="#caa45d">${n.g}</text>`;
+    if(st==='done'){stroke=C.cb;sw=2.2;op=1;halo=.42;bottom='';doneBadge=`<g class="doneBadge"><circle cx="${x+18}" cy="${y+18}" r="7.2" fill="#173421" stroke="#a8eaa4" stroke-width="1.6"/><path d="M ${x+14.7} ${y+17.7} L ${x+17.1} ${y+20.1} L ${x+21.8} ${y+14.9}" fill="none" stroke="#dff7d7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></g>`;}
+    else if(st==='avail'){stroke=C.cb;sw=2.2;op=1;halo=.34;bottom=`<text x="${x}" y="${y+30}" text-anchor="middle" font-size="10" font-weight="900" fill="#f0c46a">${n.g}</text>`;}
+    else if(st==='inprog'){stroke='#d5a060';sw=2.6;op=1;halo=.5;bottom=`<text x="${x}" y="${y+30}" text-anchor="middle" font-size="10" fill="#e6b36d">${n.g}</text>`;}
     const tag=n.u?'#e8714a':n.slot?'#9a7bff':null;
     s+=`<g class="tnode ${cls}" data-id="${n.id}" style="cursor:${st==='avail'?'pointer':'default'}">`;
-    s+=`<rect x="${n.x-13}" y="${n.y-15}" width="26" height="30" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
-    s+=`<text x="${n.x}" y="${n.y-1}" text-anchor="middle" font-size="13" opacity="${op}">${n.ic}</text>`;
+    s+=`<circle cx="${x}" cy="${y}" r="27" fill="${stroke}" opacity="${halo}" filter="url(#techGlow)"/>`;
+    s+=`<circle class="nodeOuter" cx="${x}" cy="${y}" r="24" fill="#151914" stroke="${stroke}" stroke-width="${sw}" opacity="${st==='lock' ? .72 : 1}"/>`;
+    s+=`<circle class="nodeRing" cx="${x}" cy="${y}" r="18.5" fill="none" stroke="#cdb893" stroke-width="1.2" opacity="${st==='lock' ? .34 : .88}"/>`;
+    s+=`<circle class="nodeCore" cx="${x}" cy="${y}" r="15" fill="${fill}" stroke="#080a09" stroke-width="1.1"/>`;
+    s+=`<text x="${x}" y="${y+5}" text-anchor="middle" font-size="16" opacity="${op}">${n.ic}</text>`;
     s+=bottom;
-    if(tag)s+=`<rect x="${n.x+6}" y="${n.y-14}" width="6" height="6" rx="1.5" fill="${tag}"/>`;
+    if(tag)s+=`<circle cx="${x+18}" cy="${y-17}" r="5" fill="${tag}" stroke="#0b0b0b" stroke-width="1"/>`;
+    s+=doneBadge;
     s+='</g>';
   }
   return s+'</svg>';
 }
 let techWinOpen=false;
+function updateTechGold(){
+  const g=document.getElementById('techGold'); if(g)g.textContent=gold[PLAYER]|0;
+}
 function buildTechWindow(){ // полная перестройка (только по событиям, не по таймеру — иначе теряются клики)
+  updateTechGold();
   document.getElementById('techGrid').innerHTML=`<div class="techSlots" id="techSlots">${techSlotsInner()}</div><div id="techGraph">${techSVG()}</div>`;
 }
 function refreshTechAfford(){ // частый тик: обновляем ТОЛЬКО слоты (прогресс), граф не трогаем
-  if(!techWinOpen)return; const s=document.getElementById('techSlots'); if(s)s.innerHTML=techSlotsInner();
+  if(!techWinOpen)return; updateTechGold(); const s=document.getElementById('techSlots'); if(s)s.innerHTML=techSlotsInner();
 }
 function techTip(e){
   const g=e.target.closest&&e.target.closest('[data-id]');

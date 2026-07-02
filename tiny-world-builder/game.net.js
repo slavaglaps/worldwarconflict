@@ -159,6 +159,10 @@
       const mine = state.research.get(String(PLAYER)); const arr=[];
       if(mine) for(const part of mine.split(';')){ const [id,td]=part.split(':'); if(id) arr.push({ id, t:(+td||0)/10 }); }
       techRes[PLAYER]=arr;
+      const sig=arr.map(r=>r.id).join(',');
+      if(push._researchSig!==sig){ push._researchSig=sig;
+        if(typeof buildTechWindow==='function'&&typeof techWinOpen!=='undefined'&&techWinOpen){try{buildTechWindow();}catch(e){}}
+      }
     }
     if(typeof techDone!=='undefined' && state.tech){ push._techSig=push._techSig||{};
       state.tech.forEach((ids,k)=>{ const fid=+k; if(push._techSig[fid]!==ids){ push._techSig[fid]=ids;
@@ -169,7 +173,7 @@
     if(!push._by || push._n!==cities.length){ push._by={}; for(const cc of cities)push._by[cc.idx]=cc; push._n=cities.length; }
     state.cities.forEach((cc,key)=>{ const lc=push._by[Number(key)]; if(lc){ lc.isShipyard=!!cc.shipyard; lc.isAirport=!!cc.airport; lc.aa=cc.aa|0; } });
     const e=[], DQ=1/64;   // позиции пришли как fixed-point uint16 (×64 на сервере) — делим обратно
-    state.squads.forEach((s,id)=>{ const x=s.x*DQ, z=s.z*DQ; e.push(['sq'+id, 0, s.owner, x, gy(x,z)+0.2, z, s.count]); });
+    state.squads.forEach((s,id)=>{ const x=s.x*DQ, z=s.z*DQ; e.push(['sq'+id, 0, s.owner, x, gy(x,z)+0.2, z, s.count, s.fighting?1:0]); });  // [7]=fighting → боевая анимация
     state.ships .forEach((s,id)=> e.push(['sh'+id, 1, s.owner, s.x*DQ, WY, s.z*DQ, 0]));
     state.planes.forEach((s,id)=> e.push(['pl'+id, 2, s.owner, s.x*DQ, PA, s.z*DQ, 0]));
     onMsg({ data: JSON.stringify({ t:'ent', e }) });

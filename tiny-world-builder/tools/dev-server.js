@@ -156,12 +156,15 @@ function readGameDataForSim() {
   if (!colorsBlock) throw new Error('FACTION_COLOR block not found');
   const colorExpr = colorsBlock[1].replace(/([,{]\s*)'([^']+)'\s*:/g, '$1"$2":').replace(/0x[0-9a-fA-F]+/g, m => String(Number(m)));
   const FACTION_COLOR = Function(`return ${colorExpr};`)();
-  return { CITY_LIST, FACTION_COLOR };
+  const aliasesBlock = src.match(/const\s+COUNTRY_ALIASES\s*=\s*(\{[\s\S]*?\n\});/);
+  const COUNTRY_ALIASES = aliasesBlock ? Function(`return ${aliasesBlock[1]};`)() : {};
+  return { CITY_LIST, FACTION_COLOR, COUNTRY_ALIASES };
 }
 
 function cityListToSimMap(hexMap) {
-  const { CITY_LIST, FACTION_COLOR } = readGameDataForSim();
-  const countries = [...new Set(CITY_LIST.map(c => c[5]))];
+  const { CITY_LIST, FACTION_COLOR, COUNTRY_ALIASES } = readGameDataForSim();
+  const canonicalCountry = country => COUNTRY_ALIASES[country] || country;
+  const countries = [...new Set(CITY_LIST.map(c => canonicalCountry(c[5])))];
   const factByCountry = {};
   const factions = countries.map((country, id) => {
     factByCountry[country] = id;
@@ -169,7 +172,7 @@ function cityListToSimMap(hexMap) {
   });
   const capitals = new Set();
   const cities = CITY_LIST.map((c, idx) => {
-    const country = c[5];
+    const country = canonicalCountry(c[5]);
     const capital = !capitals.has(country); capitals.add(country);
     const gx = Math.round(((c[1] - (-13)) / (51 - (-13))) * 256);
     const gz = Math.round(((70 - c[2]) / (70 - 34)) * 256);
@@ -298,7 +301,9 @@ function cityListToSimMap(hexMap) {
 function writeSimMapData(hexMap) {
   const out = path.resolve(root, 'sim', 'map-data.json');
   const next = cityListToSimMap(hexMap);
-  fs.writeFileSync(out, JSON.stringify(next));
+  const tmp = out + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(next));
+  fs.renameSync(tmp, out);                         // атомарно
   return { stat: fs.statSync(out), map: next };
 }
 
@@ -958,8 +963,15 @@ const server = http.createServer((req, res) => {
       return;
     }
     readJsonBody(req).then(input => {
+      // валидация: не даём пустой/битой карте затереть рабочую (особенно при частом авто-синке)
+      if (!input || !Array.isArray(input.tiles) || input.tiles.length < 1000) {
+        sendJson(res, 400, { ok: false, error: 'refusing to save: tiles missing or too few (' + (input && input.tiles && input.tiles.length) + ')' });
+        return;
+      }
       const out = path.resolve(root, 'hex-map.json');
-      fs.writeFileSync(out, JSON.stringify(input));
+      const tmp = out + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(input));   // компактно (карта большая)
+      fs.renameSync(tmp, out);                         // атомарно: tmp → rename, без риска битого файла
       const stat = fs.statSync(out);
       const sim = writeSimMapData(input);
       sendJson(res, 200, {

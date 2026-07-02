@@ -31,7 +31,7 @@ function projectLocalSim(sim, onMsg) {
   const e = [];
   for (const s of sim.squads) {
     let x = s.x, z = s.z;                                          // прямая интерполяция ребра…
-    if (typeof hexRoadPos === 'function' && !s.foe && s.path) {    // …но рисуем ВДОЛЬ визуальной дороги (хекс-карта)
+    if (typeof hexRoadPos === 'function' && s.path) {              // …но рисуем ВДОЛЬ визуальной дороги — и В БОЮ тоже (иначе прыжок с дороги при сцепке)
       const a = s.path[s.hop], b = s.path[s.hop + 1];
       if (a != null && b != null) {
         const ed = sim.edgeBetween(a, b), frac = ed && ed.len ? Math.min(1, s.prog / ed.len) : 0;
@@ -39,7 +39,7 @@ function projectLocalSim(sim, onMsg) {
         if (rp) { x = rp.x; z = rp.z; }
       }
     }
-    e.push(['sq' + s.id, 0, s.owner, x, gy(x, z) + 0.2, z, Math.round(s.fcount)]);
+    e.push(['sq' + s.id, 0, s.owner, x, gy(x, z) + 0.2, z, Math.round(s.fcount), s.foe ? 1 : 0]);  // [7]=fighting → боевая анимация на клиенте
   }
   for (const s of sim.ships) e.push(['sh' + s.id, 1, s.owner, s.x, WY, s.z, 0]);
   for (const p of sim.planes) e.push(['pl' + p.id, 2, p.owner, p.x, PA, p.z, 0]);
@@ -47,6 +47,8 @@ function projectLocalSim(sim, onMsg) {
 }
 
 let _lsHeroSig = '';
+let _lsTechSig = '';
+let _lsPendingCmds = [];
 
 function syncLocalHeroes(sim) {
   if (!sim || !sim.heroSlots) return;
@@ -80,6 +82,15 @@ function syncLocalEcon(sim) {
     if (sim.techDone[f]) { techDone[f] = new Set(sim.techDone[f]); try { recomputeTech(f); } catch (e) {} }
   }
   if (typeof techRes !== 'undefined' && sim.techRes && sim.techRes[PLAYER]) techRes[PLAYER] = sim.techRes[PLAYER].map(r => ({ id: r.id, t: r.t }));
+  if (typeof buildTechWindow === 'function' && typeof techWinOpen !== 'undefined') {
+    const doneSig = (sim.techDone || []).map(s => Array.from(s || []).sort().join(',')).join('|');
+    const resSig = (sim.techRes && sim.techRes[PLAYER] ? sim.techRes[PLAYER] : []).map(r => r.id).join(',');
+    const sig = doneSig + '//' + PLAYER + ':' + resSig;
+    if (sig !== _lsTechSig) {
+      _lsTechSig = sig;
+      if (techWinOpen) buildTechWindow();
+    }
+  }
   syncLocalHeroes(sim);
 }
 
@@ -101,15 +112,33 @@ async function initLocalSim() {
   } catch (e) { console.error('[ls] не удалось поднять локальный сим:', e); }
 }
 
+// map-data.json держит страны РАЗДЕЛЬНО (Испания/Португалия/сканд.), а клиент их СЛИВАЕТ
+// (COUNTRY_ALIASES → Иберия / Северная империя). Приводим карту сима к клиентскому списку фракций
+// (тот же порядок и id, что FACTIONS), иначе PLAYER-индекс попадает в другую страну (Россия→Болгария).
+function simMapForClient(raw) {
+  if (typeof FACTIONS === 'undefined' || !Array.isArray(FACTIONS) || !FACTIONS.length || typeof canonicalCountry !== 'function') return raw;
+  const factions = FACTIONS.map(f => ({ id: f.id, country: f.country, color: f.color }));
+  const nameToId = {}; factions.forEach(f => { nameToId[f.country] = f.id; });
+  const oldToNew = {};                                    // старый id фракции (32) → новый канонический (29)
+  raw.factions.forEach(f => { const canon = canonicalCountry(f.country); oldToNew[f.id] = nameToId[canon] != null ? nameToId[canon] : 0; });
+  const cities = raw.cities.map(c => {
+    const canon = canonicalCountry(c.country);
+    return Object.assign({}, c, { country: canon, owner: oldToNew[c.owner] != null ? oldToNew[c.owner] : (nameToId[canon] != null ? nameToId[canon] : 0) });
+  });
+  return Object.assign({}, raw, { factions, cities });    // edges ссылаются на idx городов → без изменений
+}
 function startLocalSim() {
   if (!_lsReady) { _lsPendingStart = true; return; }     // страну выбрали раньше загрузки — стартуем, как загрузится
   const balance = _lsApi.makeBalance({ factionDefault: { gold: 200, polit: 80, heroes: [] } });   // прод-старты как на сервере; героев игрок призывает сам
-  LOCALSIM = new _lsApi.Sim({ map: _lsMap, balance, ai: true });
+  LOCALSIM = new _lsApi.Sim({ map: simMapForClient(_lsMap), balance, ai: true });
   LOCALSIM.humanFactions = new Set([PLAYER]);            // ИИ не управляет игроком
   if (typeof LOCALSIM.clearFactionHeroes === 'function') LOCALSIM.clearFactionHeroes(PLAYER);
   _lsHeroSig = '';
+  _lsTechSig = '';
   gameOver = false;
   projectLocalSim(LOCALSIM, MP._onMsg); syncLocalEcon(LOCALSIM);   // первый кадр — сразу состояние
+  const pending = _lsPendingCmds.splice(0);
+  for (const cmd of pending) localSimCmd(cmd);
 }
 
 function localSimStep(gdt) {                              // вызывается из loop() каждый кадр в режиме ?ls
@@ -122,7 +151,7 @@ function localSimStep(gdt) {                              // вызываетс�
 var _LS_TRACK = { 1: 'prod', 2: 'def', 3: 'atk', prod: 'prod', def: 'def', atk: 'atk' };
 var _LS_I = (v) => (v == null ? null : v | 0);
 function localSimCmd(o) {                                 // MP.cmd в режиме ?ls → методы серверного Sim (как GameRoom)
-  const s = LOCALSIM, f = PLAYER; if (!s) return;
+  const s = LOCALSIM, f = PLAYER; if (!s) { _lsPendingCmds.push({ ...o }); if (_lsPendingCmds.length > 40) _lsPendingCmds.shift(); return; }
   try {
     switch (o.cmd) {
       case 'buy':      s.cmdBuy(f, _LS_I(o.c), String(o.spec)); break;

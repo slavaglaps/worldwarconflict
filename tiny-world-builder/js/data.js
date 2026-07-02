@@ -17,14 +17,61 @@ const FACTION_COLOR={
   'Украина':0xa6b04a,'Россия':0xa83434,'Турция':0x8a6240,
   'Грузия':0xa85a86,'Армения':0x7d5ac2,'Азербайджан':0x3aa67a,
   'Литва':0xccc23a,'Латвия':0x8fb05f,'Эстония':0x4aa85a,'Греция':0x36ad9e,
+  'Иберия':0xcaa233,'Северная империя':0x6f9ed2,
 };
 let PLAYER_COUNTRY='Франция';  // выбирается на старте в окне выбора страны
 // флаги фракций
 const FLAGS={'Франция':'🇫🇷','Британия':'🇬🇧','Испания':'🇪🇸','Португалия':'🇵🇹','Италия':'🇮🇹','Германия':'🇩🇪',
   'Нидерланды':'🇳🇱','Бельгия':'🇧🇪','Люксембург':'🇱🇺','Чехия':'🇨🇿','Андора':'🇦🇩','Австро-Венгерская империя':'🇦🇹','Польша':'🇵🇱','Беларусь':'🇧🇾','Молдова':'🇲🇩','Румыния':'🇷🇴','Болгария':'🇧🇬','Норвегия':'🇳🇴','Швеция':'🇸🇪','Финляндия':'🇫🇮','Дания':'🇩🇰',
   'Греция':'🇬🇷','Украина':'🇺🇦','Россия':'🇷🇺','Турция':'🇹🇷','Грузия':'🇬🇪','Армения':'🇦🇲',
-  'Азербайджан':'🇦🇿','Литва':'🇱🇹','Латвия':'🇱🇻','Эстония':'🇪🇪'};
+  'Азербайджан':'🇦🇿','Литва':'🇱🇹','Латвия':'🇱🇻','Эстония':'🇪🇪','Иберия':'🇪🇸','Северная империя':'🇸🇪'};
 const flagOf=c=>FLAGS[c]||'🏳';
+const COUNTRY_ALIASES={
+  'Испания':'Иберия',
+  'Португалия':'Иберия',
+  'Норвегия':'Северная империя',
+  'Швеция':'Северная империя',
+  'Финляндия':'Северная империя',
+};
+const COUNTRY_HOME_BIOME={
+  'Иберия':'desert','Испания':'desert','Португалия':'desert',
+  'Франция':'summer','Британия':'darkForest','Германия':'basalt','Италия':'terracotta',
+  'Австро-Венгерская империя':'alpineStone','Бельгия':'burgundyClay','Польша':'wheatGold',
+  'Украина':'steppeAmber','Греция':'aegeanMarble','Грузия':'caucasusHighland',
+  'Армения':'apricotTuff','Азербайджан':'saffronDrylands','Латвия':'amberBog',
+  'Литва':'heatherField','Эстония':'mistCoast','Беларусь':'peatland',
+  'Болгария':'roseValley','Кипр':'copperIsland','Люксембург':'slateMeadow',
+  'Молдова':'vineyardDusk','Нидерланды':'dunePolder','Андора':'pyreneanStone',
+  'Румыния':'carpathianDusk','Словакия':'limestoneBlue','Чехия':'bohemianClay',
+  'Швейцария':'glacierAlpine','Россия':'volcanic','Турция':'anatolia',
+  'Северная империя':'winter','Скандинавия':'winter',
+  'Швеция':'winter','Финляндия':'winter','Дания':'winter','Норвегия':'winter',
+};
+const PLAYABLE_COUNTRIES=[
+  'Россия',
+  'Украина',
+  'Австро-Венгерская империя',
+  'Турция',
+  'Британия',
+  'Франция',
+  'Италия',
+  'Германия',
+  'Польша',
+  'Северная империя',
+];
+const COUNTRY_CARD_ART={
+  'Россия':'assets/countries/country-russia.jpg',
+  'Украина':'assets/countries/country-ukraine.jpg',
+  'Австро-Венгерская империя':'assets/countries/country-austro-hungary.jpg',
+  'Турция':'assets/countries/country-turkey.jpg',
+  'Британия':'assets/countries/country-britain.jpg',
+  'Франция':'assets/countries/country-france.jpg',
+  'Италия':'assets/countries/country-italy.jpg',
+  'Германия':'assets/countries/country-germany.jpg',
+  'Польша':'assets/countries/country-poland.jpg',
+  'Северная империя':'assets/countries/country-northern-empire.jpg',
+};
+function canonicalCountry(country){return COUNTRY_ALIASES[country]||country;}
 let FACTIONS=[], FACT_BY_COUNTRY={}, PLAYER=0;
 /* ── мультиплеер: глобальное состояние (логика — в блоке MULTIPLAYER ниже) ── */
 const MP={ on:false, host:false, guest:false, id:0, hostId:0, sock:null,
@@ -33,14 +80,18 @@ let OWNER_COL={}, OWNER_COLD={};
 const OWNER={PLAYER:0}; // обратная совместимость: OWNER.PLAYER = id фракции игрока
 function _dark(hex,f){const c=new T3.Color(hex);c.multiplyScalar(f);return c.getHex();}
 function buildFactions(){
-  FACTIONS=[];FACT_BY_COUNTRY={};OWNER_COL={};OWNER_COLD={};
-  const countries=[...new Set(CITY_LIST.map(c=>c[5]))]; // страны с городами, в порядке появления
+  FACTIONS=[];FACT_BY_COUNTRY={};OWNER_COL={};OWNER_COLD={};PLAYER=0;
+  const countries=[...new Set(CITY_LIST.map(c=>canonicalCountry(c[5])))]; // страны с городами, в порядке появления
   countries.forEach((country,i)=>{
     const color=FACTION_COLOR[country]||0x9aa6b2;
     FACTIONS.push({id:i,country,color,colorD:_dark(color,0.68),isPlayer:country===PLAYER_COUNTRY});
     FACT_BY_COUNTRY[country]=i; OWNER_COL[i]=color; OWNER_COLD[i]=_dark(color,0.68);
     if(country===PLAYER_COUNTRY)PLAYER=i;
   });
+  for(const raw in COUNTRY_ALIASES){
+    const merged=COUNTRY_ALIASES[raw];
+    if(FACT_BY_COUNTRY[merged]!=null)FACT_BY_COUNTRY[raw]=FACT_BY_COUNTRY[merged];
+  }
   OWNER.PLAYER=PLAYER;
 }
 
@@ -84,10 +135,10 @@ const rand=(a,b)=>a+Math.random()*(b-a);
 
 /* ── древо исследований: 58 узлов, 4 ветки, слоты, время (по макету) ── */
 const TCOLS={
-  war:{name:'МОЩЬ',         c:'#c0473f',cb:'#e98279',x:43},
-  eco:{name:'ПРОЦВЕТАНИЕ',  c:'#2f9e5a',cb:'#5cc486',x:202},
-  sci:{name:'ЗНАНИЕ',       c:'#2f93b8',cb:'#5bb9d8',x:361},
-  ind:{name:'ПРОМЫШЛЕННОСТЬ',c:'#7a5ec0',cb:'#a78fe2',x:520},
+  war:{name:'МОЩЬ',         ic:'⚔',c:'#9d4d3d',cb:'#df9078',x:43},
+  eco:{name:'ПРОЦВЕТАНИЕ',  ic:'✦',c:'#497b55',cb:'#8dc58b',x:202},
+  sci:{name:'ЗНАНИЕ',       ic:'◫',c:'#4f7e88',cb:'#9bd2d7',x:361},
+  ind:{name:'ПРОМЫШЛЕННОСТЬ',ic:'⚙',c:'#73684b',cb:'#d0b879',x:520},
 };
 // древо технологий (NODES) + индекс NODE — из _tech.gen.js (канон server/sim/tech-data.js)
 // поля узла: id,col,x,y,ic,name,req[],g(голда),t(сек), эффекты a/d/e/s/p, v{tr,td,…}(×), u(разблок), slot(+слот)
@@ -143,7 +194,7 @@ const LON0=-13, LON1=51, LAT0=34, LAT1=70; // расширено на восто
 // [name, lon, lat, size, _ , country] — владелец теперь = фракция страны
 const P=0, N=0, E=0; // заглушки (колонка владельца игнорируется)
 const CITY_LIST = [
-  ["Маннчестер",-1.25,53.5469,1,P,"Британия"],
+  ["Маннчестер",-1.24,53.5933,1,P,"Британия"],
   ["Бирмингем",-2,52.4219,2,P,"Британия"],
   ["Глазго",-4.25,55.5156,2,P,"Британия"],
   ["Ливерпуль",-3,53.4063,2,P,"Британия"],
@@ -390,5 +441,6 @@ const CITY_DATA = CITY_LIST.map((c,i) => {
   const [lon, lat] = [c[1], c[2]];
   const x = (lon - LON0) / (LON1 - LON0) * GRID;
   const z = (LAT1 - lat) / (LAT1 - LAT0) * GRID;
-  return [Math.round(x), Math.round(z), c[5], c[3], FACT_BY_COUNTRY[c[5]]];
+  const country=canonicalCountry(c[5]);
+  return [Math.round(x), Math.round(z), country, c[3], FACT_BY_COUNTRY[country]];
 });

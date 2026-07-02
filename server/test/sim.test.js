@@ -252,7 +252,23 @@ test('cmdSend отклоняет невалидный pct', () => {
 test('отряд доходит и подкрепляет свой город', () => { const s = new Sim({ map }); const own = s.cities.filter(c => c.owner === 0).map(c => c.idx); const tgt = own[1]; const before = s.cities[tgt].units; s.cmdSend(0, own[0], tgt, 0.5); for (let i = 0; i < 400 && s.squads.length; i++) s.tick(0.1); eq(s.squads.length, 0); gt(s.cities[tgt].units, before); });
 test('отряд осаждает вражеский город (в войне)', () => { const s = new Sim({ map, warPrep: 0 }); const eo = s.cities[7].owner; assert(eo !== 0, 'город 7 вражеский'); s.setWar(0, eo); assert(s.cmdSend(0, 0, 7, 0.9)); for (let i = 0; i < 600 && s.squads.length; i++) s.tick(0.1); assert((s.cities[7].siege && s.cities[7].siege[0]) || s.cities[7].owner === 0, 'осада началась или город взят'); });
 test('нет пути через чужую территорию без войны/союза → отказ', () => { const s = new Sim({ map }); const far = s.cities.findIndex(c => c.owner !== 0 && !(s.adj.get(c.idx) || []).some(n => s.cities[n.to].owner === 0)); assert(far >= 0, 'найден удалённый город'); eq(s.findPath(0, far, 0), null); });
-test('полевой бой: вражеские отряды истощают друг друга', () => { const s = new Sim({ map }); s.setWar(0, 1); const a = new Squad(0, 30, [0, 2], s, 1), b = new Squad(1, 30, [0, 2], s, 1); a.x = b.x = 100; a.z = b.z = 100; s.squads.push(a, b); s.fieldBattles(0.5); lt(a.fcount, 30); lt(b.fcount, 30); });
+test('полевой бой: сцепка ТОЛЬКО впритык на одной дороге (FIELD_CONTACT)', () => {
+  const s = new Sim({ map }); s.setWar(0, 1);
+  let nb = null; for (const x of (s.adj.get(0) || [])) if (x.edge.len > 2) { nb = x; break; }   // ребро подлиннее, чтобы «далеко» было > CONTACT
+  assert(nb, 'у города 0 есть ребро длиной > 2');
+  const e = nb.edge, to = nb.to;
+  const a = new Squad(0, 30, [0, to], s, 1), b = new Squad(1, 30, [to, 0], s, 1);   // навстречу по ОДНОМУ ребру
+  s.squads.push(a, b);
+  // далеко друг от друга (по краям ребра) → НЕ сцепляются (раньше дрались с 3.0 евклида «через поле»)
+  a.prog = 0; b.prog = 0; a._setPos(); b._setPos();
+  s.fieldBattles(0.5);
+  eq(a.foe, null); eq(b.foe, null); eq(a.fcount, 30);
+  // впритык (дорожная дистанция 0.3 ≤ FIELD_CONTACT) → сцепились и истощают друг друга
+  a.prog = e.len / 2 - 0.15; b.prog = e.len / 2 - 0.15; a._setPos(); b._setPos();
+  s.fieldBattles(0.5);
+  assert(a.foe === b && b.foe === a, 'взаимная сцепка');
+  lt(a.fcount, 30); lt(b.fcount, 30);
+});
 
 group('Флот + авиация (постройка, движение, spatial-grid бой)');
 test('верфь строит корабль (с tech ships)', () => { const s = new Sim({ map, goldStart: 1000 }); const y = s.cities.find(c => c.isShipyard); learn(s, y.owner, 'i1'); assert(s.cmdBuildShip(y.owner, y.idx)); for (let i = 0; i < 70 && !s.ships.length; i++) s.tick(0.1); eq(s.ships.length, 1); });

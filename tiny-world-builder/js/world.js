@@ -2,13 +2,41 @@
 const app=document.getElementById('app');
 const renderer=new T3.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.outputEncoding=T3.sRGBEncoding;
+renderer.toneMapping=T3.ACESFilmicToneMapping;
+renderer.toneMappingExposure=0.87;
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=T3.PCFSoftShadowMap;
 app.appendChild(renderer.domElement);
 
+const GAME_LIGHT={
+  background:0xfafafa,
+  fogColor:0xa1bed9,
+  fogNear:0,
+  fogFar:230,
+  hemiSky:0xffffff,
+  hemiGround:0x0026bd,
+  hemiIntensity:0.85,
+  sunColor:0xffffff,
+  sunIntensity:0.82,
+  sunX:-0.42,
+  sunY:0.4,
+  sunZ:-0.09,
+  sunTargetX:0.15,
+  sunTargetY:0.01,
+  sunTargetZ:0,
+  shadowMap:4096,
+  shadowRadius:2.1,
+  shadowBias:0.0002,
+  shadowNormalBias:0.024,
+  shadowSize:0.5,
+  shadowNear:1,
+  shadowFar:2.42
+};
+
 const scene=new T3.Scene();
-scene.background=new T3.Color(0x9fd4ea);
+scene.background=new T3.Color(GAME_LIGHT.background);
 // лёгкая атмосфера для дальней суши/облаков (туман океана делает сам водный шейдер)
-scene.fog=new T3.Fog(0x9fd4ea, 660, 1500);
+scene.fog=new T3.Fog(GAME_LIGHT.fogColor,GAME_LIGHT.fogNear,GAME_LIGHT.fogFar);
 
 const camera=new T3.PerspectiveCamera(45,1,.1,3000);
 const target=new T3.Vector3(GRID/2,2,GRID/2);
@@ -23,12 +51,18 @@ function applyCam(){
 }
 applyCam();
 
-scene.add(new T3.HemisphereLight(0xffffff,0x6b7a5a,0.9));
-const sun=new T3.DirectionalLight(0xfff8f0,1.1);
-sun.position.set(GRID*0.3,220,GRID*0.1); sun.castShadow=true;
-sun.shadow.mapSize.set(4096,4096);
-const sc=sun.shadow.camera; sc.left=-190;sc.right=190;sc.top=190;sc.bottom=-190;sc.near=1;sc.far=620;
-scene.add(sun); scene.add(sun.target); sun.target.position.copy(target);
+const hemi=new T3.HemisphereLight(GAME_LIGHT.hemiSky,GAME_LIGHT.hemiGround,GAME_LIGHT.hemiIntensity);
+scene.add(hemi);
+const sun=new T3.DirectionalLight(GAME_LIGHT.sunColor,GAME_LIGHT.sunIntensity);
+sun.position.set(GRID*GAME_LIGHT.sunX,GRID*GAME_LIGHT.sunY,GRID*GAME_LIGHT.sunZ); sun.castShadow=true;
+sun.shadow.mapSize.set(GAME_LIGHT.shadowMap,GAME_LIGHT.shadowMap);
+sun.shadow.radius=GAME_LIGHT.shadowRadius;
+sun.shadow.bias=GAME_LIGHT.shadowBias;
+sun.shadow.normalBias=GAME_LIGHT.shadowNormalBias;
+const sc=sun.shadow.camera,SS=GRID*GAME_LIGHT.shadowSize;
+sc.left=-SS;sc.right=SS;sc.top=SS;sc.bottom=-SS;sc.near=GAME_LIGHT.shadowNear;sc.far=GRID*GAME_LIGHT.shadowFar;
+scene.add(sun); scene.add(sun.target);
+sun.target.position.set(GRID*GAME_LIGHT.sunTargetX,GRID*GAME_LIGHT.sunTargetY,GRID*GAME_LIGHT.sunTargetZ);
 
 /* ── Perlin/Simplex noise (simple gradient noise) ──────────────── */
 const NoiseGen = (() => {
@@ -73,7 +107,7 @@ const waterShader = {
     sunDir:       {value: new T3.Vector3(-0.21, 0.88, -0.42)},
     deepColor:    {value: new T3.Color(0x123f5c)},
     shallowColor: {value: new T3.Color(0x3fa0c8)},
-    skyColor:     {value: new T3.Color(0x9fd4ea)}, // = scene.background → бесшовный горизонт
+    skyColor:     {value: new T3.Color(GAME_LIGHT.background)}, // = scene.background → бесшовный горизонт
     fogStart:     {value: 22.0},   // расстояние ЗА краем карты, где начинается туман
     fogEnd:       {value: 150.0},  // и где океан полностью растворяется в небе
   },
