@@ -12,12 +12,12 @@
 Папка проекта: `/Users/viacheslavmuliukin/mushroom-wars-clone/` (ВНЕ основного репозитория, как просил юзер).
 
 ## АКТУАЛЬНЫЙ ФАЙЛ
-**`tiny-world-builder/game.html`** — вся игра в одном HTML (~2700 строк, инлайн-скрипт). С неё продолжаем.
+**`client/game.html`** — вся игра в одном HTML (~2700 строк, инлайн-скрипт). С неё продолжаем.
 (Старые версии `index.html`, `europe.html` — 2D-предки, не трогаем, но из europe.html взяты координаты городов/контуры стран.)
 
 ## Запуск
 ```bash
-cd /Users/viacheslavmuliukin/mushroom-wars-clone/tiny-world-builder && node tools/dev-server.js 3000 &
+cd /Users/viacheslavmuliukin/mushroom-wars-clone/client && node tools/dev-server.js 3000 &
 ```
 Игра: `http://localhost:3000/game.html` (Three грузится как глобал `THREE`, в коде `const T3=THREE`).
 ⚠️ **ВАЖНО:** ландшафт и города строятся ОДИН РАЗ при загрузке страницы (`buildWorld()`).
@@ -26,7 +26,7 @@ cd /Users/viacheslavmuliukin/mushroom-wars-clone/tiny-world-builder && node tool
 
 ## Проверка синтаксиса (обязательно после правок)
 ```bash
-cd /Users/viacheslavmuliukin/mushroom-wars-clone/tiny-world-builder && node -e "
+cd /Users/viacheslavmuliukin/mushroom-wars-clone/client && node -e "
 const fs=require('fs');const h=fs.readFileSync('game.html','utf8');
 const m=[...h.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n');
 fs.writeFileSync('/tmp/g.js','const THREE={Vector3:function(){return{project(){return{}},set(){return this},distanceTo(){return 1},subVectors(){return this},normalize(){return this},lengthSq(){return 1},length(){return 1},copy(){return this},clone(){return this},addScaledVector(){return this}}},Quaternion:function(){},Color:function(){return{multiplyScalar(){return this},getHex(){return 0},setHex(){return this},copy(){return this},lerp(){return this},clone(){return this}}}};const document={getElementById:()=>({style:{},classList:{toggle(){}},appendChild(){},querySelector:()=>({style:{}}),addEventListener(){}}),createElement:()=>({style:{},classList:{contains(){},toggle(){},add(){}},addEventListener(){},querySelector:()=>({style:{}}),appendChild(){}}),body:{appendChild(){}},querySelectorAll:()=>[]};const window={};const innerWidth=1,innerHeight=1;\n'+m);
@@ -90,9 +90,9 @@ fs.writeFileSync('/tmp/g.js','const THREE={Vector3:function(){return{project(){r
 - **Актуальный backend**: `server/index.js` / `server/GameRoom.js` на Colyseus. Старый `mp-server.js` relay удалён.
 - **Запуск локально**:
   - backend: `cd server && npm start`
-  - frontend: `cd tiny-world-builder && node tools/dev-server.js 3000`
+  - frontend: `cd client && node tools/dev-server.js 3000`
   - игра: `http://localhost:3000/game.html?mp=ROOM`
-  - лобби: `http://localhost:3000/` или `tiny-world-builder/index.html`
+  - лобби: `http://localhost:3000/` или `client/index.html`
 - **Модель**: сервер крутит `server/sim/Sim.js`; клиент не симулирует, а зеркалит Colyseus schema-state.
 - **Bridge в `game.html`**: Colyseus state переводится в локальные `snap/ent` события для существующего Three.js рендера (`applySnap`/`reconcile`). В online-режиме `MP.guest=true`, браузер-хоста нет.
 - **Назначение страны**: клиент выбирает страну, сервер отвечает `assigned{faction}`. Если страна занята, клиент переключается на фактически назначенную сервером фракцию.

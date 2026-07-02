@@ -8,8 +8,8 @@
 //   Защита:       server/test/rules-sync.test.js падает, если файлы устарели.
 //
 // Эмитим:
-//   tiny-world-builder/js/_rules.gen.js  — числовые константы (var X = n)
-//   tiny-world-builder/js/_tech.gen.js   — древо технологий (var NODES/NODE)
+//   client/js/_rules.gen.js  — числовые константы (var X = n)
+//   client/js/_tech.gen.js   — древо технологий (var NODES/NODE)
 // Всё как браузерные глобали (var → перезаписываемы balance-синком в MP).
 // Функции (aaCost/upgradeCost/recomputeTech) НЕ эмитим — у клиента свои реализации.
 // ──────────────────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ const C = require('../server/sim/constants.js');
 const { NODES } = require('../server/sim/tech-data.js');
 const { DEFAULTS } = require('../server/sim/balance.js');
 
-const JS = path.join(__dirname, '..', 'tiny-world-builder', 'js');
+const JS = path.join(__dirname, '..', 'client', 'js');
 const OUT_RULES = path.join(JS, '_rules.gen.js');
 const OUT_TECH = path.join(JS, '_tech.gen.js');
 const OUT_BAL = path.join(JS, '_balance.gen.js');

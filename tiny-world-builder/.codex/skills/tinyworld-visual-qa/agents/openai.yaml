@@ -1,3 +1,0 @@
-display_name: Tiny World Visual QA
-short_description: Validate Tiny World UI, rendering, and interaction behavior in browser.
-default_prompt: Use Tiny World visual QA checks after frontend or rendering changes.

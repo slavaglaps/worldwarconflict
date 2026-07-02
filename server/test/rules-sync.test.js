@@ -13,7 +13,7 @@ const checkSync = (out, gen, label) => {
   test(`${label} синхронен с сервером`, () => {
     const committed = fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '';
     assert(committed === gen(),
-      `${label} устарел → запусти \`node scripts/gen-client-rules.js\` и закоммить tiny-world-builder/js/*.gen.js`);
+      `${label} устарел → запусти \`node scripts/gen-client-rules.js\` и закоммить client/js/*.gen.js`);
   });
 };
 

@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..');
-const CLIENT = path.join(ROOT, 'tiny-world-builder');
+const CLIENT = path.join(ROOT, 'client');
 
 // порядок = MODS из game.html (рантайм-лоадер) и из build.js. ДОЛЖЕН совпадать.
 const MODS = [

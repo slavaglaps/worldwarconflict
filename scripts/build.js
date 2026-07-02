@@ -5,8 +5,8 @@
 // без CSP 'unsafe-inline', с source map, в разы меньше байт.
 //
 //   Сборка:  node scripts/build.js   (или npm run build из корня)
-//   Выход:   tiny-world-builder/dist/game.bundle.js(.map)  — клиент (глобальный scope)
-//            tiny-world-builder/dist/sim.bundle.js(.map)    — серверный Sim → window.__WWCSim
+//   Выход:   client/dist/game.bundle.js(.map)  — клиент (глобальный scope)
+//            client/dist/sim.bundle.js(.map)    — серверный Sim → window.__WWCSim
 //
 // Клиент: модули склеиваются в ТОМ ЖЕ порядке, что и рантайм-лоадер (единый
 // global scope), затем minifyWhitespace+minifySyntax. minifyIdentifiers=ВЫКЛ —

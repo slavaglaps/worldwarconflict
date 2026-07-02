@@ -1,3 +1,0 @@
-display_name: Tiny World Auto Batching
-short_description: Maintain cached Auto palette model suggestions.
-default_prompt: Use Tiny World Auto batching when changing model-driven placement.

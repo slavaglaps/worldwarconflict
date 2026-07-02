@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ──────────────────────────────────────────────────────────────────────────
-// Копирует серверный симулятор server/sim/ → tiny-world-builder/sim/ (для браузера).
+// Копирует серверный симулятор server/sim/ → client/sim/ (для браузера).
 // Единый источник правды — server/sim/. Клиент получает идентичную копию (Фаза 2:
 // соло гоняет НАСТОЯЩИЙ серверный Sim в браузере, без дубля логики).
 //
@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SRC = path.join(__dirname, '..', 'server', 'sim');
-const DST = path.join(__dirname, '..', 'tiny-world-builder', 'sim');
+const DST = path.join(__dirname, '..', 'client', 'sim');
 
 // файлы, нужные браузерному симу (граф require + опц. map). Тесты/прочее — НЕ копируем.
 const FILES = [
@@ -37,5 +37,5 @@ module.exports = { SRC, DST, FILES, content };
 if (require.main === module) {
   fs.mkdirSync(DST, { recursive: true });
   for (const f of FILES) fs.writeFileSync(path.join(DST, f), content(f));
-  console.log('✓ synced', FILES.length, 'файлов → tiny-world-builder/sim/');
+  console.log('✓ synced', FILES.length, 'файлов → client/sim/');
 }

@@ -14,7 +14,7 @@ const MAP = require('../sim/map-data.json');
 group('Single-source карты (client CITY_LIST ⟷ server map-data.json)');
 
 // ── извлечь CITY_LIST и проекцию из клиентского data.js ──
-const dataJs = fs.readFileSync(path.join(__dirname, '..', '..', 'tiny-world-builder', 'js', 'data.js'), 'utf8');
+const dataJs = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'data.js'), 'utf8');
 const P = 0, N = 0, E = 0;                                       // плейсхолдеры колонки владельца в CITY_LIST
 const CITY_LIST = eval(dataJs.match(/const\s+CITY_LIST\s*=\s*(\[[\s\S]*?\n\];)/)[1].replace(/;$/, ''));
 const num = (name) => Number(dataJs.match(new RegExp(name + '\\s*=\\s*(-?\\d+(?:\\.\\d+)?)'))[1]);

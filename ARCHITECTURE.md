@@ -23,29 +23,29 @@ mushroom-wars-clone/
 ├── PROJECT_CONTEXT.md       ← краткий контекст для новой сессии
 ├── index.html               2D-предок (грибы) — не трогаем
 ├── europe.html              2D-предок (карта Европы) — источник координат городов
-└── tiny-world-builder/      ← движок (склон https://github.com/jasonkneen/tiny-world-builder)
+└── client/      ← движок (склон https://github.com/jasonkneen/client)
     ├── game.html            ★ ВСЯ ИГРА (~4500 строк, один инлайн-<script>)
     ├── mp-*.js              старые/отладочные клиентские сетевые тесты
     ├── vendor/three/        Three.js r128 (глобал THREE)
     └── tools/dev-server.js  статический дев-сервер
 ```
 
-**Вся игра — в `tiny-world-builder/game.html`** (HTML + CSS + один большой `<script>`).
+**Вся игра — в `client/game.html`** (HTML + CSS + один большой `<script>`).
 Движок Tiny World Builder используется только как поставщик Three.js r128 (`vendor/three`) и визуального
-стиля; собственный 29k-строчный редактор движка (`tiny-world-builder.html`) игрой не используется.
+стиля; собственный 29k-строчный редактор движка (`client.html`) игрой не используется.
 
 ---
 
 ## 3. Запуск и тестирование
 
 ```bash
-cd tiny-world-builder
+cd client
 node tools/dev-server.js 3000     # игра: http://localhost:3000/game.html
 cd ../server && npm start         # Colyseus backend
 ```
 
 - **Одиночная игра:** `http://localhost:3000/game.html`
-- **Мультиплеер:** `http://localhost:3000/game.html?mp=ROOM` или лобби `tiny-world-builder/index.html`
+- **Мультиплеер:** `http://localhost:3000/game.html?mp=ROOM` или лобби `client/index.html`
 - ⚠️ Карта/ландшафт строятся ОДИН РАЗ при загрузке. **R** в игре пересоздаёт только партию
   (города/фракции/дипломатию), не карту — для изменений карты нужен полный Cmd+R.
 
@@ -139,7 +139,7 @@ MAX_TIER=3, SOLDIER_PRICE=4, SQUAD_SPEED=4, WAR_PREP=60 (мобилизация,
 
 ### Транспорт
 - `server/index.js` + `server/GameRoom.js` — актуальный Colyseus backend.
-- `tiny-world-builder/game.html` подключается как богатый клиент: bridge переводит Colyseus schema-state
+- `client/game.html` подключается как богатый клиент: bridge переводит Colyseus schema-state
   в локальные `snap/ent` события для существующего рендера.
 
 ### Роли (глобал `MP`)

@@ -1,6 +1,6 @@
-// GUARD: прод-бандл tiny-world-builder/dist/ КОММИТИТСЯ и серуется статик-хостингом напрямую.
+// GUARD: прод-бандл client/dist/ КОММИТИТСЯ и серуется статик-хостингом напрямую.
 // Падает, если кто-то изменил клиент/sim/билд и не пересобрал → молчаливый деплой устаревшего
-// бандла невозможен. Чинится: `node scripts/build.js` (из корня) и коммит tiny-world-builder/dist/.
+// бандла невозможен. Чинится: `node scripts/build.js` (из корня) и коммит client/dist/.
 const { group, test, assert, summary } = require('./harness');
 const fs = require('fs');
 const path = require('path');
