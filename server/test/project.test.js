@@ -9,13 +9,24 @@ const map = require('../sim/map-data.json');
 
 group('Проекция Sim → схема (schema-project)');
 
-test('город: owner/units(округл.)/spec/tier/occ', () => {
+test('город: owner/units(округл.)/spec/tier/occ/occFrom', () => {
   const s = new Sim({ map, ai: false }), st = new GameState(), techN = [];
-  const c = s.cities.find((x) => x.idx === 7); c.spec = 'atk'; c.tier = 2; c.units = 123.6; c.occ = true;
+  const c = s.cities.find((x) => x.idx === 7); c.spec = 'atk'; c.tier = 2; c.units = 123.6; c.occ = true; c.occFrom = 3;
   projectState(s, st, techN);
   const cs = st.cities.get('7');
   eq(cs.owner, c.owner); eq(cs.units, 124); eq(cs.spec, SPEC_ID.atk); eq(cs.tier, 2); eq(cs.occ, 1);
+  eq(cs.occFrom, 3);
   eq(cs.prodTier, 0); eq(cs.defTier, 0); eq(cs.atkTier, 2);
+});
+
+test('город: occFrom сбрасывается в sentinel, когда оккупации нет', () => {
+  const s = new Sim({ map, ai: false }), st = new GameState(), techN = [];
+  const c = s.cities.find((x) => x.idx === 7); c.occ = true; c.occFrom = 2;
+  projectState(s, st, techN);
+  eq(st.cities.get('7').occFrom, 2);
+  c.occ = false; c.occFrom = null;
+  projectState(s, st, techN);
+  eq(st.cities.get('7').occFrom, 255);
 });
 
 test('осада: в схему идёт СИЛЬНЕЙШИЙ пул (units + owner)', () => {

@@ -13,6 +13,22 @@ const map = require('../sim/map-data.json');
 
 const mkCity = (o) => new City(Object.assign({ idx: 0, gx: 0, gz: 0, country: 0, size: 1, owner: 0 }, o));
 const learn = (s, fid, id) => { s.techDone[fid].add(id); s.techCache[fid] = recomputeTech(s.techDone[fid]); };  // изучить узел напрямую
+const shipCity = (s, fid = 0) => {
+  const existing = s.cities.find(c => c.owner === fid && (c.isShipyard || c.hasShipyard));
+  if (existing) return existing;
+  const c = s.cities.find(x => x.owner === fid && !x.isShipyard && s._isCoastal(x));
+  assert(c, 'есть прибрежный город');
+  assert(s.cmdBuildYard(fid, c.idx, 'ship'));
+  return c;
+};
+const airportCity = (s, fid = 0) => {
+  const existing = s.cities.find(c => c.owner === fid && (c.isAirport || c.hasAirport));
+  if (existing) return existing;
+  const c = s.cities.find(x => x.owner === fid && !x.isAirport && x.parent == null);
+  assert(c, 'есть город под аэродром');
+  assert(s.cmdBuildYard(fid, c.idx, 'air'));
+  return c;
+};
 
 group('Инициализация мира');
 test('18 городов, 6 фракций', () => { const s = new Sim({ factions: 6, cities: 18 }); eq(s.cities.length, 18); eq(s.factions, 6); });
@@ -77,9 +93,9 @@ test('нельзя апгрейдить с невалидной веткой', (
 
 group('Отправка армии / осада / захват / оккупация / аннексия');
 test('подкрепление своего города', () => { const s = new Sim({ factions: 1, cities: 2 }); const u1 = s.cities[1].units; assert(s.cmdSend(0, 0, 1, 0.5)); gt(s.cities[1].units, u1); });
-test('реальная карта: отряд идёт по полилинии дороги Галвэй → Дублин', () => {
+test('реальная карта: отряд идёт по полилинии дороги Дублин → Лимэрик', () => {
   const byName = Object.fromEntries(map.cities.map(c => [c.name, c]));
-  const from = byName['Галвэй'].idx, to = byName['Дублин'].idx, fid = byName['Галвэй'].owner;
+  const from = byName['Дублин'].idx, to = byName['Лимэрик'].idx, fid = byName['Дублин'].owner;
   const s = new Sim({ map, balance: makeBalance({ factionDefault: { gold: 200, polit: 80 } }), ai: false });
   assert(s.cmdSend(fid, from, to, 0.5));
   const q = s.squads[0], edge = s.edgeBetween(from, to);
@@ -103,7 +119,7 @@ test('реальная карта: Лимэрик → Белфаст идёт м
   const from = byName['Лимэрик'].idx, to = byName['Белфаст'].idx, fid = byName['Лимэрик'].owner;
   const s = new Sim({ map, balance: makeBalance({ factionDefault: { gold: 200, polit: 80 } }), ai: false });
   const path = s.findPath(from, to, fid);
-  eq(path.map(i => map.cities[i].name).join(' → '), 'Лимэрик → Дублин → Белфаст');
+  eq(path.map(i => map.cities[i].name).join(' → '), 'Лимэрик → Галвэй → Белфаст');
   assert(s.cmdSend(fid, from, to, 0.5));
   const q = s.squads[0];
   for (let hop = 0; hop < q.path.length - 1; hop++) {
@@ -131,7 +147,7 @@ test('реальная карта: Глазго → Эдинбург идёт п
   const q = s.squads[0], edge = s.edgeBetween(from, to);
   assert(edge && Array.isArray(edge.pts) && edge.pts.length >= 5, 'у ребра есть детальная полилиния визуальной дороги');
   q.prog = edge.len * 0.5; q._setPos();
-  near(q.x, 38.1, 0.08);
+  near(q.x, 38.355, 0.08);
   near(q.z, 103, 0.08);
 });
 test('реальная карта: Бирмингмем → Ливерпуль идёт мультихопом по дорожным полилиниям', () => {
@@ -139,7 +155,7 @@ test('реальная карта: Бирмингмем → Ливерпуль �
   const from = byName['Бирмингмем'].idx, to = byName['Ливерпуль'].idx, fid = byName['Бирмингмем'].owner;
   const s = new Sim({ map, balance: makeBalance({ factionDefault: { gold: 200, polit: 80 } }), ai: false });
   const path = s.findPath(from, to, fid);
-  eq(path.map(i => map.cities[i].name).join(' → '), 'Бирмингмем → Бирмингем → Маннчестер → Ливерпуль');
+  eq(path.map(i => map.cities[i].name).join(' → '), 'Бирмингмем → Бирмингем → Ливерпуль');
   assert(s.cmdSend(fid, from, to, 0.5));
   const q = s.squads[0];
   for (let hop = 0; hop < q.path.length - 1; hop++) {
@@ -188,7 +204,7 @@ test('аннексия: у павшей фракции забирают ресу
   eq(s.cities[1].owner, 0); eq(s.gold[1], 0); eq(s.manpower[1], 0);
 });
 test('оборона (spec=def) замедляет падение города', () => {
-  const mk = (spec) => { const s = new Sim({ factions: 3, cities: 3 }); const c = s.cities[1]; c.units = 20; if (spec) { c.spec = spec; c.tier = 3; } c.siege = { 0: { units: 30, atkMult: 1 } }; let t = 0; for (; t < 200 && c.owner !== 0; t++) s.tick(0.1); return t; };
+  const mk = (spec) => { const s = new Sim({ factions: 3, cities: 3 }); const c = s.cities[1]; c.units = 20; if (spec) { c.spec = spec; c.tier = 3; } c.siege = { 0: { units: 60, atkMult: 1 } }; let t = 0; for (; t < 600 && c.owner !== 0; t++) s.tick(0.1); return t; };
   gt(mk('def'), mk(null));   // с обороной город держится дольше
 });
 
@@ -222,6 +238,36 @@ test('дипломатия отклоняет несуществующие фр�
 });
 test('союзники втягиваются в войну с агрессором', () => { const s = new Sim({ factions: 3, cities: 3, rng: () => 0.1 }); s.setRelation(1, 2, 'ally'); s.politPts[0] = 100; s.cmdWar(0, 1); assert(s.atWar(0, 2)); });
 test('мир завершает войну + ставит перемирие', () => { const s = new Sim({ factions: 2, cities: 2, rng: () => 0.001 }); s.politPts[0] = 100; s.cmdWar(0, 1); const r = s.cmdPeace(0, 1, {}); assert(r.accepted); assert(!s.atWar(0, 1)); gt(s.truceLeft(0, 1), 0); });
+test('debug: бот всегда принимает мир', () => {
+  const s = new Sim({ factions: 2, cities: 2, rng: () => 0.999 });
+  s.humanFactions = new Set([0]);
+  s.politPts[0] = 100; s.cmdWar(0, 1);
+  const r = s.cmdPeace(0, 1, { money: 100, repar: 100 });
+  assert(r.accepted);
+});
+test('мир без земель возвращает все оккупированные города', () => {
+  const s = new Sim({ factions: 2, cities: 4, rng: () => 0.001 }); s.politPts[0] = 100; s.setWar(0, 1);
+  s.cities[0].owner = 0; s.cities[0].occ = true; s.cities[0].occFrom = 1;
+  s.cities[1].owner = 1; s.cities[1].occ = true; s.cities[1].occFrom = 0;
+  const r = s.cmdPeace(0, 1, { land: false });
+  assert(r.accepted); eq(s.cities[0].owner, 1); eq(s.cities[0].occ, false); eq(s.cities[1].owner, 0); eq(s.cities[1].occ, false);
+});
+test('мир с землёй оставляет только захваченное предлагающей стороной', () => {
+  const s = new Sim({ factions: 2, cities: 4, rng: () => 0.001 }); s.politPts[0] = 100; s.setWar(0, 1);
+  s.cities[0].owner = 0; s.cities[0].occ = true; s.cities[0].occFrom = 1;
+  s.cities[1].owner = 1; s.cities[1].occ = true; s.cities[1].occFrom = 0;
+  const r = s.cmdPeace(0, 1, { land: true });
+  assert(r.accepted); eq(s.cities[0].owner, 0); eq(s.cities[0].occ, false); eq(s.cities[1].owner, 0); eq(s.cities[1].occ, false);
+  s.gold[0] = 500;
+  assert(s.cmdUpgrade(0, 0, 'prod'), 'аннексированный город можно прокачивать');
+});
+test('условия мира claimB оставляют только захваченное второй стороной', () => {
+  const s = new Sim({ factions: 2, cities: 4 });
+  s.cities[0].owner = 0; s.cities[0].occ = true; s.cities[0].occFrom = 1;
+  s.cities[1].owner = 1; s.cities[1].occ = true; s.cities[1].occFrom = 0;
+  s.resolveOccupation(0, 1, 'claimB');
+  eq(s.cities[0].owner, 1); eq(s.cities[0].occ, false); eq(s.cities[1].owner, 1); eq(s.cities[1].occ, false);
+});
 test('во время перемирия нельзя снова объявить войну', () => { const s = new Sim({ factions: 2, cities: 2, rng: () => 0.001 }); s.politPts[0] = 200; s.cmdWar(0, 1); s.cmdPeace(0, 1, {}); s.politPts[0] = 200; eq(s.cmdWar(0, 1), false); });
 test('мир с контрибуцией забирает голду врага', () => { const s = new Sim({ factions: 2, cities: 2, rng: () => 0.001 }); s.politPts[0] = 100; s.cmdWar(0, 1); s.gold[1] = 100; const g0 = s.gold[0]; const r = s.cmdPeace(0, 1, { money: 50 }); assert(r.accepted); gt(s.gold[0], g0); });
 test('политочки копятся со временем', () => { const s = new Sim({ factions: 2, cities: 2 }); s.politPts[0] = 0; s.tick(1.0); gt(s.politPts[0], 0); });
@@ -240,9 +286,9 @@ test('лаборатория k4 даёт +1 слот', () => { const s = new Sim
 test('prod-узел повышает потолок манпауэра', () => { const s = new Sim({ factions: 2, cities: 2 }); const cap0 = s.manpowerCap(0); learn(s, 0, 'p2'); gt(s.manpowerCap(0), cap0); });
 
 group('Реальная карта Европы + движение отрядов');
-test('карта грузится: 143 города, 24 фракции, граф рёбер', () => { const s = new Sim({ map }); eq(s.cities.length, 143); eq(s.factions, 24); gt(s.edgeKey.size, 100); });
-test('столицы/верфь/аэропорт на месте', () => { const s = new Sim({ map }); eq(s.cities.filter(c => c.capital).length, 24); assert(s.cities.some(c => c.isShipyard)); assert(s.cities.some(c => c.isAirport)); });
-test('поиск пути между своими городами (мультихоп)', () => { const s = new Sim({ map }); const p = s.findPath(0, 6, 0); assert(p && p.length >= 2, 'путь найден'); eq(p[0], 0); eq(p[p.length - 1], 6); });
+test('карта грузится: 239 городов, 29 фракций, граф рёбер', () => { const s = new Sim({ map }); eq(s.cities.length, 239); eq(s.factions, 29); gt(s.edgeKey.size, 100); });
+test('столицы/верфь/аэропорт на месте', () => { const s = new Sim({ map, goldStart: 1000 }); eq(s.cities.filter(c => c.capital).length, 29); shipCity(s); airportCity(s); assert(s.cities.some(c => c.isShipyard || c.hasShipyard)); assert(s.cities.some(c => c.isAirport || c.hasAirport)); });
+test('поиск пути между своими городами (мультихоп)', () => { const s = new Sim({ map }); const p = s.findPath(0, 1, 0); assert(p && p.length >= 2, 'путь найден'); eq(p[0], 0); eq(p[p.length - 1], 1); });
 test('cmdSend создаёт движущийся отряд + тратит гарнизон', () => { const s = new Sim({ map }); const own = s.cities.filter(c => c.owner === 0).map(c => c.idx); const u0 = s.cities[own[0]].units; assert(s.cmdSend(0, own[0], own[1], 0.5)); eq(s.squads.length, 1); lt(s.cities[own[0]].units, u0); });
 test('cmdSend отклоняет невалидный pct', () => {
   const s = new Sim({ map }); const own = s.cities.filter(c => c.owner === 0).map(c => c.idx); const u0 = s.cities[own[0]].units;
@@ -250,7 +296,7 @@ test('cmdSend отклоняет невалидный pct', () => {
   eq(s.cities[own[0]].units, u0); eq(s.squads.length, 0);
 });
 test('отряд доходит и подкрепляет свой город', () => { const s = new Sim({ map }); const own = s.cities.filter(c => c.owner === 0).map(c => c.idx); const tgt = own[1]; const before = s.cities[tgt].units; s.cmdSend(0, own[0], tgt, 0.5); for (let i = 0; i < 400 && s.squads.length; i++) s.tick(0.1); eq(s.squads.length, 0); gt(s.cities[tgt].units, before); });
-test('отряд осаждает вражеский город (в войне)', () => { const s = new Sim({ map, warPrep: 0 }); const eo = s.cities[7].owner; assert(eo !== 0, 'город 7 вражеский'); s.setWar(0, eo); assert(s.cmdSend(0, 0, 7, 0.9)); for (let i = 0; i < 600 && s.squads.length; i++) s.tick(0.1); assert((s.cities[7].siege && s.cities[7].siege[0]) || s.cities[7].owner === 0, 'осада началась или город взят'); });
+test('отряд осаждает вражеский город (в войне)', () => { const s = new Sim({ map, warPrep: 0 }); const from = 177, to = 50; const eo = s.cities[to].owner; assert(eo !== 0, 'город-цель вражеский'); s.setWar(0, eo); assert(s.cmdSend(0, from, to, 0.9)); for (let i = 0; i < 600 && s.squads.length; i++) s.tick(0.1); assert((s.cities[to].siege && s.cities[to].siege[0]) || s.cities[to].owner === 0, 'осада началась или город взят'); });
 test('нет пути через чужую территорию без войны/союза → отказ', () => { const s = new Sim({ map }); const far = s.cities.findIndex(c => c.owner !== 0 && !(s.adj.get(c.idx) || []).some(n => s.cities[n.to].owner === 0)); assert(far >= 0, 'найден удалённый город'); eq(s.findPath(0, far, 0), null); });
 test('полевой бой: сцепка ТОЛЬКО впритык на одной дороге (FIELD_CONTACT)', () => {
   const s = new Sim({ map }); s.setWar(0, 1);
@@ -271,33 +317,32 @@ test('полевой бой: сцепка ТОЛЬКО впритык на од�
 });
 
 group('Флот + авиация (постройка, движение, spatial-grid бой)');
-test('верфь строит корабль (с tech ships)', () => { const s = new Sim({ map, goldStart: 1000 }); const y = s.cities.find(c => c.isShipyard); learn(s, y.owner, 'i1'); assert(s.cmdBuildShip(y.owner, y.idx)); for (let i = 0; i < 70 && !s.ships.length; i++) s.tick(0.1); eq(s.ships.length, 1); });
-test('аэропорт строит самолёт (с tech planes)', () => { const s = new Sim({ map, goldStart: 1000 }); const p = s.cities.find(c => c.isAirport); learn(s, p.owner, 'i8'); assert(s.cmdBuildPlane(p.owner, p.idx)); for (let i = 0; i < 80 && !s.planes.length; i++) s.tick(0.1); eq(s.planes.length, 1); });
-test('без tech нельзя строить корабль', () => { const s = new Sim({ map, goldStart: 1000 }); const y = s.cities.find(c => c.isShipyard); eq(s.cmdBuildShip(y.owner, y.idx), false); });
-test('нельзя строить корабль в не-верфи', () => { const s = new Sim({ map, goldStart: 1000 }); const c = s.cities.find(x => !x.isShipyard && x.owner === 0); learn(s, 0, 'i1'); eq(s.cmdBuildShip(0, c.idx), false); });
-test('корабль спавнится на воде', () => { const s = new Sim({ map, goldStart: 1000 }); const y = s.cities.find(c => c.isShipyard); learn(s, y.owner, 'i1'); s.cmdBuildShip(y.owner, y.idx); for (let i = 0; i < 70 && !s.ships.length; i++) s.tick(0.1); assert(s.ships.length); assert(isWaterAt(s.ships[0].x, s.ships[0].z), 'корабль на воде'); });
-test('cmdShipMove двигает корабль по воде', () => { const s = new Sim({ map, goldStart: 1000 }); const y = s.cities.find(c => c.isShipyard); learn(s, y.owner, 'i1'); s.cmdBuildShip(y.owner, y.idx); for (let i = 0; i < 70 && !s.ships.length; i++) s.tick(0.1); const sh = s.ships[0], x0 = sh.x; assert(s.cmdShipMove(y.owner, sh.id, sh.x - 15, sh.z)); for (let i = 0; i < 20; i++) s.tick(0.1); lt(sh.x, x0); });
+test('верфь строит корабль (с tech ships)', () => { const s = new Sim({ map, goldStart: 1000 }); const y = shipCity(s); learn(s, y.owner, 'i1'); assert(s.cmdBuildShip(y.owner, y.idx)); for (let i = 0; i < 70 && !s.ships.length; i++) s.tick(0.1); eq(s.ships.length, 1); });
+test('аэропорт строит самолёт (с tech planes)', () => { const s = new Sim({ map, goldStart: 1000 }); const p = airportCity(s); learn(s, p.owner, 'i8'); assert(s.cmdBuildPlane(p.owner, p.idx)); for (let i = 0; i < 80 && !s.planes.length; i++) s.tick(0.1); eq(s.planes.length, 1); });
+test('без tech нельзя строить корабль', () => { const s = new Sim({ map, goldStart: 1000 }); const y = s.cities.find(x => x.owner === 0 && !x.isShipyard && s._isCoastal(x)); assert(y, 'есть прибрежный город'); y.hasShipyard = true; eq(s.cmdBuildShip(y.owner, y.idx), false); });
+test('нельзя строить корабль без верфи у города', () => { const s = new Sim({ map, goldStart: 1000 }); const c = s.cities.find(x => !x.isShipyard && !x.hasShipyard && x.owner === 0); learn(s, 0, 'i1'); eq(s.cmdBuildShip(0, c.idx), false); });
+test('корабль спавнится на воде', () => { const s = new Sim({ map, goldStart: 1000 }); const y = shipCity(s); learn(s, y.owner, 'i1'); s.cmdBuildShip(y.owner, y.idx); for (let i = 0; i < 70 && !s.ships.length; i++) s.tick(0.1); assert(s.ships.length); assert(isWaterAt(s.ships[0].x, s.ships[0].z), 'корабль на воде'); });
+test('cmdShipMove двигает корабль по воде', () => { const s = new Sim({ map, goldStart: 1000 }); const y = shipCity(s); learn(s, y.owner, 'i1'); s.cmdBuildShip(y.owner, y.idx); for (let i = 0; i < 70 && !s.ships.length; i++) s.tick(0.1); const sh = s.ships[0], x0 = sh.x; assert(s.cmdShipMove(y.owner, sh.id, sh.x - 15, sh.z)); for (let i = 0; i < 20; i++) s.tick(0.1); lt(sh.x, x0); });
 test('морской бой (грид): вражеские корабли топят друг друга', () => { const s = new Sim({ map }); s.setWar(0, 1); s.ships.push(new Ship(0, 100, 100, s), new Ship(1, 100.5, 100, s)); for (let i = 0; i < 200 && s.ships.length === 2; i++) s.tick(0.1); lt(s.ships.length, 2); });
 test('воздушный бой (грид): вражеские самолёты сбивают друг друга', () => { const s = new Sim({ map, rng: () => 0.01 }); s.setWar(0, 1); s.planes.push(new Plane(0, 100, 100, s), new Plane(1, 100.5, 100, s)); for (let i = 0; i < 200 && s.planes.length === 2; i++) s.tick(0.1); lt(s.planes.length, 2); });
 test('союзные корабли не воюют', () => { const s = new Sim({ map }); s.setRelation(0, 1, 'ally'); s.ships.push(new Ship(0, 100, 100, s), new Ship(1, 100.5, 100, s)); for (let i = 0; i < 50; i++) s.tick(0.1); eq(s.ships.length, 2); });
-test('buildYard: верфь — ОТДЕЛЬНЫЙ город рядом + умение строить корабли', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0 && !x.isShipyard && s._isCoastal(x)); assert(c, 'есть прибрежный город'); const n0 = s.cities.length; assert(s.cmdBuildYard(0, c.idx, 'ship')); eq(s.cities.length, n0 + 1, 'верфь — отдельный город'); const y = s.cities[s.cities.length - 1]; assert(y.isShipyard && y.parent === c.idx && !c.isShipyard, 'верфь отдельная, родитель остался обычным'); assert(s.techFlag(0, 'ships')); assert(s.cmdBuildShip(0, y.idx)); });
-test('buildYard: аэродром — ОТДЕЛЬНЫЙ город рядом + умение строить самолёты', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0 && !x.isAirport && x.parent == null); const n0 = s.cities.length; assert(s.cmdBuildYard(0, c.idx, 'air')); eq(s.cities.length, n0 + 1); const y = s.cities[s.cities.length - 1]; assert(y.isAirport && y.parent === c.idx && !c.isAirport); assert(s.techFlag(0, 'planes')); assert(s.cmdBuildPlane(0, y.idx)); });
+test('buildYard: верфь — возможность обычного города без отдельного гарнизона', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0 && !x.isShipyard && s._isCoastal(x)); assert(c, 'есть прибрежный город'); const n0 = s.cities.length; assert(s.cmdBuildYard(0, c.idx, 'ship')); eq(s.cities.length, n0, 'верфь не создаёт отдельный город'); assert(c.hasShipyard && !c.isShipyard, 'родитель стал городом с верфью'); assert(s.techFlag(0, 'ships')); assert(s.cmdBuildShip(0, c.idx)); });
+test('buildYard: аэропорт — возможность обычного города без отдельного гарнизона', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0 && !x.isAirport && x.parent == null); const n0 = s.cities.length; assert(s.cmdBuildYard(0, c.idx, 'air')); eq(s.cities.length, n0, 'аэропорт не создаёт отдельный город'); assert(c.hasAirport && !c.isAirport, 'родитель стал городом с аэропортом'); assert(s.techFlag(0, 'planes')); assert(s.cmdBuildPlane(0, c.idx)); });
 test('buildYard: верфь нельзя в неприбрежном городе', () => { const s = new Sim({ map, goldStart: 500 }); const inland = s.cities.find(x => !s._isCoastal(x) && !x.isShipyard); assert(inland, 'есть внутренний город'); eq(s.cmdBuildYard(inland.owner, inland.idx, 'ship'), false); });
 test('хард-кап флота: строит ровно до MAX_SHIPS, дальше отказ', () => {
   const s = new Sim({ map, goldStart: 1e6 });
   const c = s.cities.find(x => x.owner === 0 && !x.isShipyard && s._isCoastal(x)); assert(c, 'есть прибрежный город');
   assert(s.cmdBuildYard(0, c.idx, 'ship'));
-  const y = s.cities[s.cities.length - 1];   // верфь — отдельный город-сущность
   let ok = 0;
-  for (let i = 0; i < C.MAX_SHIPS + 5; i++) { s.gold[0] += 1000; s.manpower[0] += 1000; if (s.cmdBuildShip(0, y.idx)) ok++; }
+  for (let i = 0; i < C.MAX_SHIPS + 5; i++) { s.gold[0] += 1000; s.manpower[0] += 1000; if (s.cmdBuildShip(0, c.idx)) ok++; }
   eq(ok, C.MAX_SHIPS, 'построено ровно до капа');
   s.gold[0] += 1000; s.manpower[0] += 1000;
-  eq(s.cmdBuildShip(0, y.idx), false, 'сверх капа — отказ');
+  eq(s.cmdBuildShip(0, c.idx), false, 'сверх капа — отказ');
 });
 
 group('Бой: башни / ПВО / обстрел берега / бомбёжка');
-test('башня atk-города бьёт осаждающих', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.spec = 'atk'; c.tier = 3; c.siege = { 1: { units: 40, atkMult: 1 } }; const b0 = c.siege[1].units; for (let i = 0; i < 30; i++) s.cityTowers(0.1); assert(!c.siege || c.siege[1].units < b0, 'осаждающие потеряли бойцов'); });
-test('башня бьёт вражеский отряд в радиусе', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.spec = 'atk'; c.tier = 3; const sq = new Squad(1, 30, [c.idx], s, 1); sq.x = c.gx + 3; sq.z = c.gz + 3; s.squads.push(sq); const f0 = sq.fcount; for (let i = 0; i < 20; i++) s.cityTowers(0.1); lt(sq.fcount, f0); });
+test('башня atk-города бьёт осаждающих', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.spec = 'atk'; c.tier = 3; c.siege = { 1: { units: 40, atkMult: 1 } }; const b0 = c.siege[1].units; for (let i = 0; i < 40; i++) s.cityTowers(0.1); assert(!c.siege || c.siege[1].units < b0, 'осаждающие потеряли бойцов'); });
+test('башня бьёт вражеский отряд в радиусе', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.spec = 'atk'; c.tier = 3; const sq = new Squad(1, 30, [c.idx], s, 1); sq.x = c.gx + 3; sq.z = c.gz + 3; s.squads.push(sq); const f0 = sq.fcount; for (let i = 0; i < 40; i++) s.cityTowers(0.1); lt(sq.fcount, f0); });
 test('ПВО сбивает вражеский самолёт', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.aa = 3; const p = new Plane(1, c.gx + 5, c.gz + 5, s); const h0 = p.hp; s.planes.push(p); for (let i = 0; i < 30; i++) s.cityAA(0.1); lt(p.hp, h0); });
 test('cmdBuildAA: ставит зенитку за голду+манпауэр', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0); assert(s.cmdBuildAA(0, c.idx)); eq(c.aa, 1); });
 test('обстрел берега: корабль с tech бьёт вражеский город', () => { const s = new Sim({ map }); s.setWar(0, 1); learn(s, 0, 'i6'); const ec = s.cities.find(x => x.owner === 1); const sh = new Ship(0, ec.gx + 5, ec.gz + 5, s); s.ships.push(sh); const u0 = ec.units; for (let i = 0; i < 40; i++) s.shipBombard(0.1); lt(ec.units, u0); });

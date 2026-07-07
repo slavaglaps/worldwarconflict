@@ -1,13 +1,16 @@
 // Чистый отряд: движется по пути из городов (граф), стоит в полевом бою.
 // Позиция — линейная интерполяция вдоль ребра (клиент может рисовать по полилинии).
 
+const { syncComp } = require('./City');
+
 let _sid = 1;
 
 class Squad {
-  constructor(owner, count, path, sim, atkMult) {
+  constructor(owner, count, path, sim, atkMult, comp) {
     this.id = _sid++;
     this.owner = owner;
     this.fcount = count;          // живых бойцов (дробное в бою)
+    this.comp = comp || { inf: count, arc: 0, cav: 0 };   // 👥 состав по типам (сумма ≡ fcount)
     this.path = path;             // массив idx городов [from, ..., to]
     this.hop = 0;                 // индекс текущего сегмента (ребро path[hop]→path[hop+1])
     this.prog = 0;                // пройдено по текущему ребру (в ед. длины)
@@ -47,6 +50,7 @@ class Squad {
 
   // true → отряд дошёл/упёрся (Sim вызовет resolveArrival и удалит)
   update(dt) {
+    syncComp(this.comp, this.fcount);                        // 👥 потери боя/башен распределяются по типам пропорционально
     if (this.foe) return false;                              // дерёмся — стоим
     let move = this.K.SQUAD_SPEED * this.sim.techMul(this.owner, 'speed') * dt;
     let guard = 0;

@@ -27,6 +27,7 @@ function projectState(sim, state, techN) {
     s.defTier = c.branchTier('def');
     s.atkTier = c.branchTier('atk');
     s.occ = c.occ ? 1 : 0;
+    s.occFrom = c.occ && c.occFrom != null ? c.occFrom : 255;
     s.shipyard = c.isShipyard ? 1 : 0; s.airport = c.isAirport ? 1 : 0;
     s.aa = c.aa | 0;
     s.queued = Math.min(65535, Math.round(c.queued));

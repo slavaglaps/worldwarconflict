@@ -83,9 +83,10 @@ function newGame(){
   SHIPYARD_NAMES.clear(); ORIG_SHIPYARDS.forEach(n=>SHIPYARD_NAMES.add(n));
   AIRPORT_NAMES.clear(); ORIG_AIRPORTS.forEach(n=>AIRPORT_NAMES.add(n));
   cities=[];squads=[];ships=[];planes=[];missiles=[];fx=[];selectedUnits.clear();unitDrag=null;dragLead=null;selectedSet.clear();dragFrom=null;boxStart=null;hoverCity=null;hideDragArrow();boxEl.style.display='none';
+  if(typeof window.resetMapBuildings==='function')window.resetMapBuildings();
   gameOver=false;panelTab='upg';
   gold=FACTIONS.map(()=>60); politPts=FACTIONS.map(()=>POLIT_START); manpower=FACTIONS.map(()=>0); airOrder=FACTIONS.map(()=>null); initTech(); factionTimer=FACTIONS.map(()=>rand(0,4.5));
-  relations={}; warSince={}; truceUntil={}; peaceCD={}; reparations=[]; gameTime=0; // все нейтральны; атаковать нельзя без объявления войны
+  relations={}; warSince={}; truceUntil={}; peaceCD={}; playerStartedWarUntil={}; reparations=[]; gameTime=0; // все нейтральны; атаковать нельзя без объявления войны
   heroSlots=FACTIONS.map(()=>[]); heroBuffs=[]; closeHeroPick(); // 🎖 герои сбрасываются на старте партии
   warNotifQueue=[]; warNotifFrom=null; document.getElementById('warNotif').style.display='none';
   peaceOfferQueue=[]; peaceOfferFrom=null; document.getElementById('peaceOffer').style.display='none';
@@ -162,16 +163,17 @@ function buyAmount(c,spec){
   if(spec==='max')return Math.max(0,cap);
   return Math.min(parseInt(spec,10),cap);
 }
-function buySoldiers(c,spec){
-  if(MP.guest){ MP.cmd({cmd:'buy',c:c.idx,spec:String(spec)}); return; }
+function buySoldiers(c,spec,unit){
+  const type=(unit==='arc'||unit==='cav')?unit:'inf';   // 👥 тип найма из панели
+  if(MP.guest){ MP.cmd({cmd:'buy',c:c.idx,spec:String(spec),unit:type}); return; }
   if(c.occ){if(c.owner===OWNER.PLAYER)toast('🏴 Оккупированный город — нельзя набирать армию (аннексируйте через мир)');return;}
   const amt=buyAmount(c,spec); if(amt<=0)return;
-  gold[c.owner]-=amt*SOLDIER_PRICE; manpower[c.owner]-=amt*SOLDIER_MP; c.batches.push({count:amt,time:amt*c.trainPer,elapsed:0});
+  gold[c.owner]-=amt*SOLDIER_PRICE; manpower[c.owner]-=amt*SOLDIER_MP; c.batches.push({count:amt,time:amt*c.trainPer,elapsed:0,type});
 }
 
 /* ── исследования: граф-дерево, слоты, время ─────────────────── */
-const TEFF_LBL={tr:'радиус башен',td:'урон башен',sh:'HP кораблей',ph:'HP самолётов',sr:'дальность кораблей',bd:'урон бомб',cc:'вместимость города'};
-const TUNLOCK_LBL={ships:'строить корабли',shipMissile:'обстрел берега',planes:'строить самолёты',planeBomb:'бомбёжка городов',towers:'стрельба башен'};
+const TEFF_LBL={tr:'радиус башен',td:'урон башен',sh:'HP кораблей',ph:'HP дирижаблей',sr:'дальность кораблей',bd:'урон бомб',cc:'вместимость города'};
+const TUNLOCK_LBL={ships:'строить корабли',shipMissile:'обстрел берега',planes:'строить дирижабли',planeBomb:'бомбёжка городов',towers:'стрельба башен'};
 function techEff(n){
   const p=[];
   if(n.a)p.push(`урон +${Math.round(n.a*100)}%`);
@@ -284,6 +286,25 @@ function buildTechWindow(){ // полная перестройка (только
 function refreshTechAfford(){ // частый тик: обновляем ТОЛЬКО слоты (прогресс), граф не трогаем
   if(!techWinOpen)return; updateTechGold(); const s=document.getElementById('techSlots'); if(s)s.innerHTML=techSlotsInner();
 }
+function unlockAllTechCheat(){
+  if(typeof MP!=='undefined'&&MP.guest&&!MP.localSim){ toast('Чит доступен только в локальной игре'); return; }
+  const ids=NODES.map(n=>n.id);
+  techDone[PLAYER]=new Set(ids);
+  techRes[PLAYER]=[];
+  recomputeTech(PLAYER);
+  if(typeof LOCALSIM!=='undefined'&&LOCALSIM&&LOCALSIM.techDone&&LOCALSIM.techCache){
+    LOCALSIM.techDone[PLAYER]=new Set(ids);
+    LOCALSIM.techRes[PLAYER]=[];
+    LOCALSIM.techCache[PLAYER]={
+      add:Object.assign({},techCache[PLAYER].add),
+      flags:new Set(techCache[PLAYER].flags),
+      slots:techCache[PLAYER].slots
+    };
+  }
+  if(techWinOpen)buildTechWindow();
+  if(typeof updatePanel==='function')updatePanel();
+  toast('🔬 Все исследования разблокированы');
+}
 function techTip(e){
   const g=e.target.closest&&e.target.closest('[data-id]');
   const tip=document.getElementById('techTip'); if(!tip)return;
@@ -304,6 +325,7 @@ function openTech(){techWinOpen=true;buildTechWindow();document.getElementById('
 function closeTech(){techWinOpen=false;document.getElementById('techWin').style.display='none';const t=document.getElementById('techTip');if(t)t.style.display='none';}
 document.getElementById('sbTech').onclick=()=>{techWinOpen?closeTech():openTech();};
 document.getElementById('techClose').onclick=closeTech;
+document.getElementById('techCheatAll').onclick=unlockAllTechCheat;
 document.getElementById('techWin').addEventListener('click',e=>{if(e.target.id==='techWin')closeTech();});
 document.getElementById('techGrid').addEventListener('click',e=>{const g=e.target.closest('[data-id]');if(g)researchNode(g.dataset.id);});
 document.getElementById('techGrid').addEventListener('mousemove',techTip);
@@ -339,13 +361,16 @@ function acceptAlliance(fid,vs){return commonEnemy(fid,vs)||Math.random()<POLITI
 // вероятность что фракция ai примет мир от vs при дани tribute (vs платит ai)
 // ── оккупация → аннексия ─────────────────────────────────────
 function occCount(by,from){ let n=0; for(const c of cities)if(c.occ&&c.owner===by&&c.occFrom===from)n++; return n; }
-// разрешение оккупации между a и b при мире: 'keep'=каждый оставляет занятое (аннексия); 'white'=вернуть всё
+// разрешение оккупации между a и b при мире:
+// 'claimA' = a оставляет захваченное у b, но свои оккупированные города возвращает;
+// 'claimB' = b оставляет захваченное у a, но свои оккупированные города возвращает;
+// 'keep' = статус-кво для обеих сторон; 'white' = вернуть всё.
 function resolveOccupation(a,b,terms){
   for(const c of cities){
     if(!c.occ)continue;
     if(!((c.owner===a&&c.occFrom===b)||(c.owner===b&&c.occFrom===a)))continue;
-    if(terms==='keep'){ c.occ=false; c.occFrom=null; }                       // аннексия по статус-кво
-    else { c.owner=c.occFrom; c.occ=false; c.occFrom=null; c.units=Math.max(1,c.units); c.goldTimer=0; c.batches=[]; c.recolor(); } // белый мир — вернуть
+    if(terms==='keep'||(terms==='claimA'&&c.owner===a&&c.occFrom===b)||(terms==='claimB'&&c.owner===b&&c.occFrom===a)){ c.occ=false; c.occFrom=null; } // аннексия
+    else { c.owner=c.occFrom; c.occ=false; c.occFrom=null; c.units=Math.max(1,c.units); c.goldTimer=0; c.batches=[]; c.recolor(); } // вернуть
   }
   markRegions();
 }
@@ -363,7 +388,9 @@ function permanentAnnex(deadFid, byFid){
   }
 }
 // шанс что ai примет мир от vs на условиях terms{land,money,repar}
+const DEBUG_BOTS_ALWAYS_ACCEPT_PEACE = true;
 function peaceAcceptChance(ai,vs,terms){
+  if(DEBUG_BOTS_ALWAYS_ACCEPT_PEACE && ai!==PLAYER)return 1;
   const P=POLITICS.peace, strAi=factionStrength(ai), strVs=factionStrength(vs);   // коэффициенты — из _balance.gen.js (канон balance.js)
   let s=P.base + (strVs/(strAi+1)-1)*P.strengthWeight;     // ты сильнее → охотнее соглашаются
   s += occCount(vs,ai)*P.occBonus;            // держишь их города → они хотят мира
@@ -381,10 +408,11 @@ function dragAlliesIntoWar(aggressor,target){
   return allies;
 }
 function declareWar(t){
-  if(MP.guest){ MP.cmd({cmd:'war',tg:t}); return; }
+  if(MP.guest){ markPlayerStartedWar(t); MP.cmd({cmd:'war',tg:t}); return; }
   const tl=truceLeft(PLAYER,t);
   if(tl>0){toast(`🕊 Перемирие с ${FACTIONS[t].country}: ещё ${Math.ceil(tl)}с`);return;}
   if(!politEnough(POLIT_WAR))return;
+  markPlayerStartedWar(t);
   politPts[PLAYER]-=POLIT_WAR; setWar(PLAYER,t);
   const dragged=dragAlliesIntoWar(PLAYER,t);
   toast(`⚔ Война объявлена: ${FACTIONS[t].country} · мобилизация ${WAR_PREP}с · −${POLIT_WAR}🏛`);
@@ -417,7 +445,7 @@ function sendSupport(t){
 let peaceTarget=null, peaceLand=false, peaceMoney=0, peaceRepar=0;
 function openPeaceDialog(t){
   if(!atWar(PLAYER,t))return;
-  peaceTarget=t; peaceLand=occCount(PLAYER,t)>0; peaceMoney=0; peaceRepar=0; // по умолчанию оставляем занятое
+  peaceTarget=t; peaceLand=false; peaceMoney=0; peaceRepar=0; // безопасный дефолт: белый мир, земли только явным кликом
   document.getElementById('peaceWin').style.display='flex'; refreshPeaceDialog();
 }
 function closePeace(){peaceTarget=null;document.getElementById('peaceWin').style.display='none';}
@@ -425,11 +453,17 @@ function peaceTermsObj(){ const occ=occCount(PLAYER,peaceTarget); return {land:p
 function refreshPeaceDialog(){
   if(peaceTarget==null)return;
   const f=FACTIONS[peaceTarget], T=peaceTermsObj();
+  if(!T.occ&&peaceLand){peaceLand=false; T.land=false;}
   const nm=document.getElementById('peaceName'); nm.textContent='🕊 Мир: '+f.country; nm.style.color=hex6(f.color);
   document.getElementById('peaceInfo').innerHTML=
     `Их сила <b>${Math.round(factionStrength(peaceTarget))}</b> · Ваша <b>${Math.round(factionStrength(PLAYER))}</b> · казна врага <b style="color:#ffd23f">${gold[peaceTarget]|0}💰</b>`;
-  document.getElementById('ptLandV').textContent = T.occ?`${T.occ} занятых` : 'нечего занимать';
-  document.getElementById('ptLandBtn').classList.toggle('on', T.land);
+  document.getElementById('ptLandV').textContent = T.occ?`${T.occ} город(ов)` : 'нет захваченных';
+  const landBtn=document.getElementById('ptLandBtn');
+  landBtn.classList.toggle('on', peaceLand);
+  landBtn.disabled=!T.occ;
+  landBtn.textContent=peaceLand?'✓':'';
+  landBtn.setAttribute('aria-pressed',peaceLand?'true':'false');
+  landBtn.title=T.occ?(peaceLand?'Аннексировать все захваченные вами города':'Не аннексировать захваченные города'):'Нет захваченных вами городов';
   document.getElementById('ptMoneyV').textContent=peaceMoney+'%';
   document.getElementById('ptReparV').textContent=peaceRepar+'%';
   const ch=Math.round(peaceAcceptChance(peaceTarget,PLAYER,T)*100);
@@ -443,6 +477,26 @@ function refreshPeaceDialog(){
     (cd>0?` · <b style="color:#ff9a6a">⏳ повтор через ${Math.ceil(cd)}с</b>`:'');
   const pb=document.getElementById('peacePropose'); pb.classList.toggle('cd',cd>0); pb.style.opacity=cd>0?'0.5':''; // кнопка приглушена на кулдауне
 }
+function closePeaceResult(){document.getElementById('peaceResult').style.display='none';}
+function peaceResultHtml(T, grab){
+  const rows=[];
+  if(T.land)rows.push(`Вы аннексируете захваченные города: <b>${T.occ}</b>`);
+  else rows.push(T.occ?`Захваченные вами земли возвращаются: <b>${T.occ}</b>`:'Территориальных условий нет');
+  if(grab>0)rows.push(`Контрибуция: <b style="color:#ffd23f">+${grab}💰</b>`);
+  if(T.repar>0)rows.push(`Репарации: <b>${T.repar}%</b> дохода`);
+  return `<div class="offerTerms">${rows.map(r=>`<div>${r}</div>`).join('')}</div>`;
+}
+function showPeaceResult(accepted, fid, T, grab){
+  const title=document.getElementById('peaceResultTitle');
+  const body=document.getElementById('peaceResultBody');
+  const country=FACTIONS[fid]?FACTIONS[fid].country:'противник';
+  title.textContent=accepted?'🕊 Мир принят':'🕊 Мир отклонён';
+  title.style.color=accepted?'#9fe0ff':'#ff9a7a';
+  body.innerHTML=accepted
+    ? `<b>${country}</b> принимает условия мира.${peaceResultHtml(T,grab||0)}`
+    : `<b>${country}</b> отвергает предложение мира.<div class="offerTerms"><div>Нужно смягчить условия или повторить переговоры позже.</div><div>Пауза: <b>${PEACE_CD}с</b></div></div>`;
+  document.getElementById('peaceResult').style.display='flex';
+}
 function proposePeace(){
   const t=peaceTarget;
   const cd=peaceCDLeft(PLAYER,t);
@@ -453,49 +507,81 @@ function proposePeace(){
   setPeaceCD(PLAYER,t);                          // одно предложение раз в PEACE_CD секунд (успех или отказ)
   if(Math.random()<peaceAcceptChance(t,PLAYER,T)){
     politPts[PLAYER]-=POLIT_PEACE;
-    resolveOccupation(PLAYER,t,T.land?'keep':'white');
+    resolveOccupation(PLAYER,t,T.land?'claimA':'white');
     let grab=0; if(T.money>0){ grab=Math.floor((gold[t]|0)*T.money/100); gold[t]-=grab; gold[PLAYER]+=grab; }
     if(T.repar>0) reparations.push({from:t,to:PLAYER,pct:T.repar/100,until:gameTime+REPARATION_TIME});
     setRelation(PLAYER,t,'neutral'); setTruce(PLAYER,t);
     const parts=[]; if(T.land)parts.push(`${T.occ} земель`); if(grab)parts.push(`+${grab}💰`); if(T.repar)parts.push(`репарации ${T.repar}%`);
     toast(`🕊 Мир: ${FACTIONS[t].country}${parts.length?' · '+parts.join(' · '):' · белый мир'} · перемирие ${TRUCE_TIME}с`);
+    showPeaceResult(true,t,T,grab);
     closePeace(); refreshDiplo(); if(polWinOpen)buildPolWindow();
   } else {
     toast(`${FACTIONS[t].country} отклонил мир — смягчите условия (повтор через ${PEACE_CD}с)`);
+    showPeaceResult(false,t,T,0);
     refreshPeaceDialog();
   }
 }
 
 /* ── ИИ предлагает мир игроку (когда проигрывает) ────────────── */
-let peaceOfferQueue=[], peaceOfferFrom=null, peaceOfferTribute=0;
+let peaceOfferQueue=[], peaceOfferFrom=null, peaceOfferTerms=null;
+function peaceOfferMode(T){
+  if(!T)return 'white';
+  if(T.keepPlayerLand&&T.keepEnemyLand)return 'keep';
+  if(T.keepPlayerLand)return 'claimA';
+  if(T.keepEnemyLand)return 'claimB';
+  return 'white';
+}
+function makePeaceOfferTerms(fid){
+  const playerOcc=occCount(PLAYER,fid), enemyOcc=occCount(fid,PLAYER);
+  return {
+    keepPlayerLand:false,          // ИИ предлагает белый мир: игрок возвращает занятое у ИИ
+    keepEnemyLand:false,           // ИИ тоже возвращает занятое у игрока
+    tribute:Math.min(gold[fid]|0,40+Math.floor(Math.random()*90)),
+    playerOcc,
+    enemyOcc
+  };
+}
 function proposePeaceToPlayer(fid){
+  if(playerStartedWarRecently(fid))return; // игрок сам только что начал войну — не спамим встречным миром
   if(peaceOfferFrom===fid||peaceOfferQueue.some(o=>o.fid===fid))return;
-  const tribute=Math.min(gold[fid]|0,40+Math.floor(Math.random()*90)); // ИИ предлагает дань
-  peaceOfferQueue.push({fid,tribute});
+  peaceOfferQueue.push({fid,terms:makePeaceOfferTerms(fid)});
   if(document.getElementById('peaceOffer').style.display!=='flex')showNextPeaceOffer();
+}
+function peaceOfferTermsHtml(T){
+  const rows=[];
+  if(T.playerOcc>0)rows.push(T.keepPlayerLand
+    ? `Вы аннексируете захваченные города: <b>${T.playerOcc}</b>`
+    : `Вы возвращаете захваченные земли: <b>${T.playerOcc}</b>`);
+  if(T.enemyOcc>0)rows.push(T.keepEnemyLand
+    ? `${FACTIONS[peaceOfferFrom].country} оставляет ваши земли: <b>${T.enemyOcc}</b>`
+    : `Вам возвращают занятые земли: <b>${T.enemyOcc}</b>`);
+  if(!rows.length)rows.push('Белый мир без территориальных изменений');
+  if(T.tribute>0)rows.push(`Дань вам: <b style="color:#ffd23f">${T.tribute}💰</b>`);
+  return `<div class="offerTerms">${rows.map(r=>`<div>${r}</div>`).join('')}</div>`;
 }
 function showNextPeaceOffer(){
   // пропустить уже неактуальные (мир уже не нужен / не воюем)
   while(peaceOfferQueue.length){
     const o=peaceOfferQueue[0];
     if(!atWar(PLAYER,o.fid)){peaceOfferQueue.shift();continue;}
-    peaceOfferFrom=o.fid; peaceOfferTribute=o.tribute; peaceOfferQueue.shift();
+    peaceOfferFrom=o.fid; peaceOfferTerms=o.terms||makePeaceOfferTerms(o.fid); peaceOfferQueue.shift();
     const f=FACTIONS[o.fid];
     document.getElementById('peaceOfferBody').innerHTML=
       `<b style="color:${hex6(f.color)}">${f.country}</b> предлагает мир.`+
-      (o.tribute>0?`<br>Предлагает дань: <b style="color:#ffd23f">${o.tribute}💰</b>`:'');
+      peaceOfferTermsHtml(peaceOfferTerms);
     document.getElementById('peaceOffer').style.display='flex';
     return;
   }
-  peaceOfferFrom=null; document.getElementById('peaceOffer').style.display='none';
+  peaceOfferFrom=null; peaceOfferTerms=null; document.getElementById('peaceOffer').style.display='none';
 }
 function acceptPlayerPeace(){
-  const fid=peaceOfferFrom, tr=peaceOfferTribute;
+  const fid=peaceOfferFrom, T=peaceOfferTerms||makePeaceOfferTerms(peaceOfferFrom);
   if(fid!=null&&atWar(PLAYER,fid)){
-    resolveOccupation(PLAYER,fid,'white');  // предложение ИИ = белый мир (занятое возвращается)
+    resolveOccupation(PLAYER,fid,peaceOfferMode(T));
     setRelation(PLAYER,fid,'neutral'); setTruce(PLAYER,fid);
-    const pay=Math.min(tr,gold[fid]|0); gold[fid]-=pay; gold[PLAYER]+=pay;
-    toast(`🕊 Мир с ${FACTIONS[fid].country}${pay?` · получено ${pay}💰`:''} · белый мир · перемирие ${TRUCE_TIME}с`);
+    const pay=Math.min(T.tribute||0,gold[fid]|0); gold[fid]-=pay; gold[PLAYER]+=pay;
+    const mode=peaceOfferMode(T), landTxt=mode==='white'?'белый мир':(mode==='claimA'?'вы аннексируете земли':(mode==='claimB'?'враг аннексирует земли':'статус-кво'));
+    toast(`🕊 Мир с ${FACTIONS[fid].country}${pay?` · получено ${pay}💰`:''} · ${landTxt} · перемирие ${TRUCE_TIME}с`);
     refreshDiplo(); if(polWinOpen)buildPolWindow();
   }
   showNextPeaceOffer();
@@ -544,7 +630,16 @@ function refreshDiplo(){
     `<div>⚔ Воюет с: ${wl.length?wl.join(', '):'—'}</div>`+
     `<div>🤝 Союзы: ${al.length?al.join(', '):'—'}</div>`;
   const box=document.getElementById('diploBtns'); box.innerHTML='';
-  const mk=(label,cls,fn)=>{const b=document.createElement('button');b.className='dbtn '+cls;b.textContent=label;b.onclick=fn;box.appendChild(b);};
+  const mk=(label,cls,fn)=>{
+    const b=document.createElement('button');
+    b.type='button';
+    b.className='dbtn '+cls;
+    b.textContent=label;
+    b.addEventListener('pointerdown',e=>e.stopPropagation());
+    b.addEventListener('pointerup',e=>e.stopPropagation());
+    b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();fn();});
+    box.appendChild(b);
+  };
   if(rel==='neutral'){
     mk(`⚔ Объявить войну (${POLIT_WAR}🏛)`,'war',()=>declareWar(diploTarget));
     mk(`🤝 Заключить союз (${POLIT_ALLY}🏛)`,'ally',()=>formAlliance(diploTarget));
@@ -588,3 +683,126 @@ function showNextWarNotif(){
 function dismissWarNotif(){showNextWarNotif();}
 document.getElementById('warNotifOk').onclick=dismissWarNotif;
 document.getElementById('warNotifDiplo').onclick=()=>{const t=warNotifFrom;dismissWarNotif();openDiplo(t);};
+
+function installPeaceUiTestHook(){
+  try{
+    if(typeof window==='undefined'||!/[?&]peaceTest=1(?:&|$)/.test(window.location.search))return;
+    const modalState=id=>{
+      const el=document.getElementById(id);
+      return el?getComputedStyle(el).display:'missing';
+    };
+    const findCityByIdx=idx=>cities.find(c=>c.idx===idx);
+    const firstEnemy=()=>FACTIONS.find(f=>f.id!==PLAYER)?.id??1;
+    const closeAllPeaceTestModals=()=>{
+      ['peaceWin','peaceOffer','peaceResult','warNotif'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(el)el.style.display='none';
+      });
+      peaceTarget=null; peaceOfferFrom=null; peaceOfferTerms=null; peaceOfferQueue.length=0; warNotifFrom=null; warNotifQueue.length=0;
+    };
+    window.__peaceUiTest={
+      lastSeed:null,
+      foe:firstEnemy,
+      setupWar(fid=firstEnemy()){
+        closeAllPeaceTestModals();
+        setWar(PLAYER,fid);
+        politPts[PLAYER]=Math.max(politPts[PLAYER]||0,POLIT_PEACE+100);
+        peaceCD[relKey(PLAYER,fid)]=0;
+        return this.state(fid);
+      },
+      seedOccupation(fid=firstEnemy()){
+        let playerHeld=cities.find(c=>!c.isShipyard&&!c.isAirport&&c.owner===PLAYER&&c.idx!=null);
+        let enemyHeld=cities.find(c=>!c.isShipyard&&!c.isAirport&&c.owner===fid&&c.idx!=null);
+        if(!playerHeld||!enemyHeld||playerHeld===enemyHeld){
+          const normal=cities.filter(c=>!c.isShipyard&&!c.isAirport&&c.idx!=null);
+          playerHeld=normal[0];
+          enemyHeld=normal.find(c=>c!==playerHeld);
+        }
+        if(!playerHeld||!enemyHeld)throw new Error('peace test needs at least two normal cities');
+        playerHeld.owner=PLAYER; playerHeld.occ=true; playerHeld.occFrom=fid; playerHeld.units=Math.max(1,playerHeld.units||1); playerHeld.recolor&&playerHeld.recolor();
+        enemyHeld.owner=fid; enemyHeld.occ=true; enemyHeld.occFrom=PLAYER; enemyHeld.units=Math.max(1,enemyHeld.units||1); enemyHeld.recolor&&enemyHeld.recolor();
+        this.lastSeed={playerCity:playerHeld.idx,enemyCity:enemyHeld.idx,player:FACTIONS?.[PLAYER]?.country||PLAYER,enemy:fid};
+        if(typeof markRegions==='function')markRegions();
+        return this.lastSeed;
+      },
+      openPlayerPeace(fid=firstEnemy(),withAnnex=false){
+        this.setupWar(fid);
+        if(withAnnex)this.seedOccupation(fid);
+        openPeaceDialog(fid);
+        peaceLand=!!withAnnex;
+        refreshPeaceDialog();
+        return this.state(fid);
+      },
+      toggleAnnex(){
+        document.getElementById('ptLandBtn')?.click();
+        return this.state(peaceTarget??firstEnemy());
+      },
+      propose(fid=firstEnemy(),accepted=true,withAnnex=false){
+        this.setupWar(fid);
+        this.seedOccupation(fid);
+        openPeaceDialog(fid);
+        peaceLand=!!withAnnex; peaceMoney=0; peaceRepar=0; refreshPeaceDialog();
+        const oldRandom=Math.random;
+        Math.random=()=>accepted?0:1;
+        try{proposePeace();}finally{Math.random=oldRandom;}
+        return this.state(fid);
+      },
+      incoming(fid=firstEnemy(),mode='white'){
+        this.setupWar(fid);
+        this.seedOccupation(fid);
+        const terms={
+          keepPlayerLand:mode==='claimA'||mode==='keep',
+          keepEnemyLand:mode==='claimB'||mode==='keep',
+          tribute:25,
+          playerOcc:occCount(PLAYER,fid),
+          enemyOcc:occCount(fid,PLAYER)
+        };
+        peaceOfferQueue.push({fid,terms});
+        showNextPeaceOffer();
+        return this.state(fid);
+      },
+      acceptIncoming(fid=peaceOfferFrom??firstEnemy()){
+        document.getElementById('peaceOfferYes')?.click();
+        return this.state(fid);
+      },
+      declineIncoming(fid=peaceOfferFrom??firstEnemy()){
+        document.getElementById('peaceOfferNo')?.click();
+        return this.state(fid);
+      },
+      showWar(fid=firstEnemy()){
+        closeAllPeaceTestModals();
+        setWar(fid,PLAYER);
+        notifyWarDeclared(fid);
+        return this.state(fid);
+      },
+      state(fid=firstEnemy()){
+        const seed=this.lastSeed;
+        const playerCity=seed?findCityByIdx(seed.playerCity):null;
+        const enemyCity=seed?findCityByIdx(seed.enemyCity):null;
+        return {
+          fid,
+          peaceWin:modalState('peaceWin'),
+          peaceOffer:modalState('peaceOffer'),
+          peaceResult:modalState('peaceResult'),
+          peaceResultTitle:document.getElementById('peaceResultTitle')?.textContent||'',
+          peaceResultBody:document.getElementById('peaceResultBody')?.innerText||'',
+          peaceOfferBody:document.getElementById('peaceOfferBody')?.innerText||'',
+          warNotif:modalState('warNotif'),
+          warNotifBody:document.getElementById('warNotifBody')?.innerText||'',
+          landText:document.getElementById('ptLandBtn')?.textContent||'',
+          landOn:document.getElementById('ptLandBtn')?.classList.contains('on')||false,
+          atWar:atWar(PLAYER,fid),
+          relation:relation(PLAYER,fid),
+          occPlayer:occCount(PLAYER,fid),
+          occEnemy:occCount(fid,PLAYER),
+          seed,
+          playerCityOwner:playerCity?playerCity.owner:null,
+          enemyCityOwner:enemyCity?enemyCity.owner:null,
+          playerCityOcc:playerCity?!!playerCity.occ:null,
+          enemyCityOcc:enemyCity?!!enemyCity.occ:null
+        };
+      }
+    };
+  }catch(e){console.error('[peace-ui-test]',e);}
+}
+installPeaceUiTestHook();

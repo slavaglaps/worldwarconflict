@@ -7,21 +7,31 @@ function pickCity(cx,cy){
   const hit=ray.intersectObjects(cities.map(c=>c.hit),false);
   return hit.length?hit[0].object.userData.city:null;
 }
-function pickUnit(cx,cy){ // только корабли (авиация командуется из аэропорта, не выбирается)
+function pickUnit(cx,cy){
   ndc.x=(cx/innerWidth)*2-1; ndc.y=-(cy/innerHeight)*2+1;
   ray.setFromCamera(ndc,camera);
-  if(MP.guest){ // гость управляет своими кораблями-зеркалами (ghosts)
-    const groups=[]; for(const gh of MP.ghosts.values())if(gh.kind===1&&gh.owner===PLAYER)groups.push(gh.group);
+  if(MP.guest){ // гость управляет своими кораблями/дирижаблями-зеркалами (ghosts)
+    const groups=[]; for(const gh of MP.ghosts.values())if((gh.kind===1||gh.kind===2)&&gh.owner===PLAYER)groups.push(gh.group);
     if(!groups.length)return null;
-    const hit=ray.intersectObjects(groups,true); if(!hit.length)return null;
+    const hit=ray.intersectObjects(groups,true);
+    if(!hit.length){
+      let best=null,bd=1.8;
+      for(const gh of MP.ghosts.values()){
+        if(gh.kind!==2||gh.owner!==PLAYER)continue;
+        const d=ray.ray.distanceSqToPoint(gh.group.position);
+        if(d<bd){bd=d;best=gh;}
+      }
+      return best;
+    }
     let o=hit[0].object; while(o&&!(o.userData&&o.userData.ghost))o=o.parent;
     return o?o.userData.ghost:null;
   }
-  if(!ships.length)return null;
-  const hit=ray.intersectObjects(ships.map(s=>s.group),true);
+  const units=[...ships,...planes].filter(u=>u&&u.group);
+  if(!units.length)return null;
+  const hit=ray.intersectObjects(units.map(s=>s.group),true);
   if(!hit.length)return null;
-  let o=hit[0].object; while(o&&!o.userData.ship)o=o.parent;
-  return o?o.userData.ship:null;
+  let o=hit[0].object; while(o&&!(o.userData.ship||o.userData.plane))o=o.parent;
+  return o?(o.userData.ship||o.userData.plane):null;
 }
 function waterPoint(cx,cy){
   ndc.x=(cx/innerWidth)*2-1; ndc.y=-(cy/innerHeight)*2+1;
@@ -96,7 +106,7 @@ renderer.domElement.addEventListener('mousedown',e=>{
     return;
   }
   if(e.button!==0||gameOver)return;
-  // клик по своему кораблю/самолёту → выбрать и тянуть (если он уже в группе — тянем всю группу)
+  // клик по своему кораблю/дирижаблю → выбрать и тянуть (если он уже в группе — тянем всю группу)
   const u=pickUnit(e.clientX,e.clientY);
   if(u&&u.owner===OWNER.PLAYER){
     if(!selectedUnits.has(u)){ if(!e.shiftKey)clearUnits(); selectedUnits.add(u); }
@@ -131,7 +141,7 @@ window.addEventListener('mousemove',e=>{
     return;
   }
   if(unitDrag&&dragLead){
-    const gp=waterPoint(e.clientX,e.clientY);
+    const gp=dragLead.isAir?groundPoint(e.clientX,e.clientY):waterPoint(e.clientX,e.clientY);
     if(gp){const u=dragLead, ay=u.isAir?PLANE_ALT:WATER_Y_SHIP+0.3;
       updateDragArrow([{x:u.pos.x,y:ay,z:u.pos.z},{x:gp.x,y:ay,z:gp.z}],0x6fc0ff); // стрелка MW
     }
@@ -139,13 +149,6 @@ window.addEventListener('mousemove',e=>{
   }
   if(dragFrom){
     if(Math.hypot(e.clientX-dragStart.x,e.clientY-dragStart.y)>6)dragMoved=true;
-    if(dragFrom.isAirport){ // авиация: прямая стрелка к цели (летят напрямую, не по дорогам)
-      const tc=(hoverCity&&hoverCity!==dragFrom)?hoverCity:null, gp=groundPoint(e.clientX,e.clientY);
-      const tx=tc?tc.gx:(gp?gp.x:dragFrom.gx), tz=tc?tc.gz:(gp?gp.z:dragFrom.gz), ty=tc?tc.baseY:(gp?gp.y:0);
-      const col=(tc&&tc.owner!==dragFrom.owner&&atWar(dragFrom.owner,tc.owner))?0xff5a4a:0x6fc0ff; // красный = бомбить
-      updateDragArrow([cityArrowPoint(dragFrom),{x:tx,y:ty+0.5,z:tz}],col);
-      return;
-    }
     const srcs=dragSources();   // все выбранные города (или один схваченный)
     if(hoverCity&&hoverCity!==dragFrom){
       // превью маршрута по графу от КАЖДОГО источника; оранжевый = на пути чужой город (бой будет там)
@@ -175,30 +178,27 @@ window.addEventListener('mouseup',e=>{
   if(e.button!==0)return;
   hideDragArrow(); boxEl.style.display='none';
   if(gameOver){dragFrom=null;boxStart=null;unitDrag=null;dragLead=null;return;}
-  if(unitDrag){ // только корабли (расстановка в сетку вокруг точки)
-    const arr=[...selectedUnits], n=arr.length;
-    const gp=waterPoint(e.clientX,e.clientY);
-    if(MP.guest){ // гость → команда движения кораблей хосту (по id зеркал)
+  if(unitDrag){ // корабли — по воде, дирижабли — по воздуху
+    const air=!!(dragLead&&dragLead.isAir);
+    const arr=[...selectedUnits].filter(u=>!!u.isAir===air), n=arr.length;
+    const gp=air?groundPoint(e.clientX,e.clientY):waterPoint(e.clientX,e.clientY);
+    if(MP.guest){ // гость → команда движения хосту (по id зеркал)
       const ids=arr.filter(u=>u._mpid!=null).map(u=>u._mpid);
-      if(gp&&ids.length)MP.cmd({cmd:'shipmove',ids,x:+gp.x.toFixed(2),z:+gp.z.toFixed(2)});
+      if(gp&&ids.length)MP.cmd({cmd:air?'planemove':'shipmove',ids,x:+gp.x.toFixed(2),z:+gp.z.toFixed(2)});
       unitDrag=null; dragLead=null; return;
     }
     const cols=Math.ceil(Math.sqrt(n)), gapU=2.2;
     if(gp)arr.forEach((u,i)=>{
       const cx=(i%cols)-(cols-1)/2, cz=Math.floor(i/cols)-(Math.ceil(n/cols)-1)/2;
       let tx=gp.x+cx*gapU, tz=gp.z+cz*gapU;
-      if(!isWaterAt(tx,tz)){const w=nearestWaterPoint(tx,tz);tx=w.x;tz=w.z;}
+      if(!air&&!isWaterAt(tx,tz)){const w=nearestWaterPoint(tx,tz);tx=w.x;tz=w.z;}
       u.setTarget(tx,tz);
     });
     unitDrag=null; dragLead=null; return;
   }
   if(dragFrom){
     const t=pickCity(e.clientX,e.clientY);
-    if(dragFrom.isAirport&&dragMoved){ // аэропорт командует авиацией (приказ на цель)
-      const gp=groundPoint(e.clientX,e.clientY);
-      setAirOrder(dragFrom, t, gp?gp.x:dragFrom.gx, gp?gp.z:dragFrom.gz);
-    }
-    else if(dragMoved&&t&&t!==dragFrom){ for(const s of dragSources()) if(s!==t) sendUnits(s,t); }  // протащил на город → отправка из ВСЕХ выбранных
+    if(dragMoved&&t&&t!==dragFrom){ for(const s of dragSources()) if(s!==t) sendUnits(s,t); }  // протащил на город → отправка из ВСЕХ выбранных
     else if(!dragMoved){                                           // короткий клик → выбрать
       if(e.shiftKey){ if(selectedSet.has(dragFrom))selectedSet.delete(dragFrom); else selectedSet.add(dragFrom); } // Shift = добавить/убрать (мультивыбор)
       else { clearSel(); selectedSet.add(dragFrom); }
@@ -214,11 +214,12 @@ window.addEventListener('mouseup',e=>{
         return v.z<1&&sx>=x1&&sx<=x2&&sy>=y1&&sy<=y2;};
       for(const c of cities){ if(c.owner!==OWNER.PLAYER)continue; const s=screenOf(c);
         if(s.vis&&s.x>=x1&&s.x<=x2&&s.y>=y1&&s.y<=y2)selectedSet.add(c); }
-      // массовый выбор кораблей в рамке (авиация не выбирается — командуется из аэропорта)
+      // массовый выбор кораблей и дирижаблей в рамке
       let pickedUnit=false;
-      const shipList = MP.guest ? [...MP.ghosts.values()].filter(g=>g.kind===1) : ships;
-      for(const u of shipList){ if(u.owner!==OWNER.PLAYER)continue;
-        if(inBox(u.pos.x,WATER_Y_SHIP+0.2,u.pos.z)){selectedUnits.add(u);pickedUnit=true;} }
+      const unitList = MP.guest ? [...MP.ghosts.values()].filter(g=>g.kind===1||g.kind===2) : [...ships,...planes];
+      for(const u of unitList){ if(u.owner!==OWNER.PLAYER)continue;
+        const y=u.isAir?PLANE_ALT:WATER_Y_SHIP+0.2;
+        if(inBox(u.pos.x,y,u.pos.z)){selectedUnits.add(u);pickedUnit=true;} }
       if(pickedUnit){selectedSet.clear();clearSel();} // если в рамке юниты — города не выбираем
     }
     boxStart=null; updatePanel();

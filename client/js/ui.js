@@ -205,10 +205,16 @@ document.getElementById('heroWin').addEventListener('click',e=>{if(e.target.id==
 document.getElementById('peacePropose').onclick=proposePeace;
 document.getElementById('peacePropose').textContent=`Предложить мир (${POLIT_PEACE}🏛)`; // один раз: кнопку не мутируем в рефреше (иначе теряются клики)
 document.getElementById('peaceCancel').onclick=closePeace;
+document.getElementById('ptLandBtn').onclick=e=>{
+  e.stopPropagation();
+  if(!occCount(PLAYER,peaceTarget)){peaceLand=false;refreshPeaceDialog();return;}
+  peaceLand=!peaceLand;
+  refreshPeaceDialog();
+};
 // условия мира — делегирование на карточке (refresh не пересобирает кнопки → клики не теряются)
 document.getElementById('peaceCard').addEventListener('click',e=>{
   const b=e.target.closest('button[data-r]'); if(!b)return;
-  if(b.dataset.r==='land'){ peaceLand=!peaceLand; }
+  if(b.dataset.r==='land')return;
   else { const d=b.dataset.d; let v=b.dataset.r==='money'?peaceMoney:peaceRepar;
     v = d==='max'?100:Math.max(0,Math.min(100,v+(+d)));
     if(b.dataset.r==='money')peaceMoney=v; else peaceRepar=v; }
@@ -218,6 +224,16 @@ document.getElementById('peaceWin').addEventListener('click',e=>{if(e.target.id=
 // предложение мира от ИИ
 document.getElementById('peaceOfferYes').onclick=acceptPlayerPeace;
 document.getElementById('peaceOfferNo').onclick=declinePlayerPeace;
+document.getElementById('peaceResultOk').onclick=closePeaceResult;
+document.getElementById('peaceResult').addEventListener('click',e=>{if(e.target.id==='peaceResult')closePeaceResult();});
+
+['diploCard','peaceCard','peaceOfferCard','peaceResultCard','warNotifCard'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(!el)return;
+  ['pointerdown','pointerup','mousedown','mouseup','click','dblclick'].forEach(type=>{
+    el.addEventListener(type,e=>e.stopPropagation());
+  });
+});
 
 /* ── ИИ и конец игры — в серверном Sim (бывшие aiUpdate/aiActFaction/checkEnd удалены) ── */
 let factionTimer=[];

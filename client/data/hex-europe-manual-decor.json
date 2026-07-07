@@ -1,7 +1,18 @@
 {
   "version": 2,
-  "updatedAt": "2026-07-02T18:13:43.473Z",
-  "edits": [],
+  "updatedAt": "2026-07-07T13:07:35.661Z",
+  "edits": [
+    {
+      "q": 57,
+      "r": 93,
+      "asset": "bridgeA",
+      "rot": 300.000701530499,
+      "scale": 1,
+      "height": 0,
+      "offsetX": 0,
+      "offsetZ": 0
+    }
+  ],
   "removedGenerated": [],
-  "savedAt": "2026-07-02T18:13:44.375Z"
+  "savedAt": "2026-07-07T13:07:36.569Z"
 }

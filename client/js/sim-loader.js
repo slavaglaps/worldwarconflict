@@ -7,9 +7,9 @@
 async function loadServerSim(base) {
   if (window.__WWCSim) return window.__WWCSim;
   base = base || 'sim/';
-  // порядок = граф require (зависимости раньше зависимых)
+  // порядок = граф require (зависимости раньше зависимых); City ДО Squad (Squad требует syncComp из City)
   const ORDER = ['constants', 'tech-data', 'water-data.json', 'water', 'tech',
-                 'balance', 'SpatialGrid', 'Squad', 'Ship', 'Plane', 'City', 'Sim'];
+                 'balance', 'SpatialGrid', 'City', 'Squad', 'Ship', 'Plane', 'Sim'];
   const parts = [
     '(function(){',
     'var __M={};',

@@ -203,8 +203,8 @@ function loop(now){
     gameTime+=gdt;                                                          // ⏳ отсчёт мобилизации войны
     for(const c of cities){
       if(c.batches.length){ const b=c.batches[0]; if(b.elapsed<b.time)b.elapsed=Math.min(b.time,b.elapsed+gdt); } // найм
-      if(c.isShipyard&&c.shipQueue>0&&c.shipTimer<SHIP_BUILD_TIME)c.shipTimer=Math.min(SHIP_BUILD_TIME,c.shipTimer+gdt);   // ⚓
-      if(c.isAirport&&c.planeQueue>0&&c.planeTimer<PLANE_BUILD_TIME)c.planeTimer=Math.min(PLANE_BUILD_TIME,c.planeTimer+gdt); // ✈
+      if((c.isShipyard||c.hasShipyard)&&c.shipQueue>0&&c.shipTimer<SHIP_BUILD_TIME)c.shipTimer=Math.min(SHIP_BUILD_TIME,c.shipTimer+gdt);   // ⚓
+      if((c.isAirport||c.hasAirport)&&c.planeQueue>0&&c.planeTimer<PLANE_BUILD_TIME)c.planeTimer=Math.min(PLANE_BUILD_TIME,c.planeTimer+gdt); // ✈
       c.drawProdRing();
     }
     const rs=techRes[PLAYER]; if(rs)for(const r of rs){ const n=NODE[r.id]; if(n&&r.t<n.t)r.t=Math.min(n.t,r.t+gdt); }      // 🔬
@@ -212,6 +212,7 @@ function loop(now){
     shipBombardFX(gdt);    // 🚀 визуал обстрела берега кораблями (урон авторитетно считает сервер)
     updateMissiles(gdt);   // анимируем трассеры/взрывы
   }
+  if(!gameOver&&gdt>0&&typeof window.updateMapBuildings==='function')window.updateMapBuildings(gdt);
   // во время поворота камеры (Q/E или мышь) прячем DOM-подписи целиком — иначе они дрожат
   const _rot=camRotating; document.getElementById('labels').style.visibility=_rot?'hidden':'visible';
   for(const c of cities){if(!_rot)c.updateLabel();c.updateSiegeViz(now);}
@@ -244,6 +245,8 @@ function loop(now){
   panelTick+=dt; if(panelTick>0.25){panelTick=0;if(regionsDirty){regionsDirty=false;assignRegions();}updatePanel();refreshTechAfford();refreshHeroBar();if(diploTarget!=null)refreshDiplo();refreshPol();if(peaceTarget!=null)refreshPeaceDialog();}  // refresh UI
   applyPerfStressOnce();
   if(typeof window.rebuildCityBatchesIfDirty==='function')window.rebuildCityBatchesIfDirty();
+  if(window._shadowWarmUntil&&now<window._shadowWarmUntil)renderer.shadowMap.needsUpdate=true;   // прогрев теней после загрузки карты (страховка от async-геометрии)
+  if(typeof bakeDynShadowIfDirty==='function')bakeDynShadowIfDirty();   // 🌗 динамическая карта теней (города/постройки): перепечь только при изменениях, события кадра коалесятся
   renderer.render(scene,camera);
   updatePerfOverlay(now);
   requestAnimationFrame(loop);
@@ -295,9 +298,9 @@ function loop(now){
   /* ── хост: стратегический снапшот (дельта городов + дипломатия по изменению) ── */
   const cityTuple=c=>[c.idx,c.owner,Math.min(8191,Math.round(c.units)),SPEC2ID[c.spec]||0,c.tier,c.occ?1:0,
     undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,
-    c.branchTier('prod'),c.branchTier('def'),c.branchTier('atk')];
+    c.branchTier('prod'),c.branchTier('def'),c.branchTier('atk'),undefined,undefined,undefined,c.occ&&c.occFrom!=null?c.occFrom:255];
   const packCity=c=>[c.owner|0,Math.min(8191,Math.round(c.units)),SPEC2ID[c.spec]||0,c.tier|0,c.occ?1:0,
-    c.branchTier('prod'),c.branchTier('def'),c.branchTier('atk')].join(':');
+    c.branchTier('prod'),c.branchTier('def'),c.branchTier('atk'),c.occ&&c.occFrom!=null?c.occFrom:255].join(':');
   function buildSnap(now){
     ensureIndex();
     const msg={t:'snap',time:gameTime,over:gameOver?1:0,
@@ -325,18 +328,20 @@ function loop(now){
   }
 
   /* ── гость: применить состояние одного города ── */
-  function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner,prodTime,prodElapsed,shipQ,shipT,planeQ,planeT,prodTier,defTier,atkTier){
+  function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner,prodTime,prodElapsed,shipQ,shipT,planeQ,planeT,prodTier,defTier,atkTier,compI,compA,compC,occFrom){
     const spec=ID2SPEC[specId]||null, prevOwner=c.owner;
     const nextProd=prodTier==null?(spec==='prod'?tier:0):prodTier;
     const nextDef=defTier==null?(spec==='def'?tier:0):defTier;
     const nextAtk=atkTier==null?(spec==='atk'?tier:0):atkTier;
     const specChanged=c.spec!==spec||c.tier!==tier||c.prodTier!==nextProd||c.defTier!==nextDef||c.atkTier!==nextAtk;
     c.owner=owner; c.units=units; c.spec=spec; c.tier=tier; c.prodTier=nextProd; c.defTier=nextDef; c.atkTier=nextAtk; c.occ=!!occ;
+    c.occFrom = c.occ ? (occFrom!=null && occFrom!==255 ? occFrom : c.occFrom) : null;
     if(queued!=null)   // ⏳ найм: реальные время/прогресс партии с сервера (дс→с) → кольцо и прогресс-бар идут
       c.batches = queued>0 ? [{count:queued, time:Math.max(0.1,(prodTime||10)/10), elapsed:Math.min((prodTime||10)/10,(prodElapsed||0)/10)}] : [];
     if(shipQ!=null){ c.shipQueue=shipQ|0; c.shipTimer=(shipT||0)/10; }                            // ⚓ верфь: очередь + таймер
     if(planeQ!=null){ c.planeQueue=planeQ|0; c.planeTimer=(planeT||0)/10; }                       // ✈ аэродром: очередь + таймер
     if(siegeUnits!=null) c.siege = siegeUnits>0 ? {[siegeOwner]:{units:siegeUnits,atkMult:1}} : null; // осада → орбы + кольцо боя + тряска
+    if(compI!=null) c.comp={inf:compI,arc:compA||0,cav:compC||0};   // 👥 состав гарнизона (панель города)
     if(specChanged){ try{c.buildMeshes&&c.buildMeshes();}catch(e){} }
     if(prevOwner!==owner){
       try{c.recolor&&c.recolor();}catch(e){}
@@ -348,7 +353,10 @@ function loop(now){
     const curWar=new Set();
     for(const k in relations)if(relations[k]==='war'){ const ns=(k.match(/\d+/g)||[]).map(Number);
       if(ns.includes(PLAYER)){ const o=ns.find(x=>x!==PLAYER); if(o!=null)curWar.add(o); } }
-    for(const fid of curWar)if(!prevWar.has(fid))toast(`⚔ ${FACTIONS[fid]?FACTIONS[fid].country:'Враг'} объявил вам войну!`);
+    for(const fid of curWar)if(!prevWar.has(fid)&&!playerStartedWarRecently(fid)){
+      if(typeof notifyWarDeclared==='function')notifyWarDeclared(fid);
+      else toast(`⚔ ${FACTIONS[fid]?FACTIONS[fid].country:'Враг'} объявил вам войну!`);
+    }
     prevWar=curWar;
   }
   /* ── гость: оповестить о новых СОЮЗАХ со своей фракцией ── */
@@ -367,7 +375,7 @@ function loop(now){
     MP._lastTime=m.time; gameTime=m.time;
     const list=m.c||m.dc;
     if(m.c)MP._synced=true;   // получили полный keyframe → можно судить о победе/поражении
-    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15],d[16],d[17]); } regionsDirty=true; }
+    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15],d[16],d[17],d[18],d[19],d[20],d[21]); } regionsDirty=true; }
     if(m.g){ const g=m.g; for(let i=0;i<g.length;i++){gold[i]=g[i];politPts[i]=m.p[i];manpower[i]=m.m[i];} }  // в cs-режиме экономика идёт через 'econ'; в relay — здесь
     if(m.rel){ relations={}; for(const [k,v] of m.rel)relations[k]=v; warSince={}; for(const [k,v] of m.ws)warSince[k]=+v; warNotify(); allyNotify(); }
     // победа/поражение — только после keyframe И если видели партию ИДУЩЕЙ (не врываемся в уже оконченную)
@@ -383,10 +391,11 @@ function loop(now){
 
   /* ── KayKit ship assets for guest/local-sim mirrors ── */
   const SHIP_ASSET = {
-    blue: 'assets/hex-kit/units/blue/ship_blue_full.gltf',
-    red: 'assets/hex-kit/units/red/ship_red_full.gltf',
-    green: 'assets/hex-kit/units/green/ship_green_full.gltf',
-    yellow: 'assets/hex-kit/units/yellow/ship_yellow_full.gltf',
+    // accent-вариант: деревянный корпус с нормальной текстурой + паруса в цвет фракции (full был целиком залит цветом)
+    blue: 'assets/hex-kit/units/blue/ship_blue_accent.gltf',
+    red: 'assets/hex-kit/units/red/ship_red_accent.gltf',
+    green: 'assets/hex-kit/units/green/ship_green_accent.gltf',
+    yellow: 'assets/hex-kit/units/yellow/ship_yellow_accent.gltf',
     neutral: 'assets/hex-kit/units/neutral/ship.gltf',
   };
   const SHIP_PALETTE = [
@@ -395,7 +404,7 @@ function loop(now){
     { key: 'green', color: new T3.Color(0x3f9e7e) },
     { key: 'yellow', color: new T3.Color(0xcaa233) },
   ];
-  const SHIP_MODEL_SCALE = 1.55;
+  const SHIP_MODEL_SCALE = 1.1;   // модель пака 2.26 в длину → ~2.5 юнита (при 1.55 корабль был больше города)
   const SHIP_MODEL_ROT_Y = Math.PI / 2; // KayKit ship length is on local Z; game heading expects +X.
   const shipModelCache = {};
   let shipModelPromise = null;
@@ -490,14 +499,17 @@ function loop(now){
     return null;
   }
   ensureShipModels();
-  if(typeof ensureUnitModels==='function')ensureUnitModels().then(()=>{
+  function rebuildTypedUnits(){
     for(const gh of MP.ghosts.values())if(gh.kind===0&&gh.group?.userData){
       const ud=gh.group.userData;
-      if(ud.orbMesh){gh.group.remove(ud.orbMesh);ud.orbMesh=null;}
+      if(ud.tm){for(const b of ud.tm){if(b.mesh)gh.group.remove(b.mesh);if(b.acc)gh.group.remove(b.acc);} ud.tm=null;} ud.unitSourceKey=null;
       ud.orbN=-1;
       ghostSwarm(gh,unitsForCount(gh.count||1));
     }
-  });
+  }
+  if(typeof ensureUnitModels==='function')ensureUnitModels().then(rebuildTypedUnits);
+  // dev: window.__unitTune={sword:{...}} → пересборка роёв с новой раскладкой экипировки
+  window.__rebuildTypedUnits=function(){ if(typeof window.__clearTypedUnitCache==='function')window.__clearTypedUnitCache(); rebuildTypedUnits(); };
 
   const shipHitGeo=new T3.BoxGeometry(1.35,0.55,0.75);
   const shipHitMat=new T3.MeshBasicMaterial({visible:false});
@@ -558,17 +570,17 @@ function loop(now){
   const ghostPlaneBodyMat=new T3.MeshLambertMaterial({color:0xe8edf2});
   const ghostPlaneEntityDummy=new T3.Object3D();
   const ghostPlaneMatrix=new T3.Matrix4();
-  function ghostPlaneLocal(x,y,z,rz=0){
+  function ghostPlaneLocal(x,y,z,rz=0,sx=1,sy=1,sz=1){
     const d=new T3.Object3D();
-    d.position.set(x,y,z); d.rotation.z=rz; d.updateMatrix();
+    d.position.set(x,y,z); d.rotation.z=rz; d.scale.set(sx,sy,sz); d.updateMatrix();
     return d.matrix.clone();
   }
   const GHOST_PLANE_PARTS=[
-    {key:'fus', geo:new T3.CylinderGeometry(0.06,0.035,0.5,8), mat:null, body:true,  local:ghostPlaneLocal(0,0,0,Math.PI/2)},
-    {key:'wing',geo:new T3.BoxGeometry(0.1,0.025,0.5),       mat:null, body:false, local:ghostPlaneLocal(0,0,0,0)},
-    {key:'tail',geo:new T3.BoxGeometry(0.08,0.02,0.2),       mat:null, body:false, local:ghostPlaneLocal(-0.2,0,0,0)},
-    {key:'fin', geo:new T3.BoxGeometry(0.08,0.1,0.02),       mat:null, body:false, local:ghostPlaneLocal(-0.2,0.06,0,0)},
-    {key:'nose',geo:new T3.ConeGeometry(0.035,0.12,8),       mat:null, body:true,  local:ghostPlaneLocal(0.3,0,0,-Math.PI/2)},
+    {key:'bag',   geo:new T3.SphereGeometry(0.18,16,8),        mat:null, body:true,  local:ghostPlaneLocal(0,0.03,0,0,2.3,0.82,0.82)},
+    {key:'gond',  geo:new T3.BoxGeometry(0.34,0.08,0.12),       mat:null, body:false, local:ghostPlaneLocal(0,-0.18,0,0)},
+    {key:'tailH', geo:new T3.BoxGeometry(0.12,0.025,0.34),      mat:null, body:false, local:ghostPlaneLocal(-0.35,0.03,0,0)},
+    {key:'tailV', geo:new T3.BoxGeometry(0.12,0.26,0.025),      mat:null, body:false, local:ghostPlaneLocal(-0.35,0.07,0,0)},
+    {key:'nose',  geo:new T3.SphereGeometry(0.12,12,6),         mat:null, body:true,  local:ghostPlaneLocal(0.38,0.03,0,0,1.15,0.78,0.78)},
   ];
   const ghostPlaneBatchRoot=new T3.Group();
   ghostPlaneBatchRoot.name='ghost-plane-batches';
@@ -618,7 +630,7 @@ function loop(now){
       lab=document.createElement('div'); lab.className='lab'; labels&&labels.appendChild(lab); }
     else if(kind===1){ // ⚓ KayKit ship model; primitive fallback until GLTFs finish loading.
       mat=installShipVisual(g,owner,null); }
-    else if(kind===2){ // ✈ самолеты рисуются общим InstancedMesh-батчем, группа хранит только позицию/поворот.
+    else if(kind===2){ // ✈ дирижабли рисуются общим InstancedMesh-батчем, группа хранит только позицию/поворот.
       mat=new T3.MeshLambertMaterial({color:col}); g.userData.batchedPlane=true; }
     else { g.add(new T3.Mesh(new T3.ConeGeometry(0.1,0.4,6),new T3.MeshBasicMaterial({color:0xff7a3a}))); }
     scene.add(g);
@@ -636,7 +648,7 @@ function loop(now){
   // 🪖 ПОХОДНАЯ КОЛОННА-«ЗМЕЙКА»: голова у лидера, каждый ряд держится на rankSp ПОЗАДИ предыдущего.
   // Голова заходит на дугу — хвост ещё идёт прямо; поворот перетекает по колонне (как поезд). Никаких резких разворотов.
   function placeGhostSwarm(gh,now){
-    const ud=gh.group.userData, mesh=ud.orbMesh; if(!mesh)return;
+    const ud=gh.group.userData; if(!ud.tm||!ud.putUnitMatrix)return;   // 👥 бакеты типов создаёт ghostSwarm
     const tt=now/1000, sc=ud.unitScale||1, n=ud.orbN;
     const dt=Math.min(0.1,Math.max(0,(now-(ud._lt||now))/1000)); ud._lt=now;
     const p=gh.group.position, t=gh.target, dx=t.x-p.x, dz=t.z-p.z, dist=Math.hypot(dx,dz);
@@ -721,13 +733,14 @@ function loop(now){
       // 🏰 ВХОД: ряд, пройдя центр здания, ПЛАВНО тает (уменьшается+тонет) — постепенно пропадает, а не гаснет рывком
       let fadeK=1;
       if(gh._dying){ const depth=advIn-rank*rankSp; if(depth>0) fadeK=1-depth/(rankSp*2.2); }   // тают ~2 ряда сразу → заметно «постепенно пропадают»
+      if(gh._perish) fadeK*=Math.max(0,1-(now-gh._perish)/750);           // ⚔ погиб в бою → весь остаток тает на месте
       // 🚪 плавный ВЫХОД (зеркально входу): ряд ВЫРАСТАЕТ у ворот по мере пройденного пути, а не вспыхивает
       const born=(ud.travelled||0)-rank*rankSp;
       fadeK*=born>=rankSp*0.6?1:Math.max(0,born/(rankSp*0.6));
       if(rank>=visRanks || fadeK<=0.02){                                   // ещё в здании (не вышел) / уже полностью втянулся → скрыт
         ghostUnitDummy.position.set(0,-999,0); ghostUnitDummy.scale.set(0,0,0); ghostUnitDummy.updateMatrix();
         if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
-        mesh.setMatrixAt(i,ghostUnitMatrix); continue; }
+        ud.putUnitMatrix(i,ghostUnitMatrix); continue; }
       const cx=c[0], cz=c[1], dx2=d[0], dz2=d[1];                         // ряд стоит ТОЧНО на следе (дороге) — без прямых блендов
       const rowHead=-Math.atan2(dz2,dx2);
       let acOff=((file-(W-1)/2)+(u.lj||0))*fileSp*(funnelR[rank]||1);   // поперёк ряда — ровно по центру оси; воронка СВОЕГО ряда
@@ -746,22 +759,33 @@ function loop(now){
       const jm=1+battle*1.8;                                              // в сцепке толкучка заметнее
       const jx=Math.sin(tt*3.1+u.ph*1.7)*0.012*jm, jz=Math.cos(tt*2.7+u.ph)*0.012*jm;
       const gy=unitGroundY(wx,wz);
-      ghostUnitDummy.position.set((wx-p.x)+dx2*atk*0.19+jx, (gy-p.y)+bob-(1-fadeK)*sc*0.7, (wz-p.z)+dz2*atk*0.19+jz);   // каждый боец стоит на своей высоте дороги/склона
+      // адаптивный снап (как в потоке): нормальный шаг — строго по следу (не срезаем острый угол),
+      // сглаживаем ТОЛЬКО телепорт-скачки; выпад/джиттер/bob добавляются ПОСЛЕ (не демпфируются)
+      const snapMax=Math.max(0.5, (typeof gameSpeed!=='undefined'?gameSpeed:1)*0.8*dt*6);
+      if(u.ex==null || Math.hypot(wx-u.ex,wz-u.ez)<=snapMax){ u.ex=wx; u.ez=wz; u.ey=gy; }
+      else { const ke=Math.min(1,dt*9); u.ex+=(wx-u.ex)*ke; u.ez+=(wz-u.ez)*ke; u.ey+=(gy-u.ey)*ke; }
+      // 💧 боец НЕ встаёт на открытую воду (та же защита, что в потоке): ось следа (cx,cz) на суше → поджимаем к ней
+      let fwx=u.ex+dx2*atk*0.19+jx, fwz=u.ez+dz2*atk*0.19+jz;
+      if(typeof isWaterAt==='function' && isWaterAt(fwx,fwz) && !isWaterAt(cx,cz)){
+        let ok=false; for(let kk=0.7;kk>0;kk-=0.23){ const tx=cx+(fwx-cx)*kk, tz=cz+(fwz-cz)*kk; if(!isWaterAt(tx,tz)){ fwx=tx; fwz=tz; ok=true; break; } } if(!ok){ fwx=cx; fwz=cz; }
+      }
+      ghostUnitDummy.position.set(fwx-p.x, (u.ey-p.y)+bob-(1-fadeK)*sc*0.7, fwz-p.z);   // каждый боец стоит на своей высоте дороги/склона
       const tgtY=rowHead+(u.yaw||0)*0.4+(cheer?Math.sin(tt*5+u.ph*3)*0.25*cheer:0);   // плавный доворот (+вертёж в чире)
       if(u.cy==null)u.cy=tgtY; else u.cy+=angDiff(tgtY,u.cy)*Math.min(1,dt*10);
       const flinch=battle?advL*0.05*Math.sin(tt*8+u.ph*2):0;             // дрожь проигрывающего меньшинства
       const doorLean=gh._dying?(1-fadeK)*0.18:0;                         // 🏰 вход: тающий наклоняется в проём двери
-      const pitch=ud.unitLocal?0:(-lean-hop*0.10*run-atk*0.55+flinch-doorLean); // KayKit-unit уже имеет локальную ось; pitch давал боковой завал
+      const pitch=ud.hasUnitModel?0:(-lean-hop*0.10*run-atk*0.55+flinch-doorLean); // KayKit-модель уже ориентирована — наклон заваливал юнитов в пути
       ghostUnitDummy.rotation.set(pitch, u.cy, 0);
       ghostUnitDummy.scale.set(sxz,sy,sxz); ghostUnitDummy.updateMatrix();
       if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
-      mesh.setMatrixAt(i,ghostUnitMatrix);
+      ud.putUnitMatrix(i,ghostUnitMatrix);
     }
     // ⚔ ПАВШИЕ: заваливаются на месте гибели, лежат и тают (слоты n..n+cN-1 того же InstancedMesh; кап ёмкости orbCap)
     let cN=0;
     if(ud.corpses&&ud.corpses.length){
       for(let j=ud.corpses.length-1;j>=0;j--){ const c2=ud.corpses[j]; c2.t+=dt; if(c2.t>0.95)ud.corpses.splice(j,1); }
-      cN=Math.min(ud.corpses.length,Math.max(0,(ud.orbCap||n)-n));
+      const ti=ud.tmInf||ud.tm[0];
+      cN=Math.min(ud.corpses.length,Math.max(0,(ti.cap||n)-(ti.n||n)));
       for(let j=0;j<cN;j++){ const c2=ud.corpses[j];
         // аккуратный «сплэт» вместо кувырка: короткий подскок → приплющивается к земле → лежит → тонет и тает
         const fall=Math.min(1,c2.t/0.25), sink=Math.max(0,(c2.t-0.55)/0.4);
@@ -773,10 +797,10 @@ function loop(now){
         ghostUnitDummy.scale.set(sc*splatXZ*k2, sc*splatY*k2, sc*splatXZ*k2);
         ghostUnitDummy.updateMatrix();
         if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
-        mesh.setMatrixAt(n+j,ghostUnitMatrix);
+        { const s=ud.corpseSlot(j); if(ti.mesh&&s<ti.cap)ti.mesh.setMatrixAt(s,ghostUnitMatrix); }
       }
     }
-    mesh.count=n+cN; mesh.instanceMatrix.needsUpdate=true;
+    ud.finalizeUnits(cN);
     // ⚔ искры/пыль в линии соприкосновения двух армий (кап по fx-пулу, редкая каденция)
     if(battle&&bt&&typeof spawnClashFX==='function'&&(typeof fx==='undefined'||fx.length<70)){
       ud._clashT=(ud._clashT||0)+dt;
@@ -795,34 +819,240 @@ function loop(now){
       }
     }
   }
+  // ── 🍄 ПОТОК (Mushroom Wars): юниты бегут живым ручьём по сплайну дороги — каждый со своей арк-позицией,
+  //    скоростным «дыханием», вилянием и высотой из профиля дороги (склоны рампой, мосты по полотну).
+  //    window.UNIT_STREAM=false → мгновенный ОТКАТ на старый строй-рендер (placeGhostSwarm остался нетронут).
+  //    БОЙ рисует ТОТ ЖЕ поток (без переключения рендера, как в классических RTS): толпа стоит на своих местах,
+  //    прижимается к линии контакта, передние делают выпады к врагу, павшие валятся на месте.
+  function placeGhostStream(gh,now){
+    if(window.UNIT_STREAM===false) return false;
+    const a=gh.edgeA,b=gh.edgeB;
+    if(a==null||b==null||typeof hexRoadSample!=='function'||typeof hexRoadLen!=='function') return false;
+    const ud=gh.group.userData; if(!ud.tm||!ud.putUnitMatrix) return false;
+    const len=hexRoadLen(a,b); if(!len) return false;
+    const n=ud.orbN, sc=ud.unitScale||1, tt=now/1000, p=gh.group.position;
+    const dt=Math.min(0.1,Math.max(0,(now-(ud._lt||now))/1000)); ud._lt=now;
+    const key=Math.min(a,b)+'_'+Math.max(a,b);
+    // Не рефайним дорогу из горячего цикла рендера: путь уже имеет precomputed samples.
+    let st=ud.st;
+    if(!st) st=ud.st={key,a,b,len,sHead:(gh.frac||0)*len,prev:null,v:0};
+    else if(st.key!==key){
+      st.prev=(a===st.b)?{a:st.a,b:st.b,len:st.len}:null;   // следующее ребро пути → хвост доезжает по прошлому; редирект → без хвостового ребра
+      st.key=key; st.a=a; st.b=b; st.len=len;
+    } else { st.a=a; st.b=b; st.len=len; }
+    // голова: в норме — точная арк-позиция сима (срезания невозможны); при роспуске — сама дошагивает до здания
+    const spd=((typeof LOCALSIM!=='undefined'&&LOCALSIM&&LOCALSIM.K&&LOCALSIM.K.SQUAD_SPEED!=null)?LOCALSIM.K.SQUAD_SPEED:0.8)*(typeof gameSpeed!=='undefined'?gameSpeed:1);
+    const target=gh._dying? st.sHead+spd*Math.min(0.05,dt) : (gh.frac||0)*len;
+    st.v=st.v+((target-st.sHead)/(dt||0.016)-st.v)*Math.min(1,dt*6);      // сглаженная скорость головы
+    st.sHead=target;
+    const run=Math.max(0,Math.min(1,Math.abs(st.v)/(spd*0.6||0.5)));
+    // ⚔ бой в ТОМ ЖЕ рендере: цель — ближайший дерущийся враг (battleTgt из mpTick)
+    const battle=gh.fighting?1:0, bt=battle?ud.battleTgt:null;
+    const cheer=Math.max(0,ud.cheerT||0); if(cheer>0)ud.cheerT=cheer-dt;   // 🎉 чир после победы
+    // след поддерживаем и в потоке → бой/откат/полевой режим подхватываются без телепорта хвоста
+    { const jump=ud._lastP?Math.hypot(p.x-ud._lastP[0],p.z-ud._lastP[1]):0; ud._lastP=[p.x,p.z];
+      let tr=ud.trail; if(!tr||jump>2){tr=ud.trail=[[p.x,p.z]]; ud.travelled=0;}
+      else { ud.travelled=(ud.travelled||0)+jump; const last=tr[tr.length-1]; if(Math.hypot(p.x-last[0],p.z-last[1])>0.1)tr.push([p.x,p.z]); }
+      while(tr.length>160)tr.shift(); }
+    // 👥 спокойный поток: стабильные дорожки без маршевого бокового "столкновения".
+    // Боевую толкучку добавляем отдельно только при fighting.
+    const LANES=3, laneSp=0.18, rowGap=sc*0.62;
+    // 🐎 конница крупнее пешки (конь ~0.45×0.17 при пеших интервалах 0.26×0.15) → её рядам и дорожкам
+    //    нужен свой шаг, иначе кони друг в друге. Оффсеты рядов накапливаем с учётом типа ряда
+    //    (типы в колонне непрерывны: cav→inf→arc, тип ряда = тип его первого юнита).
+    const CAV_ROW=1.85, CAV_LANE=2.0;
+    const rowsN=Math.ceil(n/LANES), rowOff=ud._rowOff||(ud._rowOff=[]);
+    { rowOff.length=rowsN; let accOff=0, prevCav=ud.bucketOf(0).t==='cav';
+      rowOff[0]=0;
+      for(let r=1;r<rowsN;r++){ const cav=ud.bucketOf(Math.min(n-1,r*LANES)).t==='cav';
+        accOff+=rowGap*((cav||prevCav)?CAV_ROW:1); rowOff[r]=accOff; prevCav=cav; } }
+    const smpAt=(s)=> s>=0 ? hexRoadSample(st.a,st.b,Math.min(1,s/st.len))
+                           : (st.prev?hexRoadSample(st.prev.a,st.prev.b,Math.max(0,(st.prev.len+s)/st.prev.len)):null);
+    const rowSmp=[], rowSmp2=[];
+    let tailS=1e9;
+    for(let row=0;row<rowsN;row++){
+      const wob=battle?(Math.sin(tt*0.9+row*0.73)*0.04+Math.sin(tt*0.37+row*1.17)*0.02)*sc:0;
+      const s=st.sHead-(row===0?0:rowOff[row]+wob);
+      if(s<tailS)tailS=s;
+      rowSmp[row]={s, smp:smpAt(s)};
+      rowSmp2[row]=smpAt(s+0.06);
+    }
+    for(let i=0;i<n;i++){
+      const u=ud.orbs[i];
+      if(u.gj==null){ u.gj=0.88+Math.random()*0.24; }                     // лёгкая рваность рядов
+      const row=(i/LANES)|0, lane=i%LANES;
+      const rowData=rowSmp[row], s=rowData?rowData.s:st.sHead;
+      let fadeK=1;
+      if(gh._dying){ const over=s-(st.len-0.3); if(over>0)fadeK=Math.max(0,1-over/0.45); }  // у здания-цели тает
+      if(gh._perish) fadeK*=Math.max(0,1-(now-gh._perish)/750);           // ⚔ погиб в бою → тает на месте
+      const smp=rowData&&rowData.smp;
+      if(!smp||(s<=0.001&&!st.prev)||fadeK<=0.02){                        // ещё в здании-источнике / уже втянулся
+        ghostUnitDummy.position.set(0,-999,0); ghostUnitDummy.scale.set(0,0,0); ghostUnitDummy.updateMatrix();
+        if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
+        ud.putUnitMatrix(i,ghostUnitMatrix); continue; }
+      const smp2=rowSmp2[row]||smp;                                      // fallback для старого sampler; новый уже отдаёт tangent
+      let txv=smp.tx||1,tzv=smp.tz||0; { const l0=Math.hypot(txv,tzv); if(l0>1e-4){txv/=l0;tzv/=l0;} else { const ddx=smp2.x-smp.x,ddz=smp2.z-smp.z,l=Math.hypot(ddx,ddz); if(l>1e-4){txv=ddx/l;tzv=ddz/l;} } }
+      const isCav=ud.bucketOf(i).t==='cav';
+      const laneMul=isCav?CAV_LANE:1, jitMul=battle?(isCav?0.4:1):0.12;    // 🐎 конные дорожки шире; в марше почти без бокового джиттера
+      const latW=(lane-(LANES-1)/2)*laneSp*laneMul+((u.lj||0)*0.18+Math.sin(tt*1.3*u.sp+u.ph*3.7)*0.012)*jitMul;  // своя дорожка + лёгкая живость
+      const wx=smp.x-tzv*latW, wz=smp.z+txv*latW, wy=smp.y+0.05;         // профиль = реальная поверхность полотна (рейкаст) + малый клиренс
+      // адаптивный снап: на НОРМАЛЬНОМ шаге сажаем СТРОГО на дорогу (не режем острый угол — лерп отставал и срезал внутрь);
+      // сглаживаем ТОЛЬКО телепорт-скачки (стык рёбер / редирект пути), где цель прыгает далеко.
+      const snapMax=Math.max(0.5, spd*dt*6);
+      if(u.ex==null || Math.hypot(wx-u.ex,wz-u.ez)<=snapMax){ u.ex=wx; u.ez=wz; u.ey=wy; }
+      else { const ke=Math.min(1,dt*10); u.ex+=(wx-u.ex)*ke; u.ez+=(wz-u.ez)*ke; u.ey+=(wy-u.ey)*ke; }
+      // ⚔ боевое поведение поверх позиции толпы (классическое RTS: линия контакта, выпады передних, толкучка)
+      let atk=0, offX=0, offZ=0, faceE=null;
+      if(bt){ const ex2=bt[0]-u.ex, ez2=bt[1]-u.ez, de=Math.hypot(ex2,ez2)||1e-6, dirx=ex2/de, dirz=ez2/de;
+        const eng=Math.max(0,1-de/2.4);                                   // ближе к врагу → сильнее вовлечён
+        if(ud.bucketOf(i).t==='arc'){
+          // 🏹 ЛУЧНИК: не лезет в ближний — стреляет с места (отдача назад + стрела из пула осадных)
+          if(eng>0.02){
+            faceE=-Math.atan2(dirz,dirx);
+            u.shotT=(u.shotT==null?Math.random()*1.4:u.shotT)+dt;
+            const period=1.15+(u.ph%1)*0.6;                               // свой каденс
+            if(u.shotT>=period){ u.shotT=0; u.recoilT=0.2;
+              if(typeof _spawnArrow==='function'){
+                const ty=(typeof getTerrainHeight==='function'?getTerrainHeight(bt[0],bt[1]):u.ey)+0.25;
+                _spawnArrow(u.ex, u.ey+sc*0.55, u.ez, bt[0]+(Math.random()-0.5)*0.9, ty, bt[1]+(Math.random()-0.5)*0.9);
+              }
+            }
+            if(u.recoilT>0){ u.recoilT-=dt; const r=Math.max(0,u.recoilT/0.2);
+              offX=-dirx*r*0.1; offZ=-dirz*r*0.1; }                       // отдача назад при выстреле
+          }
+        } else {
+          atk=eng>0.05?Math.pow(Math.max(0,Math.sin(tt*(5+u.sp*2.5)+u.ph*3.1)),4)*eng:0;   // острый удар (своя фаза)
+          const press=eng*0.13+atk*0.17;                                  // прижим к линии + рывок удара
+          offX=dirx*press; offZ=dirz*press;
+          if(eng>0.12)faceE=-Math.atan2(dirz,dirx);                       // передние разворачиваются к врагу
+        }
+      }
+      const jm=battle?2.8:0.35;                                           // в марше не болтаем строй, в сцепке толкучка заметнее
+      const jx2=Math.sin(tt*3.1+u.ph*1.7)*0.012*jm, jz2=Math.cos(tt*2.7+u.ph)*0.012*jm;
+      const phase=tt*(6+u.sp*3.2)+u.ph, hop=Math.abs(Math.sin(phase));
+      const joy=cheer?cheer*Math.abs(Math.sin(phase*1.8+u.ph*2))*0.08:0;  // 🎉 подпрыгивания после победы
+      const bob=hop*(0.045+run*0.11)+atk*0.05+joy, sqv=(hop-0.4)*(0.45+run*0.5);
+      const sy2=sc*(1+sqv*0.34)*fadeK, sxz=sc*(1-sqv*0.18)*fadeK;
+      const tgtY=(faceE!=null?faceE:-Math.atan2(tzv,txv))+(u.yaw||0)*0.35+(cheer?Math.sin(tt*5+u.ph*3)*0.25*cheer:0);
+      if(u.cy==null)u.cy=tgtY; else u.cy+=angDiff(tgtY,u.cy)*Math.min(1,dt*9);
+      const pitch=ud.hasUnitModel?0:(-run*0.26-hop*0.10*run-atk*0.55-(gh._dying?(1-fadeK)*0.18:0));   // модель не наклоняем (заваливались в пути)
+      // 💧 боец НЕ встаёт на открытую воду: если финальная XZ на воде, а ось дороги на суше —
+      //    поджимаем к оси, пока не суша (боевой веер/берег у развилок вылезал на реку). Мост не трогаем (ось=вода).
+      let fwx=u.ex+offX+jx2, fwz=u.ez+offZ+jz2;
+      if(typeof isWaterAt==='function' && isWaterAt(fwx,fwz) && !isWaterAt(smp.x,smp.z)){
+        let ok=false; for(let kk=0.7;kk>0;kk-=0.23){ const tx=smp.x+(fwx-smp.x)*kk, tz=smp.z+(fwz-smp.z)*kk; if(!isWaterAt(tx,tz)){ fwx=tx; fwz=tz; ok=true; break; } } if(!ok){ fwx=smp.x; fwz=smp.z; }
+      }
+      ghostUnitDummy.position.set(fwx-p.x, (u.ey-p.y)+bob-(1-fadeK)*sc*0.7, fwz-p.z);
+      ghostUnitDummy.rotation.set(pitch, u.cy, 0);
+      ghostUnitDummy.scale.set(sxz,sy2,sxz); ghostUnitDummy.updateMatrix();
+      if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
+      ud.putUnitMatrix(i,ghostUnitMatrix);
+    }
+    st.tailS=tailS;
+    // ⚔ искры/пыль в линии соприкосновения двух армий
+    if(battle&&bt&&typeof spawnClashFX==='function'&&(typeof fx==='undefined'||fx.length<70)){
+      ud._clashT=(ud._clashT||0)+dt;
+      if(ud._clashT>0.26+Math.random()*0.22){ ud._clashT=0;
+        const mx=p.x+(bt[0]-p.x)*0.5+(Math.random()-0.5)*0.5, mz=p.z+(bt[1]-p.z)*0.5+(Math.random()-0.5)*0.5;
+        spawnClashFX(mx,typeof getTerrainHeight==='function'?getTerrainHeight(mx,mz):p.y,mz);
+      }
+    }
+    // павшие после сцепки дотаивают тем же кодом слотов n.. (как в строе)
+    let cN=0;
+    if(ud.corpses&&ud.corpses.length){
+      for(let j=ud.corpses.length-1;j>=0;j--){ const c2=ud.corpses[j]; c2.t+=dt; if(c2.t>0.95)ud.corpses.splice(j,1); }
+      const ti=ud.tmInf||ud.tm[0];
+      cN=Math.min(ud.corpses.length,Math.max(0,(ti.cap||n)-(ti.n||n)));
+      for(let j=0;j<cN;j++){ const c2=ud.corpses[j];
+        const fall=Math.min(1,c2.t/0.25), sink=Math.max(0,(c2.t-0.55)/0.4);
+        const rx=(c2.wx!=null?c2.wx-p.x:0), rz=(c2.wz!=null?c2.wz-p.z:0);
+        const splatY=Math.max(0.2,1-fall*0.8), splatXZ=1+fall*0.2, k2=1-sink*0.6;
+        ghostUnitDummy.position.set(rx, Math.sin(fall*Math.PI)*0.05-sink*sc*0.35, rz);
+        ghostUnitDummy.rotation.set(-fall*0.22,c2.cy||0,0);
+        ghostUnitDummy.scale.set(sc*splatXZ*k2, sc*splatY*k2, sc*splatXZ*k2);
+        ghostUnitDummy.updateMatrix();
+        if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
+        { const s=ud.corpseSlot(j); if(ti.mesh&&s<ti.cap)ti.mesh.setMatrixAt(s,ghostUnitMatrix); }
+      }
+    }
+    ud.finalizeUnits(cN);
+    // 🚶 пыль марша под потоком
+    if(run>0.6&&!gh._dying&&typeof spawnMarchDust==='function'&&(typeof fx==='undefined'||fx.length<70)){
+      ud._dustT=(ud._dustT||0)+dt;
+      if(ud._dustT>0.45+Math.random()*0.4){ ud._dustT=0;
+        const si=st.sHead-Math.random()*Math.min(Math.ceil(n/LANES)*rowGap,st.sHead), sm=smpAt(si);
+        if(sm)spawnMarchDust(sm.x+(Math.random()-0.5)*0.25, sm.y, sm.z+(Math.random()-0.5)*0.25); }
+    }
+    return true;
+  }
+  // диспетчер: поток по дороге, иначе (бой/поле/откат UNIT_STREAM=false) — старый строй
+  function placeGhostUnits(gh,now){ if(placeGhostStream(gh,now))return; placeGhostSwarm(gh,now); }
+  // 👥 квоты типов юнитов в рое из состава отряда (comp); остаток — в пехоту
+  function typeQuotas(gh,n){
+    const c=gh.comp&&(gh.comp.inf+gh.comp.arc+gh.comp.cav)>0?gh.comp:{inf:n,arc:0,cav:0};
+    const tot=c.inf+c.arc+c.cav;
+    let nArc=Math.round(n*c.arc/tot), nCav=Math.round(n*c.cav/tot);
+    if(nArc+nCav>n){ nCav=Math.max(0,n-nArc); }
+    return {inf:n-nArc-nCav, arc:nArc, cav:nCav};
+  }
   function ghostSwarm(gh,n){
     const ud=gh.group.userData;
-    const src=typeof unitBatchSource==='function'?unitBatchSource(gh.owner):null;
-    const srcKey=src?`model:${src.key}`:'fallback';
-    if(n===ud.orbN&&ud.unitSourceKey===srcKey)return;
+    const base=typeof unitBatchSource==='function'?unitBatchSource(gh.owner):null;
+    const srcKey=base?`model:${base.key}`:'fallback';
+    const q=typeQuotas(gh,n);
+    const qKey=q.inf+','+q.arc+','+q.cav;
+    if(n===ud.orbN&&ud.unitSourceKey===srcKey&&ud._qKey===qKey)return;
     // ⚔ убыль в бою → ПАВШИЕ: снимаем текущие матрицы исчезающих бойцов, они лягут трупами (анимация в placeGhostSwarm).
-    //    Позиция смерти — в МИРОВЫХ координатах: труп остаётся лежать на месте, даже когда отряд уже ушёл дальше.
-    if(gh.fighting&&ud.orbMesh&&ud.unitSourceKey===srcKey&&n<ud.orbN){
+    if(gh.fighting&&ud.tm&&ud.unitSourceKey===srcKey&&n<ud.orbN){
       ud.corpses=ud.corpses||[];
       const gp=gh.group.position;
       for(let i=n;i<ud.orbN&&ud.corpses.length<12;i++){
-        ud.orbMesh.getMatrixAt(i,_cm); _cm.decompose(_cv,_cq,_cs);
+        if(!ud.getUnitMatrix||!ud.getUnitMatrix(i,_cm))continue;
+        _cm.decompose(_cv,_cq,_cs);
         if(_cs.x<1e-3)continue;                                                 // скрытый (ещё в здании) — без трупа
-        ud.corpses.push({wx:_cv.x+gp.x,wz:_cv.z+gp.z,                           // мировая точка смерти (труп прибит к земле)
-          cy:(ud.orbs[i]&&ud.orbs[i].cy)||0,t:0});
+        ud.corpses.push({wx:_cv.x+gp.x,wz:_cv.z+gp.z, cy:(ud.orbs[i]&&ud.orbs[i].cy)||0,t:0});
       }
     }
-    // (пере)создаём инстанс-меш только при смене модели ИЛИ нехватке ёмкости (1:1 → армия может расти)
-    if(!ud.orbMesh||ud.unitSourceKey!==srcKey||(ud.orbCap||0)<n){
-      const modelChanged=ud.unitSourceKey!==srcKey;
-      if(ud.orbMesh)gh.group.remove(ud.orbMesh);
-      ud.unitSourceKey=srcKey; ud.unitLocal=src?src.local:null;
-      ud.orbCap=Math.max(18,Math.ceil(n*1.3));                                  // запас, чтобы не пересоздавать на каждый +1
-      ud.orbMesh=new T3.InstancedMesh(src?src.geo:UNIT_GEO,src?src.mat:gh.mat,ud.orbCap);
-      ud.orbMesh.castShadow=false; ud.orbMesh.receiveShadow=true; ud.orbMesh.userData.perfGroup='units';
-      gh.group.add(ud.orbMesh);
-      if(modelChanged){ud.orbs.length=0;ud.corpses=null;}                       // смена модели → пересобрать рой, трупы старой геометрии убрать
+    // 👥 три бакета по типам (inf/arc/cav): свой InstancedMesh на тип (merged-модели из unitTypedSource).
+    //    Пересоздаём бакет только при смене модели или нехватке ёмкости; смещения (off) пересчитываем всегда.
+    const modelChanged=ud.unitSourceKey!==srcKey;
+    if(modelChanged&&ud.tm){ for(const b of ud.tm){if(b.mesh)gh.group.remove(b.mesh);if(b.acc)gh.group.remove(b.acc);} ud.tm=null; ud.orbs.length=0; ud.corpses=null; }
+    ud.unitSourceKey=srcKey; ud.unitLocal=null;                                 // typed-геометрии уже нормализованы (local впечатан)
+    ud.hasUnitModel=!!base;                                                     // модель уже ориентирована — без наклона в беге (заваливались в пути)
+    // 🐎→🪖→🏹 порядок марша: конница ВПЕРЕДИ колонны, пехота в середине, лучники замыкают
+    //    (индексы бакетов идут от головы: rank=(i/W)|0, off накапливается по порядку tm)
+    if(!ud.tm)ud.tm=[{t:'cav',mesh:null,cap:0,off:0,n:0},{t:'inf',mesh:null,cap:0,off:0,n:0},{t:'arc',mesh:null,cap:0,off:0,n:0}];
+    ud.tmInf=ud.tm.find(b=>b.t==='inf');                                        // трупы живут в пехотном бакете (см. corpseSlot)
+    let off=0;
+    for(const b of ud.tm){
+      b.n=q[b.t]; b.off=off; off+=b.n;
+      const extra=b.t==='inf'?14:0;                                             // запас на трупы (бакет пехоты)
+      if(b.n>0&&(!b.mesh||b.cap<b.n+extra)){
+        if(b.mesh)gh.group.remove(b.mesh);
+        if(b.acc){gh.group.remove(b.acc);b.acc=null;}
+        const src=typeof unitTypedSource==='function'?unitTypedSource(gh.owner,b.t):null;
+        b.cap=Math.max(18,Math.ceil((b.n+extra)*1.3));
+        b.mesh=new T3.InstancedMesh(src?src.geo:UNIT_GEO,src?src.mat:gh.mat,b.cap);
+        b.mesh.count=0; b.mesh.castShadow=false; b.mesh.receiveShadow=true; b.mesh.userData.perfGroup='units';
+        gh.group.add(b.mesh);
+        if(src&&src.accGeo){                                                    // 👥 аксессуар (лук/конь): отдельный меш, те же матрицы
+          b.acc=new T3.InstancedMesh(src.accGeo,src.accMat,b.cap);
+          b.acc.count=0; b.acc.castShadow=false; b.acc.receiveShadow=true; b.acc.userData.perfGroup='units';
+          gh.group.add(b.acc);
+        }
+      }
     }
+    ud._qKey=qKey;
+    // helpers: глобальный индекс юнита → бакет по типу
+    ud.bucketOf=(i)=>{ for(const b of ud.tm){ if(i<b.off+b.n)return b; } return ud.tm[0]; };
+    ud.putUnitMatrix=(i,m4)=>{ const b=ud.bucketOf(i); const j=i-b.off;
+      if(b.mesh&&j<b.cap){ b.mesh.setMatrixAt(j,m4); if(b.acc)b.acc.setMatrixAt(j,m4); } };
+    ud.getUnitMatrix=(i,out)=>{ const b=ud.bucketOf(i); if(!b.mesh||i-b.off>=b.cap)return false; b.mesh.getMatrixAt(i-b.off,out); return true; };
+    ud.finalizeUnits=(cN)=>{ for(const b of ud.tm){ if(!b.mesh)continue;
+      b.mesh.count=Math.min(b.cap,b.n+(b.t==='inf'?(cN||0):0));
+      b.mesh.instanceMatrix.needsUpdate=true;
+      if(b.acc){ b.acc.count=Math.min(b.cap,b.n); b.acc.instanceMatrix.needsUpdate=true; } } };
+    ud.corpseSlot=(j)=>(ud.tmInf||ud.tm[0]).n+j;                                // трупы — в хвосте бакета ПЕХОТЫ (не первого: порядок tm теперь cav→inf→arc)
     // СТАБИЛЬНЫЙ рой: позиция по индексу (золотая спираль, не зависит от n) → при убыли армии
     // лишние фигурки просто прячутся с краю, остальные не «перетасовываются».
     while(ud.orbs.length<n){
@@ -832,9 +1062,8 @@ function loop(now){
     // ⚔ В БОЮ ширина ЗАМОРОЖЕНА: армия тает, но строй не перетасовывается (ряды просто исчезают с хвоста);
     //    после боя (fighting=false) выжившие перестраиваются под новую численность.
     if(!gh.fighting || ud.colW==null) ud.colW = n<=5?1 : n<=20?2 : n<=40?3 : 4;
-    ud.unitScale=(src?src.scale:1);   // 🔒 размер юнита ФИКСИРОВАН (не зависит от числа) — большие армии просто плотнее/шире по шеренге, а не мельче
-    ud.orbMesh.count=n;
-    placeGhostSwarm(gh,performance.now());
+    ud.unitScale=(base?base.scale:1);   // 🔒 размер юнита ФИКСИРОВАН (не зависит от числа) — большие армии просто плотнее/шире по шеренге, а не мельче
+    placeGhostUnits(gh,performance.now());
   }
   function reconcile(list){
     const seen=new Set();
@@ -843,17 +1072,28 @@ function loop(now){
       if(!gh||gh.kind!==kind){ if(gh)killGhost(gh); gh=ghostMesh(kind,d[2]); MP.ghosts.set(id,gh); gh.group.position.set(d[3],d[4],d[5]); }
       gh._mpid=id; gh.target.set(d[3],d[4],d[5]);
       if(kind===0&&gh.count>d[6])gh._dmgT=performance.now();               // 🔴 потери → красная вспышка метки
-      gh.count=d[6]; gh.fighting=!!d[7]; if(kind===0)ghostSwarm(gh,unitsForCount(d[6])); seen.add(id);
+      gh.count=d[6]; gh.fighting=!!d[7];
+      gh.edgeA=d[8]!=null?d[8]:null; gh.edgeB=d[9]!=null?d[9]:null; gh.frac=d[10]||0;   // текущее ребро пути → поток юнитов (UNIT_STREAM)
+      gh.comp=d[11]!=null?{inf:d[11],arc:d[12]||0,cav:d[13]||0}:null;                    // 👥 состав отряда (для рендера/лейбла)
+      if(kind===0)ghostSwarm(gh,unitsForCount(d[6])); seen.add(id);
     }
     for(const [id,gh] of MP.ghosts) if(!seen.has(id)){
       const ud=gh.group.userData;
-      if(gh.kind===0 && ud.orbN>0 && !gh._dying){                       // отряд прибыл (в свой ИЛИ вражеский город) → заходит в здание, дальше бой рисует сам город
-        gh._dying=performance.now(); const p=gh.group.position; ud._dieAt=[p.x,p.z];
-        if(typeof cities!=='undefined'){ let bd=4,best=null; for(const c of cities){ if(!c)continue; const cx=c._visualGX==null?c.gx:c._visualGX, cz=c._visualGZ==null?c.gz:c._visualGZ; const d2=(cx-p.x)*(cx-p.x)+(cz-p.z)*(cz-p.z); if(d2<bd){bd=d2;best=[cx,cz];} } if(best)ud._dieAt=best; }  // цель входа = здание
-        const f=ud.fwd||[1,0];
-        ud.dieDir=[f[0],f[1]];                                          // курс входа фиксируем → колонна заходит СТРОГО прямо в центр здания
-        gh.target.set(p.x,p.y,p.z);
-        if(gh.lab)gh.lab.style.display='none';
+      if(gh.kind===0 && ud.orbN>0 && !gh._dying && !gh._perish){
+        // где исчез отряд? Рядом с городом → ПРИБЫТИЕ (втекает в здание). Иначе (бой/башня/урон в пути) → ПОГИБ,
+        // тает на месте — раньше убитый в пути отряд «прибывал», и его последний юнит бежал через полкарты к городу.
+        const p=gh.group.position; let best=null;
+        if(typeof cities!=='undefined'){ let bd=4; for(const c of cities){ if(!c)continue; const cx=c._visualGX==null?c.gx:c._visualGX, cz=c._visualGZ==null?c.gz:c._visualGZ; const d2=(cx-p.x)*(cx-p.x)+(cz-p.z)*(cz-p.z); if(d2<bd){bd=d2;best=[cx,cz];} } }
+        if(gh.fighting || !best || (gh.count||0)<1){                     // бой / вдали от города / пустой отряд → гаснет на месте
+          gh._perish=performance.now();
+          if(gh.lab)gh.lab.style.display='none';
+        } else {                                                          // прибытие: заходит в здание
+          gh._dying=performance.now(); ud._dieAt=best;
+          const f=ud.fwd||[1,0];
+          ud.dieDir=[f[0],f[1]];                                          // курс входа фиксируем → колонна заходит СТРОГО прямо в центр здания
+          gh.target.set(p.x,p.y,p.z);
+          if(gh.lab)gh.lab.style.display='none';
+        }
       } else if(gh.kind!==0){ killGhost(gh); MP.ghosts.delete(id); }      // корабли/самолёты — как раньше, мгновенно
     }
   }
@@ -866,7 +1106,15 @@ function loop(now){
     if(MP._lastFid!==PLAYER){ MP._lastFid=PLAYER; MP.send({t:'joinInfo',fid:PLAYER,country:PLAYER_COUNTRY}); setPill(); } // надёжно сообщаем хосту свою фракцию
     for(const [id,gh] of MP.ghosts){
       const p=gh.group.position,t=gh.target,k=Math.min(1,dt*12),dx=t.x-p.x,dz=t.z-p.z;
+      if(gh._perish){                                                     // ⚔ погиб в бою: гаснет на месте и снимается
+        if(now-gh._perish>750){ killGhost(gh); MP.ghosts.delete(id); continue; }
+        if(gh.kind===0&&gh.group.userData.orbs)placeGhostUnits(gh,now);
+        continue; }
       if(gh._dying){ const ud=gh.group.userData, f=ud.dieDir||ud.fwd||[1,0];  // 🏰 роспуск: ряды по очереди заходят СТРОГО прямо в центр здания (по одному ряду), независимо от gameSpeed
+        if(window.UNIT_STREAM!==false && gh.edgeA!=null && ud.st){          // 🍄 поток: юниты сами дотекают по дороге до здания и тают у двери
+          if((ud.st.tailS!=null && ud.st.tailS>ud.st.len+0.25) || now-gh._dying>60000){ killGhost(gh); MP.ghosts.delete(id); continue; }
+          if(gh.kind===0&&ud.orbs)placeGhostUnits(gh,now);
+          continue; }
         const rankSp=(ud.unitScale||1)*0.95, colLen=Math.ceil((ud.orbN||1)/(ud.colW||3))*rankSp;
         const adv=ud._dieAt?Math.hypot(p.x-ud._dieAt[0], p.z-ud._dieAt[1]):0;
         // ⚠ гасим ТОЛЬКО когда ПОСЛЕДНИЙ ряд полностью растаял (depth ≥ 2.2·rankSp), иначе хвост исчезал рывком на ~23% масштабе → «засасывало в конце»
@@ -897,7 +1145,7 @@ function loop(now){
         if(gh._wasF&&!gh.fighting&&!gh._dying&&(gh.count||0)>0)ud2.cheerT=0.9;
         gh._wasF=gh.fighting;
       }
-      if(gh.kind===0&&gh.group.userData.orbs)placeGhostSwarm(gh,now);   // 🪖 покачивание роя отряда (как солошный _placeOrbs)
+      if(gh.kind===0&&gh.group.userData.orbs)placeGhostUnits(gh,now);   // 🪖 юниты отряда: 🍄 поток по дороге / строй (бой, поле, откат UNIT_STREAM=false)
       if(gh.lab && !gh._dying){ const v=new T3.Vector3(p.x,p.y+0.4,p.z).project(camera);
         gh.lab.style.display=v.z<1?'block':'none';
         gh.lab.style.left=(v.x*0.5+0.5)*innerWidth+'px'; gh.lab.style.top=(-v.y*0.5+0.5)*innerHeight+'px';
@@ -918,11 +1166,12 @@ function loop(now){
     else if(m.cmd==='upg'){ if(c&&c.owner===fid&&!c.occ){ const tier=c.branchTier(m.track); const cost=upgradeCost(tier); if(tier<MAX_TIER&&gold[fid]>=cost){gold[fid]-=cost;c[m.track+'Tier']=tier+1;c.syncLegacyTier(m.track);c.buildMeshes();markRegions();} } }
     else if(m.cmd==='war'){ if(fid!==m.tg&&!atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_WAR){ politPts[fid]-=POLIT_WAR; setWar(fid,m.tg); try{dragAlliesIntoWar(fid,m.tg);}catch(e){} } }
     else if(m.cmd==='ally'){ if(fid!==m.tg&&!atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_ALLY){ politPts[fid]-=POLIT_ALLY; setRelation(fid,m.tg,'ally'); } }
-    else if(m.cmd==='peace'){ if(atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_PEACE){ politPts[fid]-=POLIT_PEACE; resolveOccupation(fid,m.tg,'white'); setRelation(fid,m.tg,'neutral'); if(typeof setTruce==='function')setTruce(fid,m.tg); } }
-    else if(m.cmd==='bship'){ const y=ci(m.c); if(y&&y.owner===fid&&y.isShipyard)buildShip(y,fid); }
-    else if(m.cmd==='bplane'){ const y=ci(m.c); if(y&&y.owner===fid&&y.isAirport)buildPlane(y,fid); }
+    else if(m.cmd==='peace'){ if(atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_PEACE){ politPts[fid]-=POLIT_PEACE; resolveOccupation(fid,m.tg,m.land?'claimA':'white'); setRelation(fid,m.tg,'neutral'); if(typeof setTruce==='function')setTruce(fid,m.tg); } }
+    else if(m.cmd==='bship'){ const y=ci(m.c); if(y&&y.owner===fid&&(y.isShipyard||y.hasShipyard))buildShip(y,fid); }
+    else if(m.cmd==='bplane'){ const y=ci(m.c); if(y&&y.owner===fid&&(y.isAirport||y.hasAirport))buildPlane(y,fid); }
     else if(m.cmd==='yard'){ const c=ci(m.c); if(c&&c.owner===fid)buildYard(c,m.kind,fid); }
     else if(m.cmd==='shipmove'){ if(Array.isArray(m.ids))for(const s of ships)if(s._mpid!=null&&m.ids.includes(s._mpid)&&s.owner===fid)s.setTarget(m.x,m.z); }
+    else if(m.cmd==='planemove'){ if(Array.isArray(m.ids))for(const p of planes)if(p._mpid!=null&&m.ids.includes(p._mpid)&&p.owner===fid&&p.setTarget)p.setTarget(m.x,m.z); }
     else if(m.cmd==='airorder'){ if(m.recall){ airOrder[fid]=null; } else { const from=ci(m.fromIdx), to=m.cityIdx>=0?ci(m.cityIdx):null; if(from&&from.owner===fid)setAirOrder(from,to,m.x,m.z,fid); } }
     else if(m.cmd==='break'){ if(allied(fid,m.tg)&&(politPts[fid]||0)>=POLIT_BREAK){ politPts[fid]-=POLIT_BREAK; setRelation(fid,m.tg,'neutral'); } }
     else if(m.cmd==='sup'){ const amt=Math.min(100,gold[fid]|0); if(amt>=20){gold[fid]-=amt;gold[m.tg]=(gold[m.tg]||0)+amt;} }

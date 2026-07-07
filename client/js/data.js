@@ -105,13 +105,21 @@ let peaceCD={};    // "a_b" → игровое время, когда можно
 function setPeaceCD(a,b){peaceCD[relKey(a,b)]=gameTime+PEACE_CD;}
 function peaceCDLeft(a,b){return Math.max(0,(peaceCD[relKey(a,b)]||0)-gameTime);}
 let gameTime=0;   // накопленное игровое время (с учётом паузы/скорости)
+let playerStartedWarUntil={}; // fid → до какого времени не считать войну входящим объявлением
 // WAR_PREP — из _rules.gen.js (server/sim/constants.js); секунд мобилизации перед атакой
 const relKey=(a,b)=>a<b?a+'_'+b:b+'_'+a;
 function relation(a,b){return a===b?'self':(relations[relKey(a,b)]||'neutral');}
 const atWar =(a,b)=>relation(a,b)==='war';
 const allied=(a,b)=>relation(a,b)==='ally';
+function markPlayerStartedWar(fid){playerStartedWarUntil[fid]=gameTime+Math.max(PEACE_CD||18,WAR_PREP||0,8);}
+function playerStartedWarRecently(fid){return (playerStartedWarUntil[fid]||0)>gameTime;}
 function setRelation(a,b,r){const k=relKey(a,b);if(r==='neutral'){delete relations[k];delete warSince[k];}else relations[k]=r;}
-function setWar(a,b){setRelation(a,b,'war');warSince[relKey(a,b)]=gameTime;} // война + старт мобилизации
+function setWar(a,b){
+  const was=atWar(a,b);
+  setRelation(a,b,'war');
+  warSince[relKey(a,b)]=gameTime; // война + старт мобилизации
+  if(!was&&b===PLAYER&&a!==PLAYER&&!playerStartedWarRecently(a)&&typeof notifyWarDeclared==='function')notifyWarDeclared(a);
+}
 function warCountdown(a,b){return Math.max(0,WAR_PREP-(gameTime-(warSince[relKey(a,b)]||0)));}
 const warReady=(a,b)=>atWar(a,b)&&warCountdown(a,b)<=0; // война идёт И мобилизация прошла
 // можно ли владельцу o пройти/остаться на узле фракции no (своя/союзная — да; война — стоп; нейтрал — нет)
@@ -224,7 +232,7 @@ const CITY_LIST = [
   ["Неаполь",14.75,41.0313,2,N,"Италия"],
   ["Турин",7.75,45.1094,2,N,"Италия"],
   ["Флоренция",11.5,43.5625,2,N,"Италия"],
-  ["Палермо",13.5,37.7969,2,N,"Италия"],
+  ["Палермо",12.9933,37.8184,2,N,"Италия"],
   ["Берлин",13.25,52.5625,3,N,"Германия"],
   ["Мюнхен",10.25,48.9063,2,N,"Германия"],
   ["Гамбург",10.75,53.4063,2,N,"Германия"],
@@ -325,7 +333,7 @@ const CITY_LIST = [
   ["Тбилиси",44.75,41.7344,3,N,"Грузия"],
   ["Батуми",42,42.2969,2,N,"Грузия"],
   ["Кутаиси",43.75,42.2969,1,N,"Грузия"],
-  ["Ереван",44.5,40.1875,3,N,"Армения"],
+  ["Ереван",44.9167,40.1633,3,N,"Армения"],
   ["Гюмри",43.75,40.75,1,N,"Армения"],
   ["Баку",49,40.1875,3,N,"Азербайджан"],
   ["Гянджа",46.25,40.75,2,N,"Азербайджан"],
@@ -348,7 +356,7 @@ const CITY_LIST = [
   ["Каглиари",9,39.4844,1,N,"Италия"],
   ["Сассари",9.25,40.6094,1,N,"Италия"],
   ["Ротердам",5.25,52.7031,1,N,"Нидерланды"],
-  ["Брюсель",4.75,50.4531,1,N,"Бельгия"],
+  ["Брюсель",4.6567,50.3957,1,N,"Бельгия"],
   ["Лихтенштайн",10.5,47.2188,1,N,"Австро-Венгерская империя"],
   ["Зальцбург",12,48.2031,1,N,"Австро-Венгерская империя"],
   ["Линц",14.25,48.0625,1,N,"Австро-Венгерская империя"],

@@ -125,11 +125,8 @@ for (let u = 0; u < N; u++) {
 }
 
 const walkToAnchor = i => { const out = []; for (let k = i; k !== -1; k = parent[k]) out.push(k); return out; }; // клетка → якорь
-const dropCollinear = pts => pts.filter((p, i) => {
-  if (i === 0 || i === pts.length - 1) return true;
-  const a = pts[i - 1], b = pts[i + 1];
-  return Math.abs((p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])) > 1e-6;
-});
+// ⚠ коллинеарные центры НЕ выбрасываем: клиентское сглаживание пути (hex-world smoothRoad) строит «середины рёбер»
+//   между СОСЕДНИМИ вершинами — вершины обязаны быть центрами клеток, иначе радиус сглаживания раздувается до полдлины сегмента.
 
 const roads = [];
 for (const e of cand.values()) {
@@ -142,7 +139,7 @@ for (const e of cand.values()) {
   const first = pts[0], last = pts[pts.length - 1];
   if (Math.hypot(ca.wx - first[0], ca.wz - first[1]) > 0.01) pts.unshift([ca.wx, ca.wz]);
   if (Math.hypot(cb.wx - last[0], cb.wz - last[1]) > 0.01) pts.push([cb.wx, cb.wz]);
-  pts = dropCollinear(pts).map(p => [r3(p[0]), r3(p[1])]);
+  pts = pts.map(p => [r3(p[0]), r3(p[1])]);
   if (pts.length < 2) continue;
   roads.push([e.a, e.b, pts]);
 }

@@ -136,6 +136,7 @@
       <div class="techTitle">
         <h2>Исследования</h2>
       </div>
+      <button id="techCheatAll" title="Разблокировать все исследования">Чит: всё</button>
       <div class="techGoldCard"><span class="coin">◉</span><b id="techGold">0</b><span>зол.</span></div>
     </div>
     <div id="techGrid"></div>
@@ -171,9 +172,9 @@
     <div id="peaceName">🕊 Мир</div>
     <div id="peaceInfo"></div>
     <div class="pterm">
-      <span class="ic">🌍</span><span class="nm">Занять земли</span>
+      <span class="ic">🌍</span><span class="nm">Аннексировать захваченное</span>
       <span class="v" id="ptLandV"></span>
-      <button class="tgl" id="ptLandBtn" data-r="land">✓</button>
+      <button class="tgl" id="ptLandBtn" data-r="land"></button>
     </div>
     <div class="pterm">
       <span class="ic">💰</span><span class="nm">Контрибуция</span>
@@ -205,6 +206,17 @@
     <div class="row2">
       <button id="peaceOfferYes" class="dbtn ally">Принять</button>
       <button id="peaceOfferNo" class="dbtn war">Отклонить</button>
+    </div>
+  </div>
+</div>
+
+<div id="peaceResult">
+  <div id="peaceResultCard" class="gpanel">
+    <div class="gstars">★ ★ ★</div>
+    <div id="peaceResultTitle">🕊 Мир</div>
+    <div id="peaceResultBody"></div>
+    <div class="row2">
+      <button id="peaceResultOk" class="dbtn peace">Понятно</button>
     </div>
   </div>
 </div>
@@ -243,7 +255,7 @@
     'js/solo-sim.js',        //   projectLocalSim(): Sim → guest-рендер (Фаза 2 проектор)
     'js/data.js', 'js/world.js', 'js/heroes.js', 'js/decor.js', 'js/roads.js',
     'js/city.js', 'js/units.js', 'js/logic.js', 'js/ui.js', 'js/input.js',
-    'js/hud.js', 'js/loop.js',
+    'js/hud.js', 'js/build.js', 'js/loop.js',
     'game.net.js',           // мост Colyseus — последним (использует глобали игры)
   ];
   try {

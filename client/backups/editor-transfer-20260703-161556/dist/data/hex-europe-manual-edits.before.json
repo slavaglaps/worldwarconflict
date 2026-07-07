@@ -1,0 +1,357 @@
+{
+  "version": 1,
+  "updatedAt": "2026-07-02T19:33:16.677Z",
+  "edits": [
+    {
+      "q": 42,
+      "r": 114,
+      "asset": "roadA",
+      "rot": 240,
+      "height": 0.75,
+      "country": "Франция",
+      "biome": "summer",
+      "col": 14221176
+    },
+    {
+      "q": 43,
+      "r": 113,
+      "asset": "roadB",
+      "rot": 0,
+      "height": 0,
+      "country": "Франция",
+      "biome": "summer",
+      "col": 14221176
+    },
+    {
+      "q": 43,
+      "r": 114,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Франция",
+      "biome": "summer",
+      "col": 14221176
+    },
+    {
+      "q": 39,
+      "r": 114,
+      "asset": "roadA",
+      "rot": 0,
+      "height": 0.75,
+      "country": "Франция",
+      "biome": "summer",
+      "col": 14221176
+    },
+    {
+      "q": 56,
+      "r": 109,
+      "asset": "roadF",
+      "rot": 300,
+      "height": 0,
+      "country": "Австро-Венгерская империя",
+      "biome": "alpineStone",
+      "col": 11123145
+    },
+    {
+      "q": 96,
+      "r": 151,
+      "asset": "roadB",
+      "rot": 240,
+      "height": 0,
+      "country": "Турция",
+      "biome": "anatolia",
+      "col": 14068328
+    },
+    {
+      "q": 96,
+      "r": 159,
+      "asset": "roadA",
+      "rot": 300,
+      "height": 0,
+      "country": "Турция",
+      "biome": "anatolia",
+      "col": 14068328
+    },
+    {
+      "q": 97,
+      "r": 160,
+      "asset": "roadA",
+      "rot": 300,
+      "height": 0,
+      "country": "Турция",
+      "biome": "anatolia",
+      "col": 14068328
+    },
+    {
+      "q": 100,
+      "r": 161,
+      "asset": "roadA",
+      "rot": 180,
+      "height": 0,
+      "country": "Турция",
+      "biome": "anatolia",
+      "col": 14068328
+    },
+    {
+      "q": 101,
+      "r": 161,
+      "asset": "roadA",
+      "rot": 180,
+      "height": 0,
+      "country": "Турция",
+      "biome": "anatolia",
+      "col": 14068328
+    },
+    {
+      "q": 103,
+      "r": 161,
+      "asset": "roadA",
+      "rot": 180,
+      "height": 0,
+      "country": "Турция",
+      "biome": "anatolia",
+      "col": 14068328
+    },
+    {
+      "q": 104,
+      "r": 161,
+      "asset": "roadA",
+      "rot": 180,
+      "height": 0,
+      "country": "Турция",
+      "biome": "anatolia",
+      "col": 14068328
+    },
+    {
+      "q": 105,
+      "r": 161,
+      "asset": "roadB",
+      "rot": 0,
+      "height": 0,
+      "country": "Турция",
+      "biome": "anatolia",
+      "col": 14068328
+    },
+    {
+      "q": 113,
+      "r": 160,
+      "asset": "roadB",
+      "rot": 120,
+      "height": 0,
+      "country": "Турция",
+      "biome": "anatolia",
+      "col": 14068328
+    },
+    {
+      "q": 113,
+      "r": 161,
+      "asset": "roadA",
+      "rot": 120,
+      "height": 0,
+      "country": "Турция",
+      "biome": "anatolia",
+      "col": 14068328
+    },
+    {
+      "q": 110,
+      "r": 122,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 110,
+      "r": 121,
+      "asset": "roadA",
+      "rot": 300,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 111,
+      "r": 121,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 112,
+      "r": 122,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 111,
+      "r": 122,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 110,
+      "r": 123,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 111,
+      "r": 123,
+      "asset": "roadA",
+      "rot": 300,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 112,
+      "r": 124,
+      "asset": "roadD",
+      "rot": 60,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 111,
+      "r": 125,
+      "asset": "roadA",
+      "rot": 240,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 111,
+      "r": 126,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 110,
+      "r": 127,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 110,
+      "r": 126,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 110,
+      "r": 125,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 113,
+      "r": 124,
+      "asset": "roadA",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 114,
+      "r": 124,
+      "asset": "roadA",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 115,
+      "r": 124,
+      "asset": "roadA",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 116,
+      "r": 124,
+      "asset": "roadA",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 118,
+      "r": 124,
+      "asset": "roadA",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 124,
+      "r": 127,
+      "asset": "roadA",
+      "rot": 60,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    },
+    {
+      "q": 122,
+      "r": 124,
+      "asset": "roadB",
+      "rot": 0,
+      "height": 0,
+      "country": "Россия",
+      "biome": "volcanic",
+      "col": 4078135
+    }
+  ],
+  "savedAt": "2026-07-02T19:33:19.496Z"
+}

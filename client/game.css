@@ -124,6 +124,10 @@
   .techGoldCard{position:absolute;right:88px;top:17px;height:40px;display:flex;align-items:center;gap:8px;padding:0 18px;white-space:nowrap;
     color:#d9c69f;border:1px solid rgba(204,176,126,.48);border-radius:3px;background:rgba(11,16,18,.62);
     font-family:Georgia,"Times New Roman",serif;font-size:18px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
+  #techCheatAll{position:absolute;left:88px;top:17px;height:40px;padding:0 16px;border:1px solid rgba(204,176,126,.46);border-radius:3px;
+    background:linear-gradient(180deg,rgba(69,44,26,.82),rgba(24,17,13,.9));color:#f1d29a;cursor:pointer;
+    font-family:Georgia,"Times New Roman",serif;font-size:15px;font-weight:700;letter-spacing:.2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
+  #techCheatAll:hover{border-color:rgba(242,203,130,.82);color:#ffe1a8;}
   .techGoldCard .coin{color:#d7a94d;font-size:14px;text-shadow:0 0 8px rgba(215,169,77,.42);}
   .techGoldCard b{color:#f3c65e;font-size:20px;}
   #techCard .sub{display:inline-flex;align-items:center;justify-content:center;min-width:250px;height:38px;margin:12px auto 0;padding:0 42px;
@@ -174,6 +178,7 @@
     #techHeader:before,#techHeader:after{display:none;}
     #techCard h2{font-size:28px;}
     .techGoldCard{right:66px;top:18px;height:34px;padding:0 9px;font-size:12px;gap:5px;}
+    #techCheatAll{left:18px;top:18px;height:34px;padding:0 9px;font-size:12px;}
     .techGoldCard b{font-size:14px;}
     .techGoldCard .coin{font-size:11px;}
     #techCard .sub{height:32px;min-width:190px;font-size:13px;margin-top:8px;}
@@ -199,8 +204,11 @@
   #diploRel .you{font-weight:800;}
   #diploBtns{display:flex;flex-direction:column;gap:7px;}
   .dbtn{border:1px solid rgba(0,0,0,.28);border-radius:9px;padding:12px 16px;font-weight:800;font-size:13px;letter-spacing:.4px;
-    text-transform:uppercase;cursor:pointer;color:#06121e;position:relative;transition:filter .1s;}
+    text-transform:uppercase;cursor:pointer;color:#06121e;position:relative;transition:filter .1s;user-select:none;touch-action:manipulation;}
   .dbtn:hover{filter:brightness(1.13);}
+  #diploBtns .dbtn{transition:background-color .08s,border-color .08s,box-shadow .08s,opacity .08s;filter:none!important;transform:none!important;pointer-events:auto;}
+  #diploBtns .dbtn:hover{filter:none!important;box-shadow:0 0 0 2px rgba(255,255,255,.08),0 0 18px rgba(198,168,112,.14);}
+  #diploBtns .dbtn:active{filter:none!important;box-shadow:inset 0 2px 8px rgba(0,0,0,.28);}
   .dbtn.war{background:#d24a32;color:#fff;border-color:#a8412f;} .dbtn.ally{background:#3fae62;color:#06210f;border-color:#2f7a45;}
   .dbtn.peace{background:#5aa0dc;color:#06121e;border-color:#3f6f9e;} .dbtn.sup{background:#e6b73e;border-color:#8a7430;}
   .dbtn.neutral{background:#9aa6b2;} .dbtn.ghost{background:#2c352b;color:#cdd9c8;border:1px solid #46523f;}
@@ -228,10 +236,11 @@
   .wStats .sep{width:1px;height:22px;background:rgba(255,255,255,.16);}
   .wMob{font-size:13px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#9fae93;margin-bottom:18px;} .wMob b{color:#ffce6a;}
   /* war declaration notification */
-  #warNotif{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:28;
+  #warNotif{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:28;pointer-events:auto;
     background:rgba(20,4,2,.45);}
-  #warNotifCard{width:min(470px,93vw);padding:22px 26px 24px;text-align:center;animation:warpop .25s ease;}
+  #warNotifCard{width:min(470px,93vw);padding:22px 26px 24px;text-align:center;animation:modalFade .14s ease;pointer-events:auto;}
   @keyframes warpop{from{transform:scale(.82);opacity:0;}to{transform:scale(1);opacity:1;}}
+  @keyframes modalFade{from{opacity:0;}to{opacity:1;}}
   #warNotifBtns{display:flex;gap:12px;margin-top:2px;}
   #warNotifBtns .dbtn{flex:1;padding:14px;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;}
   /* politics window */
@@ -300,9 +309,9 @@
   .ab.icon{min-width:60px;display:flex;align-items:center;justify-content:center;font-size:18px;}
   .ab.dis{opacity:.4;cursor:default;filter:none;}
   /* peace negotiation (player offers) */
-  #peaceWin,#peaceOffer{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:29;
+  #peaceWin,#peaceOffer,#peaceResult{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:29;pointer-events:auto;
     background:rgba(6,12,20,.6);}
-  #peaceCard,#peaceOfferCard{width:min(390px,92vw);padding:20px 22px;text-align:center;position:relative;animation:warpop .2s ease;}
+  #peaceCard,#peaceOfferCard,#peaceResultCard{width:min(390px,92vw);padding:20px 22px;text-align:center;position:relative;animation:modalFade .14s ease;pointer-events:auto;}
   #peaceName{font-size:22px;font-weight:900;margin-bottom:8px;}
   #peaceInfo,#peaceChance{font-size:13px;color:#cfe0f0;margin-bottom:8px;}
   .pterm{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border-radius:11px;padding:9px 12px;margin-bottom:8px;}
@@ -313,17 +322,26 @@
   .pterm button{border:none;border-radius:7px;height:28px;font-weight:800;cursor:pointer;font-size:14px;color:#fff;}
   .pterm .mm{background:#e0533f;width:30px;} .pterm .pp{background:#4caf50;width:30px;}
   .pterm .mx{background:#3a86d0;padding:0 9px;font-size:11px;height:28px;}
-  .pterm .tgl{background:#33414d;color:#7e8c9a;width:36px;}
-  .pterm .tgl.on{background:#1f7a3a;color:#aaf0c4;}
+  .pterm .tgl{background:#33414d;color:#7e8c9a;width:36px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.08);}
+  .pterm .tgl.on{background:#1f7a3a;color:#aaf0c4;box-shadow:0 0 0 2px rgba(125,255,166,.16),inset 0 0 0 2px rgba(255,255,255,.12);}
+  .pterm .tgl:disabled{opacity:.42;cursor:default;filter:none;}
   #peaceTribute{background:rgba(255,255,255,.06);border-radius:10px;padding:10px;margin:6px 0 12px;}
   #peaceTribute .lbl{font-size:12px;color:#9fb2c4;margin-bottom:6px;}
   #peaceTribute .ctl{display:flex;align-items:center;justify-content:center;gap:6px;}
   #peaceTribute .ctl button{border:none;border-radius:7px;width:34px;height:30px;font-weight:800;cursor:pointer;background:#2f4150;color:#eef4ff;}
   #peaceTribute .amt{font-size:18px;font-weight:800;color:#ffd23f;min-width:84px;}
-  #peaceWin .row2,#peaceOffer .row2{display:flex;gap:8px;}
-  #peaceWin .row2 .dbtn,#peaceOffer .row2 .dbtn{flex:1;}
+  #peaceWin .row2,#peaceOffer .row2,#peaceResult .row2{display:flex;gap:8px;}
+  #peaceWin .row2 .dbtn,#peaceOffer .row2 .dbtn,#peaceResult .row2 .dbtn{flex:1;}
+  #warNotif .dbtn,#peaceWin .dbtn,#peaceOffer .dbtn,#peaceResult .dbtn{transition:background-color .08s,border-color .08s,box-shadow .08s,opacity .08s;transform:none!important;filter:none!important;}
+  #warNotif .dbtn:hover,#peaceWin .dbtn:hover,#peaceOffer .dbtn:hover,#peaceResult .dbtn:hover{filter:none!important;box-shadow:0 0 0 2px rgba(255,255,255,.08),0 0 18px rgba(198,168,112,.14);}
+  #warNotif .dbtn:active,#peaceWin .dbtn:active,#peaceOffer .dbtn:active,#peaceResult .dbtn:active{filter:none!important;box-shadow:inset 0 2px 8px rgba(0,0,0,.28);}
   #peaceOfferTitle{font-size:22px;font-weight:900;color:#9fe0ff;margin-bottom:10px;}
   #peaceOfferBody{font-size:14px;color:#e6f2ff;line-height:1.6;margin-bottom:16px;}
+  #peaceResultTitle{font-size:22px;font-weight:900;margin-bottom:10px;color:#9fe0ff;}
+  #peaceResultBody{font-size:14px;color:#e6f2ff;line-height:1.55;margin-bottom:16px;}
+  .offerTerms{margin-top:11px;padding:10px 12px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);
+    text-align:left;color:#dce8f2;font-size:13px;line-height:1.55;}
+  .offerTerms div+div{margin-top:4px;}
   /* 🎖 hero bar */
   #heroBar{position:fixed;left:12px;bottom:12px;display:flex;gap:12px;z-index:14;align-items:flex-end;pointer-events:none;}
   .heroSlot{display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:auto;}

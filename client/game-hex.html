@@ -139,6 +139,7 @@
       <div class="techTitle">
         <h2>Исследования</h2>
       </div>
+      <button id="techCheatAll" title="Разблокировать все исследования">Чит: всё</button>
       <div class="techGoldCard"><span class="coin">◉</span><b id="techGold">0</b><span>зол.</span></div>
     </div>
     <div id="techGrid"></div>
@@ -174,9 +175,9 @@
     <div id="peaceName">🕊 Мир</div>
     <div id="peaceInfo"></div>
     <div class="pterm">
-      <span class="ic">🌍</span><span class="nm">Занять земли</span>
+      <span class="ic">🌍</span><span class="nm">Аннексировать захваченное</span>
       <span class="v" id="ptLandV"></span>
-      <button class="tgl" id="ptLandBtn" data-r="land">✓</button>
+      <button class="tgl" id="ptLandBtn" data-r="land"></button>
     </div>
     <div class="pterm">
       <span class="ic">💰</span><span class="nm">Контрибуция</span>
@@ -212,6 +213,17 @@
   </div>
 </div>
 
+<div id="peaceResult">
+  <div id="peaceResultCard" class="gpanel">
+    <div class="gstars">★ ★ ★</div>
+    <div id="peaceResultTitle">🕊 Мир</div>
+    <div id="peaceResultBody"></div>
+    <div class="row2">
+      <button id="peaceResultOk" class="dbtn peace">Понятно</button>
+    </div>
+  </div>
+</div>
+
 <script src="vendor/three/three.r128.min.js"></script>
 <script src="vendor/three/GLTFLoader.r128.js"></script>
 <!-- ── Сборщик модулей игры ───────────────────────────────────────────────
@@ -227,7 +239,7 @@
 //    Перед игровыми модулями АСИНХРОННО грузим хекс-карту (hex-preload.js), затем
 //    в MODS добавлен hex-world.js (переопределяет buildWorld/getTerrainHeight перед boot).
 (async () => {
-  const bust = location.search.includes('nocache') ? ('?_=' + Date.now()) : '';
+  const bust = '?_=' + Date.now();   // dev: ВСЕГДА анти-кеш модулей (иначе браузер отдавал старый js/loop.js → правки «не применялись»)
   const loadScript = (src) => new Promise((res, rej) => {   // внешний <script src> — CSP-safe
     const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error(src)); document.head.appendChild(s);
   });
@@ -256,8 +268,8 @@
     'js/city.js', 'js/units.js', 'js/logic.js', 'js/ui.js', 'js/input.js',
     'js/hud.js',
     'js/hex-world.js',       // ⬡ ПЕРЕД loop.js: переопределяет buildWorld/getTerrainHeight до boot
-    'js/loop.js',
     'js/build.js',           // 🏠 система строительства (хекс-карта): меню + подсветка + размещение
+    'js/loop.js',
     'js/dbg-speed.js',       // 🐞 debug: ползунок скорости отряда (правит LOCALSIM.K.SQUAD_SPEED вживую)
     'game.net.js',           // мост Colyseus — последним (использует глобали игры)
   ];

@@ -28,6 +28,52 @@
   window.HEXWIDTH = SQ3 * Rg * kx;          // ширина хекса в ИГРОВЫХ координатах (шаг соседних хексов) — для лимита ширины шеренги в loop.js
   const BRIDGE_VISUAL_LIFT = 0.08;
   const BRIDGE_DEFAULT_SCALE = 1.025;
+  // ── профиль высот дороги + сэмплер — в ОБЛАСТИ МОДУЛЯ ──
+  // Нужны и hexBuildWorld (точная запечённая карта), и ensureHexRoadSamplesForMap (фолбэк для сим-рёбер,
+  // который initLocalSim зовёт ДО buildWorld). До постройки карты _visualTopByCell/_brTops пусты → высота
+  // деградирует к рельефу тайлов, а точные samples перепекутся при buildWorld (он безусловно перезаписывает HEXROADS).
+  let _visualTopByCell = new Map(), _brTops = [];
+  const ROAD_SAMPLE_STEP = 0.12;
+  const roadPtY = (x, z) => {
+    let h = -Infinity;
+    const ix = Math.floor(x), iz = Math.floor(z);
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+      const px = ix + dx, pz = iz + dz;
+      const col = (typeof tiles !== 'undefined' && tiles) ? tiles[px] : null, t = col && col[pz];
+      if (t && t.topY != null) h = Math.max(h, t.topY);
+      const vt = _visualTopByCell.get(px + ',' + pz);
+      if (vt != null) h = Math.max(h, vt);
+    }
+    if (!Number.isFinite(h)) h = (typeof getTerrainHeight === 'function' ? getTerrainHeight(x, z) : 0);
+    for (const br of _brTops) { const d2 = (br.gx - x) * (br.gx - x) + (br.gz - z) * (br.gz - z); if (d2 < 1.2 * 1.2 && br.top > h) h = br.top; }
+    return h;
+  };
+  const buildRoadSamples = (rd) => {
+    const pts = rd.pts, cum = rd.cum, hts = rd.hts, len = rd.len;
+    const atDist = (dist) => {
+      const target = Math.max(0, Math.min(len, dist));
+      let i = 1; while (i < cum.length && cum[i] < target) i++;
+      if (i >= pts.length) i = pts.length - 1;
+      const seg = cum[i] - cum[i - 1] || 1, f = Math.max(0, Math.min(1, (target - cum[i - 1]) / seg));
+      return {
+        s: target,
+        x: pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f,
+        z: pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f,
+        y: hts ? hts[i - 1] + (hts[i] - hts[i - 1]) * f : 0,
+      };
+    };
+    const count = Math.max(2, Math.ceil(len / ROAD_SAMPLE_STEP) + 1);
+    const samples = new Array(count);
+    for (let i = 0; i < count; i++) samples[i] = atDist(i === count - 1 ? len : i * ROAD_SAMPLE_STEP);
+    for (let i = 0; i < count; i++) {
+      const a = samples[Math.max(0, i - 1)], b = samples[Math.min(count - 1, i + 1)];
+      const dx = b.x - a.x, dz = b.z - a.z, l = Math.hypot(dx, dz) || 1;
+      samples[i].tx = dx / l; samples[i].tz = dz / l;
+      samples[i].nx = -samples[i].tz; samples[i].nz = samples[i].tx;
+    }
+    rd.sampleStep = ROAD_SAMPLE_STEP;
+    rd.samples = samples;
+  };
   const TILE_XZ_OVERLAP = 1;                // не растягиваем игровые тайлы: игра должна совпадать с редакторной геометрией
   let HEXROADS = new Map();                 // ekey "a_b" → {from, pts[gx,gz], cum, len} для путей юнитов
   let HEXSNAP = null;                        // [x][z] → центр ближайшего хекса (снап зданий городов в центр гекса)
@@ -535,9 +581,41 @@
     const neighborQR = (q, r) => (r & 1)
       ? [[q+1,r],[q-1,r],[q+1,r-1],[q,r-1],[q+1,r+1],[q,r+1]]
       : [[q+1,r],[q-1,r],[q,r-1],[q-1,r-1],[q,r+1],[q-1,r+1]];
+    const OCEAN_KEYS = (() => {
+      let minQ = Infinity, maxQ = -Infinity, minR = Infinity, maxR = -Infinity;
+      for (const key of HEXTYPES.keys()) {
+        const [q, r] = key.split(',').map(Number);
+        minQ = Math.min(minQ, q); maxQ = Math.max(maxQ, q); minR = Math.min(minR, r); maxR = Math.max(maxR, r);
+      }
+      const ocean = new Set(), queue = [];
+      for (const [key, ht] of HEXTYPES) {
+        if (!ht.water || ht.river) continue;
+        const [q, r] = key.split(',').map(Number);
+        if (q === minQ || q === maxQ || r === minR || r === maxR) { ocean.add(key); queue.push([q, r]); }
+      }
+      for (let i = 0; i < queue.length; i++) {
+        const [q, r] = queue[i];
+        for (const [nq, nr] of neighborQR(q, r)) {
+          const nk = nq + ',' + nr, ht = HEXTYPES.get(nk);
+          if (!ht || !ht.water || ht.river || ocean.has(nk)) continue;
+          ocean.add(nk); queue.push([nq, nr]);
+        }
+      }
+      return ocean;
+    })();
+    const isOpenOceanKey = (key) => {
+      if (!OCEAN_KEYS.has(key)) return false;
+      const [q, r] = key.split(',').map(Number);
+      let n = 0;
+      for (const [nq, nr] of neighborQR(q, r)) if (OCEAN_KEYS.has(nq + ',' + nr)) n++;
+      // Узкие реки/каналы могут быть связаны с морем flood-fill'ом, но у них обычно 1-2 водных соседа.
+      // Для верфи нужен настоящий берег открытой воды, а не речной тайл.
+      return n >= 3;
+    };
     HEXCOAST = [];
     // tiles: [q, r, water, elev, colHex, rivKey, rivRy, roadKey, roadRy, tileKey?, tileRy?]
     const tileByKey = {};                          // ручные тайл-переопределения (coast*/grassSlope*)
+    const visualTopByCell = (_visualTopByCell = new Map());             // gx,z -> реальный верх override/sloped-модели (алиас модульного для roadPtY)
     for (const t of MAP.tiles) {
       const q = t[0], r = t[1], isW = t[2], elev = t[3], colHex = t[4], rk = t[5], rry = t[6], dk = t[7], dry = t[8], tk = t[9], try_ = t[10], biome = t[11] || 'default', yOffset = Number(t[12]) || 0;
       const gx = wxToGX(qrToWX(q, r)), gz = wzToGZ(qrToWZ(q, r));
@@ -550,16 +628,19 @@
       if (tk) {                                   // переопределённая модель тайла (берег/склон/ручной тайл)
         const textureKey = biomeTextureKey(biome), tileBucket = tk + ':' + textureKey;
         const isSloped = isSlopedTileAsset(tk);
-        (tileByKey[tileBucket] || (tileByKey[tileBucket] = { modelKey: tk, textureKey, list: [] })).list.push({ gx, gz, top: (elev + (isSloped ? yOffset : 0)) * kY, scaleTop: elev * kY, ry: try_, biome, col: String(tk).startsWith('coast') ? WHITE : tileInstanceColor(biome) });
+        const visualTop = (elev + (isSloped ? yOffset : 0)) * kY;
+        visualTopByCell.set(Math.round(gx) + ',' + Math.round(gz), visualTop);
+        (tileByKey[tileBucket] || (tileByKey[tileBucket] = { modelKey: tk, textureKey, list: [] })).list.push({ gx, gz, top: visualTop, scaleTop: elev * kY, ry: try_, biome, col: String(tk).startsWith('coast') ? WHITE : tileInstanceColor(biome) });
       } else if (rk) {                            // речной тайл — только модель реки
         (rivByKey[rk] || (rivByKey[rk] = [])).push({ gx, gz, top: elev * kY, ry: rry, q, r });
       } else if (isW) {                           // море
         water.push({ gx, gz, top: (elev - 0.2) * kY });
       } else if (dk) {                            // дорожный тайл — полноценная замена grass-хекса
         HEXROADTILES.push({ gx, gz });
-        const textureKey = biomeTextureKey(biome), roadBucket = dk + ':' + textureKey;
+        const textureKey = biomeTextureKey(biome);
+        const roadBucket = dk + ':' + textureKey;
         const isSloped = isSlopedTileAsset(dk);
-        (roadByKey[roadBucket] || (roadByKey[roadBucket] = { modelKey: dk, textureKey, list: [] })).list.push({ gx, gz, top: (elev + (isSloped ? yOffset : 0)) * kY, scaleTop: elev * kY, ry: dry, biome, col: landInstanceColor(biome, colHex) });
+        (roadByKey[roadBucket] || (roadByKey[roadBucket] = { modelKey: dk, textureKey, list: [] })).list.push({ gx, gz, top: (elev + (isSloped ? yOffset : 0)) * kY, scaleTop: elev * kY, ry: dry, q, r, biome, col: landInstanceColor(biome, colHex) });
       } else {                                    // обычная суша
         grass.push({ gx, gz, top: elev * kY, q, r, biome, textureKey: biomeTextureKey(biome), col: landInstanceColor(biome, colHex) });
       }
@@ -607,13 +688,13 @@
     ROADREF = [];                                    // индекс инстансов дорог → перекраска при захвате (как трава)
     for (const k in roadByKey) {
       const bucket = roadByKey[k], list = bucket.list;
-      const mm = instMesh(roadBatchModel(M[bucket.modelKey], bucket.textureKey), list, 'map-roads', false);
+      const mm = instMesh(roadBatchModel(M[bucket.modelKey], bucket.textureKey), list, 'map-roads', true);
       if (mm) { scene.add(mm); for (let i = 0; i < list.length; i++) ROADREF.push({ mesh: mm, idx: i, gx: list[i].gx, gz: list[i].gz, base: list[i].col, biome: list[i].biome || 'default' }); }
     }
     TILEREF = [];
     for (const k in tileByKey) {
       const bucket = tileByKey[k];
-      const mm = instMesh(tileBatchModel(M[bucket.modelKey], bucket.textureKey, bucket.modelKey), bucket.list, 'map-overrides', false);
+      const mm = instMesh(tileBatchModel(M[bucket.modelKey], bucket.textureKey, bucket.modelKey), bucket.list, 'map-overrides', true);
       if (mm) {
         scene.add(mm);
         for (let i = 0; i < bucket.list.length; i++) TILEREF.push({
@@ -656,7 +737,7 @@
     for (const k in decByKey) {
       const bucket = decByKey[k], list = bucket.list, model = decorBatchModel(M[bucket.asset], bucket.textureKey); if (!model) continue;
       const im = new T.InstancedMesh(model.geo.clone(), model.mat, list.length);
-      im.castShadow = false; im.receiveShadow = true;
+      im.castShadow = true; im.receiveShadow = true;
       im.userData.perfGroup = 'map-decor';
       const packBiome = model.mat?.userData?.packBiomeShader ? new Float32Array(list.length) : null;
       for (let i = 0; i < list.length; i++) {
@@ -677,15 +758,39 @@
       const _gzToWZ = (gz) => { const lat = LAT1 - (gz / GRID) * (LAT1 - LAT0); return ((m.B.maxY - lat) / m.latSpan) * m.worldH - oz; };
       const decorKeys = new Set();
       for (const d of MAP.decor) decorKeys.add(_qrFromW(d[1], d[2]));            // хекс с любым декором — занят
+      const grassByKey = new Map();
+      for (const c of grass) grassByKey.set(c.q + ',' + c.r, c);
+      const cityNeighbors = [];
       const cityKeys = new Set();
-      if (typeof CITY_DATA !== 'undefined') for (const d of CITY_DATA) {
+      if (typeof CITY_DATA !== 'undefined') for (let ci = 0; ci < CITY_DATA.length; ci++) {
+        const d = CITY_DATA[ci];
         const ck = _qrFromW(_gxToWX(d[0]), _gzToWZ(d[1])); cityKeys.add(ck);     // сам город + кольцо соседей (стены)
         const p = ck.split(',').map(Number);
-        for (const [nq, nr] of neighborQR(p[0], p[1])) cityKeys.add(nq + ',' + nr);
+        for (const [nq, nr] of neighborQR(p[0], p[1])) {
+          const nk = nq + ',' + nr;
+          cityKeys.add(nk);
+          const c = grassByKey.get(nk);
+          if (c && !decorKeys.has(nk)) {
+            const seaNeighbors = neighborQR(nq, nr).filter(([sq, sr]) => isOpenOceanKey(sq + ',' + sr));
+            let seaDir = null;
+            if (seaNeighbors.length) {
+              const outX = c.gx - d[0], outZ = c.gz - d[1];
+              let bestDir = null, bestDot = -Infinity;
+              for (const [sq, sr] of seaNeighbors) {
+                const dx = wxToGX(qrToWX(sq, sr)) - c.gx, dz = wzToGZ(qrToWZ(sq, sr)) - c.gz;
+                const mag = Math.hypot(dx, dz) || 1, ux = dx / mag, uz = dz / mag;
+                const dot = ux * outX + uz * outZ;
+                if (dot > bestDot) { bestDot = dot; bestDir = [ux, uz]; }
+              }
+              seaDir = bestDir;
+            }
+            cityNeighbors.push({ gx: c.gx, gz: c.gz, top: c.top, key: 'city:' + ci + ':' + nk, parentIdx: ci, q: nq, r: nr, seaDir });
+          }
+        }
       }
       const buildHexes = [];
       for (const c of grass) { const k = c.q + ',' + c.r; if (decorKeys.has(k) || cityKeys.has(k)) continue; buildHexes.push({ gx: c.gx, gz: c.gz, top: c.top, key: k }); }
-      window.HEXBUILD = { hexes: buildHexes, occupied: new Set(), scale: kx * m.HEXS, kY };
+      window.HEXBUILD = { hexes: buildHexes, cityNeighbors, occupied: new Set(), scale: kx * m.HEXS, kY };
     }
 
     // ── растеризация в tiles[][] (256²): вода/высоты/порты/декор/дороги ──
@@ -701,7 +806,10 @@
         const x = xi + a, z = zi + b; if (x < 0 || z < 0 || x >= GRID || z >= GRID) continue;
         const cur = tiles[x][z];
         if (landTile) tiles[x][z] = { isWater: false, topY: elev * kY, terrain: 'land', region: null };
-        else if (cur.isWater) cur.topY = (rk ? elev : elev - 0.2) * kY;
+        else if (cur.isWater) {
+          cur.topY = (rk ? elev : elev - 0.2) * kY;
+          if (rk) cur.terrain = 'river';
+        }
         const nd = (gxC - x) * (gxC - x) + (gzC - z) * (gzC - z), prev = HEXSNAP[x][z];   // ближайший центр хекса
         if (!prev || nd < prev[2]) HEXSNAP[x][z] = [gxC, gzC, nd, !isW];
       }
@@ -726,18 +834,72 @@
       }
       return bestD <= 20 * 20 ? best : null;
     };
+    // мосты в игровых координатах с высотой полотна — дорога через реку идёт ПО мосту, не по дну
+    const brTops = (_brTops = (MAP.bridges || []).map((b) => ({ gx: wxToGX(b[0]), gz: wzToGZ(b[1]), top: ((b[4] || 0) + BRIDGE_VISUAL_LIFT) * kY })));   // алиас модульного для roadPtY
+    // roadPtY — в области модуля (нужен и ensureHexRoadSamplesForMap до buildWorld)
+    // сглаживание пути ПОД НАРИСОВАННУЮ дорогу: тайлы дорог входят/выходят через СЕРЕДИНЫ РЁБЕР хекса,
+    // на поворотных тайлах рисуют дугу мимо центра. Путь по центрам клеток (сырая полилиния) на поворотах
+    // резал хорду → юниты сходили с ленты. Заменяем каждый узел квадратичной Безье: середина-ребра →
+    // (контроль = центр клетки) → середина-ребра. Прямые тайлы вырождаются в прямую, повороты — в ту же дугу.
+    const smoothRoad = (raw) => {
+      if (raw.length < 3) return raw.slice();
+      // КАЖДЫЙ внутренний узел (центр клетки) → квадратичная Безье: середина-ребра-входа → КОНТРОЛЬ=ЦЕНТР клетки → середина-ребра-выхода.
+      // Дорожный тайл входит/выходит через середины рёбер, а на поворотном/развилочном тайле дуга идёт ЧЕРЕЗ центр клетки.
+      // Прямой тайл: mIn, центр, mOut коллинеарны → прямая. Поворот/развилка: дуга через центр = ровно как нарисовано (не срезаем хорду).
+      const SEG = 8;
+      const out = [raw[0].slice()];
+      for (let i = 1; i < raw.length - 1; i++) {
+        const mInx = (raw[i - 1][0] + raw[i][0]) / 2, mInz = (raw[i - 1][1] + raw[i][1]) / 2;
+        const mOutx = (raw[i][0] + raw[i + 1][0]) / 2, mOutz = (raw[i][1] + raw[i + 1][1]) / 2;
+        const cx = raw[i][0], cz = raw[i][1];
+        for (let k = 0; k <= SEG; k++) {
+          const t = k / SEG, u = 1 - t, uu = u * u, ut2 = 2 * u * t, tt = t * t;
+          out.push([uu * mInx + ut2 * cx + tt * mOutx, uu * mInz + ut2 * cz + tt * mOutz]);
+        }
+      }
+      out.push(raw[raw.length - 1].slice());
+      const ded = [out[0]];
+      for (const q of out) { const l = ded[ded.length - 1]; if (Math.hypot(q[0] - l[0], q[1] - l[1]) > 1e-4) ded.push(q); }
+      straightenEnds(ded, 0.9);   // 🎯 выпрямить подход к городам-концам (убрать «крючок» → юниты выходят/проходят прямо, без арки)
+      return ded;
+    };
+    // Концы дороги forced в ЦЕНТР города, а последняя дорожная клетка смещена → сглаженная полилиния «дёргается»
+    // (доворот ~30° в последние 0.15) и юниты у города делают странную дугу. Репроецируем последние R ед. каждого
+    // конца на ПРЯМУЮ хорду (конец→якорь на арк-дистанции R) — подход становится прямым (сим не трогаем: это только рендер).
+    const straightenEnds = (pts, R) => {
+      if (pts.length < 4) return pts;
+      const oneEnd = (endIdx, dir) => {
+        const ep = pts[endIdx];
+        let acc = 0, ai = endIdx, prev = endIdx;                       // якорь на арк-дистанции R от конца
+        for (let s = 0; s < pts.length - 2; s++) { const cur = prev + dir; if (cur < 0 || cur >= pts.length) { ai = prev; break; } acc += Math.hypot(pts[cur][0] - pts[prev][0], pts[cur][1] - pts[prev][1]); ai = cur; prev = cur; if (acc >= R) break; }
+        const anchor = pts[ai];
+        const idx = []; for (let i = endIdx; i !== ai + dir; i += dir) idx.push(i);   // конец..якорь
+        let c = 0; const cums = [0]; for (let k = 1; k < idx.length; k++) { c += Math.hypot(pts[idx[k]][0] - pts[idx[k - 1]][0], pts[idx[k]][1] - pts[idx[k - 1]][1]); cums.push(c); }
+        const tot = c || 1;
+        for (let k = 1; k < idx.length - 1; k++) { const t = cums[k] / tot; pts[idx[k]] = [ep[0] + (anchor[0] - ep[0]) * t, ep[1] + (anchor[1] - ep[1]) * t]; }   // на прямую хорду
+      };
+      oneEnd(0, 1); oneEnd(pts.length - 1, -1);
+      return pts;
+    };
+    // ROAD_SAMPLE_STEP / buildRoadSamples / roadPtY — в области модуля (см. верх файла)
     for (const rd of (MAP.roads || [])) {
       let a = rd[0], b = rd[1];
       const raw = rd[2];
-      const pts = raw.map((p) => [wxToGX(p[0]), wzToGZ(p[1])]);
+      const pts = smoothRoad(raw.map((p) => [wxToGX(p[0]), wzToGZ(p[1])]));
       if (a == null || b == null || a === b || pts.length < 2) continue;
       const cum = [0]; for (let i = 1; i < pts.length; i++) cum[i] = cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-      HEXROADS.set(Math.min(a, b) + '_' + Math.max(a, b), { a, b, from: a, pts, cum, len: cum[cum.length - 1] });
+      const hts = pts.map((p) => roadPtY(p[0], p[1]));                 // профиль высот вдоль дороги (склоны — рампой, мосты — по полотну)
+      const edge = { a, b, from: a, pts, cum, hts, len: cum[cum.length - 1] };
+      buildRoadSamples(edge);
+      HEXROADS.set(Math.min(a, b) + '_' + Math.max(a, b), edge);
     }
 
     if (typeof buildGraph === 'function') buildGraph();   // дорожный граф (пути юнитов)
     addHexRoadGraphEdges();                               // ручные дороги редактора тоже должны быть путями
     console.log('[hex] карта из hex-map.json: tiles=' + MAP.tiles.length + ' bridges=' + MAP.bridges.length + ' decor=' + MAP.decor.length + ' roads=' + HEXROADS.size);
+    if (typeof markShadowsDirty === 'function') markShadowsDirty();   // вся статичная геометрия карты в сцене → перепечь тени один раз
+    window._shadowWarmUntil = (typeof performance !== 'undefined' ? performance.now() : 0) + 2000;   // страховка: ~2с печём тени каждый кадр (если что-то догрузилось асинхронно)
+    if (typeof installDynShadowOnWorld === 'function') installDynShadowOnWorld();   // 🌗 земля/дороги/мосты принимают тени городов/построек из динамической карты
   }
 
   function addHexRoadGraphEdges() {
@@ -769,6 +931,145 @@
     if (i >= pts.length) return { x: pts[pts.length - 1][0], z: pts[pts.length - 1][1] };
     const seg = cum[i] - cum[i - 1] || 1, lf = (target - cum[i - 1]) / seg;
     return { x: pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * lf, z: pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * lf };
+  };
+  // Dev-only уточнение пути РЕЙКАСТОМ по отрендеренной геометрии.
+  // Gameplay-рендер НЕ вызывает это в runtime: юниты используют precomputed rd.samples.
+  // 1) высоты: склоновые тайлы — рампы, сетка tiles topY — ступени → юниты парили/тонули на подъёмах;
+  // 2) 🎯 ЛАТЕРАЛЬНЫЙ СНАП: клетки сырого пути местами расходятся с НАРИСОВАННОЙ лентой (развилки у мостов,
+  //    острые поворотные тайлы — лента дугой/нырком, путь хордой по траве). Точку вне полотна сдвигаем
+  //    перпендикулярно к ближайшей точке ленты, предпочитая НЕПРЕРЫВНОСТЬ (кандидат ближе к предыдущей
+  //    точке) — у V-развилки путь трассирует рукава, а не прыгает между ними. Концы у городов не трогаем
+  //    (там площадь города, ленты нет — снап утащил бы путь вбок). Клиент-only: длины пересчитываем,
+  //    сим движется по своему edge.len — рассинхрона нет.
+  let _rcMaps = null;
+  const _rc = new T.Raycaster(), _rcO = new T.Vector3(), _rcD = new T.Vector3(0, -1, 0);
+  window.hexRoadRefineHts = function hexRoadRefineHts(a, b) {
+    const rd = HEXROADS.get(Math.min(a, b) + '_' + Math.max(a, b));
+    if (!rd || rd._refined || !rd.hts) return;
+    if (!_rcMaps) { _rcMaps = []; scene.traverse((o) => { const t = o.name || o.userData.perfGroup || ''; if (o.isInstancedMesh && /map-(roads|bridges)/.test(t)) _rcMaps.push(o); }); }
+    const hit = (x, z) => { _rcO.set(x, 8, z); _rc.set(_rcO, _rcD); const h = _rc.intersectObjects(_rcMaps, false); return h.length ? h[0].point.y : null; };
+    const n = rd.pts.length, ys = new Array(n), on = new Array(n);
+    for (let i = 0; i < n; i++) { ys[i] = hit(rd.pts[i][0], rd.pts[i][1]); on[i] = ys[i] != null; }
+    // off-run'ы (непрерывные участки мимо ленты) ВНЕ приконцевых зон обводим ПО ЛЕНТЕ:
+    // жадная трассировка от входа к выходу — шаг с минимальным отклонением от направления на цель,
+    // который попадает на полотно (0,±15°..±90°). Прямая по траве недоступна → трасса огибает по рукавам
+    // развилки/дуге поворотного тайла. Затем трасса ресемплируется в исходные индексы точек.
+    const END_GUARD = 1.5, STEP = 0.12, ANGLES = [0, 0.262, -0.262, 0.524, -0.524, 0.785, -0.785, 1.047, -1.047, 1.309, -1.309, 1.571, -1.571];
+    let moved = false, i = 1;
+    while (i < n - 1) {
+      if (on[i] || rd.cum[i] <= END_GUARD || rd.len - rd.cum[i] <= END_GUARD) { i++; continue; }
+      let j = i; while (j < n - 1 && !on[j] && rd.len - rd.cum[j] > END_GUARD) j++;    // run: [i..j-1], границы on-road
+      const A = rd.pts[i - 1], B = rd.pts[j];
+      const traced = []; let px = A[0], pz = A[1], guard = 0;
+      while (Math.hypot(B[0] - px, B[1] - pz) > 0.16 && guard++ < 220) {
+        let dx = B[0] - px, dz = B[1] - pz; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+        let placed = false;
+        for (const ang of ANGLES) {
+          const ca = Math.cos(ang), sa = Math.sin(ang);
+          const nx = px + (dx * ca - dz * sa) * STEP, nz = pz + (dx * sa + dz * ca) * STEP;
+          if (hit(nx, nz) != null) { px = nx; pz = nz; traced.push([nx, nz]); placed = true; break; }
+        }
+        if (!placed) { px += dx * STEP; pz += dz * STEP; traced.push([px, pz]); }      // лента прервалась — шаг к цели
+      }
+      if (traced.length > 1) {
+        const cl = [0]; for (let k = 1; k < traced.length; k++) cl[k] = cl[k - 1] + Math.hypot(traced[k][0] - traced[k - 1][0], traced[k][1] - traced[k - 1][1]);
+        const tot = cl[cl.length - 1] || 1, cnt = j - i;
+        for (let k = 0; k < cnt; k++) {                                                // равномерный ресемпл трассы в pts[i..j-1]
+          const target = tot * (k + 1) / (cnt + 1);
+          let m = 1; while (m < cl.length && cl[m] < target) m++;
+          if (m >= traced.length) { rd.pts[i + k][0] = traced[traced.length - 1][0]; rd.pts[i + k][1] = traced[traced.length - 1][1]; }
+          else { const seg = cl[m] - cl[m - 1] || 1, f = (target - cl[m - 1]) / seg;
+            rd.pts[i + k][0] = traced[m - 1][0] + (traced[m][0] - traced[m - 1][0]) * f;
+            rd.pts[i + k][1] = traced[m - 1][1] + (traced[m][1] - traced[m - 1][1]) * f; }
+          ys[i + k] = hit(rd.pts[i + k][0], rd.pts[i + k][1]);
+        }
+        moved = true;
+      }
+      i = j;
+    }
+    // 🎯 ЦЕНТРИРОВАНИЕ: ось могла лежать НА ленте, но у её внутреннего края (Безье-центр на остром
+    //    поворотном тайле) → визуально юниты «срезают» по внутренней кромке. Меряем поперёк ленты
+    //    расстояние до обоих краёв рейкастом и сдвигаем точку на СЕРЕДИНУ. Пропускаем: guard-зоны,
+    //    точки мимо ленты, широкие места (развилка/площадь — там «край» размыт рукавами).
+    for (let k = 1; k < n - 1; k++) {
+      if (ys[k] == null) continue;
+      if (rd.cum[k] <= END_GUARD || rd.len - rd.cum[k] <= END_GUARD) continue;
+      const p = rd.pts[k], q0 = rd.pts[k - 1], q1 = rd.pts[k + 1];
+      let dx = q1[0] - q0[0], dz = q1[1] - q0[1]; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+      const px = -dz, pz = dx;
+      let L = null, R = null;
+      for (let t = 0.1; t <= 0.92 && (L == null || R == null); t += 0.1) {
+        if (R == null && hit(p[0] + px * t, p[1] + pz * t) == null) R = t - 0.05;
+        if (L == null && hit(p[0] - px * t, p[1] - pz * t) == null) L = t - 0.05;
+      }
+      if (L == null || R == null) continue;                                           // край не найден — широкое место, не трогаем
+      if (L + R > 2.0) continue;                                                      // слишком широко (развилка) — не центрируем
+      const shift = (R - L) / 2;
+      if (Math.abs(shift) > 0.03 && Math.abs(shift) <= 0.42) {
+        p[0] += px * shift; p[1] += pz * shift;
+        const y2 = hit(p[0], p[1]); if (y2 != null) ys[k] = y2;
+        moved = true;
+      }
+    }
+    for (let k = 0; k < n; k++) if (ys[k] != null) rd.hts[k] = ys[k];                  // верх полотна/моста; совсем мимо — сеточная высота
+    if (moved) {                                                                       // пересчёт арк-длин
+      for (let k = 1; k < n; k++) rd.cum[k] = rd.cum[k - 1] + Math.hypot(rd.pts[k][0] - rd.pts[k - 1][0], rd.pts[k][1] - rd.pts[k - 1][1]);
+      rd.len = rd.cum[n - 1];
+    }
+    buildRoadSamples(rd);
+    rd._refined = true;
+  };
+  window.ensureHexRoadSamplesForMap = function ensureHexRoadSamplesForMap(map) {
+    const edges = map && Array.isArray(map.edges) ? map.edges : [];
+    const citiesSrc = map && Array.isArray(map.cities) ? map.cities : [];
+    let added = 0;
+    for (const e of edges) {
+      if (!e || e.a == null || e.b == null || e.a === e.b) continue;
+      const key = Math.min(e.a, e.b) + '_' + Math.max(e.a, e.b);
+      const existing = HEXROADS.get(key);
+      if (existing && existing.samples && existing.samples.length) continue;
+      let pts = Array.isArray(e.pts) && e.pts.length >= 2 ? e.pts.map(p => [p.x, p.z]) : null;
+      if (!pts) {
+        const ca = citiesSrc[e.a], cb = citiesSrc[e.b];
+        if (!ca || !cb) continue;
+        pts = [[ca.gx, ca.gz], [cb.gx, cb.gz]];
+      }
+      const cum = [0]; for (let i = 1; i < pts.length; i++) cum[i] = cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      const hts = pts.map(p => roadPtY(p[0], p[1]));       // roadPtY/buildRoadSamples теперь модульные → видны и здесь (до buildWorld деградируют к рельефу)
+      const edge = { a: e.a, b: e.b, from: e.a, pts, cum, hts, len: cum[cum.length - 1] || e.len || 0 };
+      buildRoadSamples(edge);                              // всегда строим samples → hexRoadSample не вернёт null → юниты не исчезают
+      HEXROADS.set(key, edge);
+      added++;
+    }
+    if (added) console.info('[hex] добавлены fallback road samples:', added);
+    return added;
+  };
+  // быстрый сэмпл дороги С ВЫСОТОЙ и tangent/normal из precomputed rd.samples — для потока юнитов.
+  window.hexRoadSample = function hexRoadSample(a, b, f) {
+    const rd = HEXROADS.get(Math.min(a, b) + '_' + Math.max(a, b));
+    if (!rd || rd.len <= 0) return null;
+    let t = Math.max(0, Math.min(1, f));
+    if (rd.from !== a) t = 1 - t;                 // дорога запечена a→b; едем в обратную сторону → реверс
+    const samples = rd.samples, step = rd.sampleStep || 0.12;
+    if (!samples || !samples.length) return null;
+    const target = t * rd.len, raw = target / step, i = Math.max(0, Math.min(samples.length - 1, Math.floor(raw)));
+    const a0 = samples[i], b0 = samples[Math.min(samples.length - 1, i + 1)];
+    const lf = Math.max(0, Math.min(1, raw - i));
+    const dir = rd.from === a ? 1 : -1;
+    const tx = (a0.tx + (b0.tx - a0.tx) * lf) * dir;
+    const tz = (a0.tz + (b0.tz - a0.tz) * lf) * dir;
+    const l = Math.hypot(tx, tz) || 1;
+    return {
+      x: a0.x + (b0.x - a0.x) * lf,
+      z: a0.z + (b0.z - a0.z) * lf,
+      y: a0.y + (b0.y - a0.y) * lf,
+      tx: tx / l, tz: tz / l,
+      nx: -tz / l, nz: tx / l,
+    };
+  };
+  window.hexRoadLen = function hexRoadLen(a, b) {
+    const rd = HEXROADS.get(Math.min(a, b) + '_' + Math.max(a, b));
+    return rd ? rd.len : 0;
   };
   window.hexRoadPolyline = function hexRoadPolyline(a, b) {
     const rd = HEXROADS.get(Math.min(a, b) + '_' + Math.max(a, b));
@@ -1014,7 +1315,10 @@
     }
     for (const b of buckets.values()) {
       const im = new T.InstancedMesh(b.model.geo, b.mat, b.matrices.length);
-      im.castShadow = true; im.receiveShadow = true;
+      // 🌗 города — ДИНАМИЧЕСКИЕ кастеры: из статичной карты исключены (castShadow=false),
+      //    тень рисуют через отдельную карту (слой DYN_SHADOW_LAYER) — апгрейд перепекает только её
+      im.castShadow = false; im.receiveShadow = true;
+      im.layers.enable(typeof DYN_SHADOW_LAYER !== 'undefined' ? DYN_SHADOW_LAYER : 2);
       im.userData.perfGroup = b.group;
       for (let i = 0; i < b.matrices.length; i++) {
         im.setMatrixAt(i, b.matrices[i]);
@@ -1024,6 +1328,7 @@
       CITY_BATCH_GROUP.add(im);
     }
     scene.add(CITY_BATCH_GROUP);
+    if (typeof markDynShadowsDirty === 'function') markDynShadowsDirty();   // батчи городов пересобраны → одна перепечь динамической карты
   }
   window.rebuildCityBatchesIfDirty = rebuildCityBatchesIfDirty;
 

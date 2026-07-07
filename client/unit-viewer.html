@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Unit Viewer — осмотр моделек</title>
+<style>
+  html,body{margin:0;height:100%;background:#2a2f36;overflow:hidden;font-family:system-ui,sans-serif}
+  #hud{position:fixed;left:10px;top:10px;color:#cfe;background:rgba(0,0,0,.45);padding:8px 12px;border-radius:8px;font-size:13px;line-height:1.5;white-space:pre;z-index:10}
+  #err{position:fixed;left:10px;bottom:10px;color:#f88;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:6px;font-size:12px;max-width:80vw;z-index:10}
+  /* редактор трансформа деталей */
+  #panel{position:fixed;right:10px;top:10px;width:290px;color:#dfe;background:rgba(16,20,26,.92);border:1px solid #33415a;border-radius:10px;padding:10px 12px;font-size:12px;z-index:20;user-select:none}
+  #panel h4{margin:0 0 8px;font-size:13px;color:#8fd}
+  #panel .row{display:flex;align-items:center;gap:6px;margin:4px 0}
+  #panel .row label{width:26px;color:#9ab;text-align:right;font-variant-numeric:tabular-nums}
+  #panel input[type=range]{flex:1;min-width:0;accent-color:#4a90d9}
+  #panel input[type=number]{width:58px;background:#0d1116;border:1px solid #33415a;color:#dfe;border-radius:4px;padding:2px 4px;font-size:11px}
+  #panel .seg{display:flex;gap:4px;margin:4px 0}
+  #panel .seg button{flex:1;background:#1a2230;border:1px solid #33415a;color:#bcd;border-radius:5px;padding:4px 0;cursor:pointer;font-size:11px}
+  #panel .seg button.on{background:#2d5b8c;border-color:#4a90d9;color:#fff}
+  #panel select{width:100%;background:#0d1116;border:1px solid #33415a;color:#dfe;border-radius:5px;padding:3px}
+  #panel .act{display:flex;gap:6px;margin-top:8px}
+  #panel .act button{flex:1;background:#1a2230;border:1px solid #33415a;color:#cde;border-radius:5px;padding:5px 0;cursor:pointer;font-size:11px}
+  #panel .act button:hover{border-color:#4a90d9}
+  #panel .hint{color:#78899c;font-size:10px;margin-top:6px;line-height:1.4}
+</style>
+</head>
+<body>
+<div id="hud">загрузка…</div>
+<div id="err"></div>
+<div id="panel">
+  <h4>🛠 Трансформ деталей</h4>
+  <div class="seg" id="typeSeg"></div>
+  <select id="partSel"></select>
+  <div id="fields"></div>
+  <div class="act">
+    <button id="btnReset">Сброс детали</button>
+    <button id="btnCopy">Копировать JSON</button>
+  </div>
+  <div class="hint">Оси детали: X — вперёд, Y — вверх, Z — вбок. s — масштаб; rx/ry/rz — поворот (рад). У всадника: lift — посадка, fwd — сдвиг вперёд.</div>
+</div>
+
+<script src="vendor/three/three.r128.min.js"></script>
+<script src="vendor/three/GLTFLoader.r128.js"></script>
+<script>
+  // ── минимальный контекст, который нужен units.js на верхнем уровне ──
+  const T3 = THREE;
+  const OWNER_COL = { 0:0x3f6fc8, 1:0xc14a3a, 2:0x3f9e7e, 3:0xcaa233 };  // blue/red/green/yellow — как в игре
+  const errEl = document.getElementById('err');
+  window.addEventListener('error', e => { errEl.textContent = 'JS error: ' + (e.message||e); });
+</script>
+<!-- РЕАЛЬНЫЙ код сборки юнитов из игры: unitTypedSource / _equip / UNIT_EQUIP -->
+<script src="js/units.js"></script>
+
+<script>
+(function(){
+  const W = innerWidth, H = innerHeight;
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+  renderer.setSize(W, H);
+  renderer.setClearColor(0x2a2f36, 1);
+  document.body.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, W/H, 0.01, 100);
+
+  // свет как в игре: hemi + направленный
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3f47, 1.05));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir.position.set(3, 6, 2); scene.add(dir);
+  const dir2 = new THREE.DirectionalLight(0xffffff, 0.35);
+  dir2.position.set(-3, 2, -3); scene.add(dir2);
+
+  // земля + сетка + оси в мире
+  const grid = new THREE.GridHelper(6, 24, 0x556, 0x3a4048);
+  grid.position.y = 0; scene.add(grid);
+
+  const VIEW_SCALE = 3.2;              // равномерно увеличиваем всех для удобного осмотра (пропорции не меняются)
+  const SLOTS = { inf:-1.7, arc:0, cav:1.7 };  // три типа в ряд по X (шире — конь не наезжает на соседей)
+  const IDENTITY = new THREE.Matrix4();
+  const OWNER = 0;                     // синяя фракция
+
+  const unitGroups = {};              // type -> {group, box}
+
+  function discAt(x){                  // диск-«пятно» под юнитом на y=0 → видно, парит ли деталь
+    const d = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24),
+      new THREE.MeshBasicMaterial({color:0x00e0a0, transparent:true, opacity:0.16}));
+    d.rotation.x = -Math.PI/2; d.position.set(x, 0.002, 0); scene.add(d);
+  }
+
+  function buildUnit(type){
+    const x = SLOTS[type];
+    // снести прошлую сборку
+    if(unitGroups[type]){ scene.remove(unitGroups[type].group); }
+    const grp = new THREE.Group();
+    grp.position.set(x, 0, 0);
+    grp.scale.setScalar(VIEW_SCALE);
+    const src = (typeof unitTypedSource==='function') ? unitTypedSource(OWNER, type) : null;
+    if(!src){ errEl.textContent = 'unitTypedSource вернул null для '+type; return; }
+    const body = new THREE.InstancedMesh(src.geo, src.mat, 1);
+    body.count = 1; body.setMatrixAt(0, IDENTITY); body.instanceMatrix.needsUpdate = true;
+    grp.add(body);
+    if(src.accGeo){
+      const acc = new THREE.InstancedMesh(src.accGeo, src.accMat, 1);
+      acc.count = 1; acc.setMatrixAt(0, IDENTITY); acc.instanceMatrix.needsUpdate = true;
+      grp.add(acc);
+    }
+    // оси в основании юнита (X=красн вперёд, Y=зел вверх, Z=син вбок) + bbox
+    const ax = new THREE.AxesHelper(0.3); grp.add(ax);
+    scene.add(grp);
+    grp.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(grp);
+    // рамка bbox
+    const bh = new THREE.Box3Helper(box, 0x8899aa); scene.add(bh);
+    unitGroups[type] = { group: grp, box, bh };
+    return { type, size: box.getSize(new THREE.Vector3()), min: box.min.clone(), max: box.max.clone() };
+  }
+
+  function buildAll(){
+    const info = {};
+    for(const t of ['inf','arc','cav']){ info[t] = buildUnit(t); }
+    return info;
+  }
+
+  // старт после загрузки моделей пака
+  const ready = (typeof unitModelPromise!=='undefined' && unitModelPromise) ? unitModelPromise : Promise.resolve();
+  ready.then(()=>{
+    for(const t in SLOTS) discAt(SLOTS[t]);
+    const info = buildAll();
+    setView('all', 30, 15, 4.2);
+    document.getElementById('hud').textContent = 'готово. VV.view(target,az,el,dist) · VV.rebuild()';
+    window.__viewerInfo = info;
+  });
+
+  // ── камера-орбита: состояние + применение (мышь И preview_eval крутят одно и то же) ──
+  const cam = { az:30, el:16, dist:6.4, what:'all', target:new THREE.Vector3(0, 0.55, 0) };
+  function applyCam(){
+    const a = cam.az*Math.PI/180, e = cam.el*Math.PI/180, d = cam.dist, t = cam.target;
+    camera.position.set(t.x + d*Math.cos(e)*Math.sin(a), t.y + d*Math.sin(e), t.z + d*Math.cos(e)*Math.cos(a));
+    camera.lookAt(t);
+    document.getElementById('hud').textContent =
+      `${cam.what}  az=${cam.az.toFixed(0)}° el=${cam.el.toFixed(0)}° d=${cam.dist.toFixed(1)}\n`+
+      `ЛКМ — вращать · колесо — зум · ПКМ — сдвиг · дабл-клик — сброс`;
+  }
+  function setView(what, az, el, dist){
+    if(what){ cam.what = what;
+      const t = (what==='all') ? new THREE.Vector3(0, 0.55*VIEW_SCALE*0.34, 0)
+              : (unitGroups[what] ? unitGroups[what].box.getCenter(new THREE.Vector3()) : new THREE.Vector3());
+      cam.target.copy(t);
+    }
+    if(az!=null)cam.az=az; if(el!=null)cam.el=el; if(dist!=null)cam.dist=dist;
+    applyCam();
+  }
+
+  // ── мышь ──
+  const cv = renderer.domElement;
+  let drag = null;   // {btn, x, y}
+  cv.addEventListener('contextmenu', e=>e.preventDefault());
+  cv.addEventListener('pointerdown', e=>{ drag={btn:e.button, x:e.clientX, y:e.clientY}; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointerup',   e=>{ drag=null; });
+  cv.addEventListener('pointermove', e=>{
+    if(!drag)return;
+    const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY;
+    if(drag.btn===2 || e.shiftKey){                                    // ПКМ / Shift — панорама цели в плоскости экрана
+      const right=new THREE.Vector3(), up=new THREE.Vector3();
+      camera.matrixWorld.extractBasis(right, up, new THREE.Vector3());
+      const k = cam.dist*0.0016;
+      cam.target.addScaledVector(right, -dx*k).addScaledVector(up, dy*k);
+    } else {                                                            // ЛКМ — орбита
+      cam.az -= dx*0.4;
+      cam.el = Math.max(-88, Math.min(88, cam.el + dy*0.4));
+    }
+    applyCam();
+  });
+  cv.addEventListener('wheel', e=>{ e.preventDefault();
+    cam.dist = Math.max(0.4, Math.min(30, cam.dist*(1+e.deltaY*0.0012))); applyCam();
+  }, {passive:false});
+  cv.addEventListener('dblclick', ()=>{ setView('all', 30, 16, 6.4); });
+
+  window.VV = {
+    view: setView,
+    focus(what){ setView(what, cam.az, cam.el, what==='all'?6.4:3.4); },   // навести на тип, сохранив угол
+    rebuild(){ if(typeof window.__clearTypedUnitCache==='function')window.__clearTypedUnitCache(); const r=buildAll(); applyCam(); return r; },
+    info(){ const o={}; for(const t in unitGroups){ const b=unitGroups[t].box; o[t]={min:b.min.toArray().map(v=>+v.toFixed(3)), max:b.max.toArray().map(v=>+v.toFixed(3))}; } return o; },
+    scale: VIEW_SCALE, cam
+  };
+
+  // ── 🛠 редактор трансформа деталей: слайдеры → window.__unitTune → VV.rebuild ──
+  //    _equip читает q.s/x/y/z/rx/ry/rz из __unitTune[cfg] (если задан — целиком, поэтому храним ПОЛНЫЙ конфиг детали).
+  (function editor(){
+    const DEF = (typeof UNIT_EQUIP!=='undefined') ? JSON.parse(JSON.stringify(UNIT_EQUIP)) : {};
+    const LS_KEY = 'unitTune';
+    // автозагрузка правок из localStorage (переживают перезагрузку вкладки)
+    if(!window.__unitTune){ try{ const s=localStorage.getItem(LS_KEY); window.__unitTune = s?JSON.parse(s):{}; }catch(e){ window.__unitTune={}; } }
+    const persist = ()=>{ try{ localStorage.setItem(LS_KEY, JSON.stringify(window.__unitTune)); }catch(e){} };
+    const PARTS = { inf:['helmet','sword','shield'], arc:['bow'], cav:['rider','helmet','swordCav','shieldCav'] };
+    // поля и диапазоны на деталь
+    const R = { s:[0.2,2,0.01], x:[-1.5,1.5,0.02], y:[-1.2,1.5,0.02], z:[-1.6,1.6,0.02],
+                rx:[-3.2,3.2,0.05], ry:[-3.2,3.2,0.05], rz:[-3.2,3.2,0.05],
+                lift:[0,1.2,0.01], fwd:[-0.4,0.4,0.01] };
+    const fieldsFor = (p)=> p==='rider' ? ['s','lift','fwd'] : ['s','x','y','z','rx','ry','rz'];
+    // эффективный конфиг детали = дефолт ∪ текущий тюнинг
+    const eff = (p)=> Object.assign({}, DEF[p]||{}, window.__unitTune[p]||{});
+    let curType='cav', curPart='rider';
+
+    const typeSeg=document.getElementById('typeSeg'), partSel=document.getElementById('partSel'), fieldsEl=document.getElementById('fields');
+    ['inf','arc','cav'].forEach(t=>{ const b=document.createElement('button'); b.textContent=t; b.dataset.t=t;
+      b.onclick=()=>{ curType=t; curPart=PARTS[t][0]; syncType(); VV.focus(t); }; typeSeg.appendChild(b); });
+
+    function syncType(){
+      [...typeSeg.children].forEach(b=>b.classList.toggle('on', b.dataset.t===curType));
+      partSel.innerHTML=''; PARTS[curType].forEach(p=>{ const o=document.createElement('option'); o.value=p; o.textContent=p; partSel.appendChild(o); });
+      partSel.value=curPart; buildFields();
+    }
+    partSel.onchange=()=>{ curPart=partSel.value; buildFields(); };
+
+    function setField(field, val){
+      const cfg = eff(curPart); cfg[field] = val;      // храним полный конфиг (иначе _equip возьмёт только тюнинг)
+      window.__unitTune[curPart] = cfg;
+      persist();                                        // автосохранение в localStorage
+      VV.rebuild();
+    }
+    function buildFields(){
+      fieldsEl.innerHTML=''; const cfg=eff(curPart);
+      for(const f of fieldsFor(curPart)){
+        const [min,max,step]=R[f]; const v = cfg[f]!=null?cfg[f]:0;
+        const row=document.createElement('div'); row.className='row';
+        const lab=document.createElement('label'); lab.textContent=f;
+        const rng=document.createElement('input'); rng.type='range'; rng.min=min; rng.max=max; rng.step=step; rng.value=v;
+        const num=document.createElement('input'); num.type='number'; num.step=step; num.value=+v.toFixed(3);
+        rng.oninput=()=>{ num.value=rng.value; setField(f, +rng.value); };
+        num.oninput=()=>{ rng.value=num.value; setField(f, +num.value); };
+        row.append(lab,rng,num); fieldsEl.appendChild(row);
+      }
+    }
+    document.getElementById('btnReset').onclick=()=>{ delete window.__unitTune[curPart]; persist(); VV.rebuild(); buildFields(); };
+    document.getElementById('btnCopy').onclick=()=>{
+      const merged={}; for(const p in DEF)merged[p]=eff(p);                     // дефолты + все изменения
+      const body=Object.entries(merged).map(([k,c])=>{
+        const inner=Object.entries(c).map(([f,v])=>`${f}:${typeof v==='number'?+v.toFixed(3):v}`).join(', ');
+        return `  ${k}: {${inner}},`;
+      }).join('\n');
+      const txt=`const UNIT_EQUIP={\n${body}\n};`;
+      navigator.clipboard?.writeText(txt).then(()=>flash('скопировано в буфер'), ()=>flash('скопируй из консоли (см. лог)'));
+      console.log('%c[UNIT_EQUIP]','color:#8fd', '\n'+txt);
+    };
+    function flash(m){ const h=document.getElementById('hud'); const o=h.textContent; h.textContent=m; setTimeout(()=>applyCam(),1200); }
+
+    // поднять панель после сборки моделей (DEF снят с UNIT_EQUIP, unitGroups готовы)
+    const start=()=>{ if(!Object.keys(unitGroups).length){ setTimeout(start,120); return; } syncType(); };
+    start();
+    window.VV.editor = { setType:(t)=>{curType=t;curPart=PARTS[t][0];syncType();}, refresh:buildFields };
+  })();
+
+  function loop(){ requestAnimationFrame(loop); renderer.render(scene, camera); }
+  loop();
+  addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+})();
+</script>
+</body>
+</html>

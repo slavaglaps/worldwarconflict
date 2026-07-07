@@ -56,7 +56,7 @@ class GameRoom extends Room {
       cs.gx = c.gx; cs.gz = c.gz; cs.size = c.size; cs.country = c.country; cs.capital = c.capital ? 1 : 0;
       cs.shipyard = c.isShipyard ? 1 : 0; cs.airport = c.isAirport ? 1 : 0;
       cs.owner = c.owner; cs.units = Math.round(c.units); cs.spec = 0; cs.tier = 0;
-      cs.prodTier = 0; cs.defTier = 0; cs.atkTier = 0; cs.occ = 0;
+      cs.prodTier = 0; cs.defTier = 0; cs.atkTier = 0; cs.occ = 0; cs.occFrom = 255;
       this.state.cities.set(String(c.idx), cs);
     }
     // экономика (gold/manpower/politPts) НЕ в broadcast-стейте — шлётся per-client в _sendEcon()
@@ -85,6 +85,7 @@ class GameRoom extends Room {
     cmd('bship',    (f, m) => this.sim.cmdBuildShip(f, intOrNull(m.city)));
     cmd('bplane',   (f, m) => this.sim.cmdBuildPlane(f, intOrNull(m.city)));
     cmd('shipmove', (f, m) => this.sim.cmdShipMove(f, intOrNull(m.id), finiteOrNull(m.x), finiteOrNull(m.z)));
+    cmd('planemove', (f, m) => this.sim.cmdPlaneMove(f, intOrNull(m.id), finiteOrNull(m.x), finiteOrNull(m.z)));
     cmd('airorder', (f, m) => this.sim.cmdAirOrder(f, m.recall ? -1 : intOrNull(m.city), finiteOrNull(m.x), finiteOrNull(m.z)));
     cmd('aa',       (f, m) => this.sim.cmdBuildAA(f, intOrNull(m.city)));
     cmd('yard',     (f, m) => this.sim.cmdBuildYard(f, intOrNull(m.city), YARD_KIND[m.kind]));

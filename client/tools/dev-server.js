@@ -886,9 +886,9 @@ function routeForRequest(reqUrl) {
   const parsed = new URL(reqUrl, 'http://localhost');
   const pathname = decodeURIComponent(parsed.pathname);
 
-  // Normal access: show the welcome menu (defaults to Farm)
-  if (pathname === '/') return { redirect: '/tiny-world-builder' };
-  if (pathname === '/tiny-world-builder') return { file: path.resolve(root, 'tiny-world-builder.html') };
+  // Корень открывает игру (раньше редиректил на /tiny-world-builder — он больше не грузится при старте)
+  if (pathname === '/') return { redirect: '/game-hex.html' };
+  if (pathname === '/tiny-world-builder') return { file: path.resolve(root, 'tiny-world-builder.html') };  // прямой доступ остаётся, но авто-запуска нет
 
   const resolved = path.resolve(root, '.' + pathname);
   if (!resolved.startsWith(root + path.sep) && resolved !== root) return null;
@@ -1127,9 +1127,7 @@ server.on('error', (err) => {
 });
 
 server.listen(port, '127.0.0.1', () => {
-  console.log(`Tiny World dev server: http://localhost:${port}/tiny-world-builder`);
-  console.log(`  → Shows welcome menu (defaults to Farm preset)`);
-  console.log(`  → Click "Vehicle Demo" button for cars/trucks`);
-  console.log(`  Or append ?demo=vehicles to jump straight to vehicle demo`);
+  console.log(`WWC dev server: http://localhost:${port}/  → game-hex.html`);
+  console.log(`  (tiny-world-builder всё ещё доступен по /tiny-world-builder, но не грузится при старте)`);
   console.log('Press Ctrl+C to stop.');
 });

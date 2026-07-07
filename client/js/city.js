@@ -29,6 +29,8 @@ class City{
     this.prodTier=0; this.defTier=0; this.atkTier=0;
     this.isShipyard=SHIPYARD_NAMES.has(CITY_NAMES[idx]); // верфь
     this.isAirport=AIRPORT_NAMES.has(CITY_NAMES[idx]);   // аэропорт
+    this.hasShipyard=false;                              // внешняя верфь у обычного города
+    this.hasAirport=false;                               // внешний аэропорт у обычного города
     this.shipQueue=0; this.shipTimer=0;   // очередь кораблей
     this.planeQueue=0; this.planeTimer=0; // очередь самолётов
     this.units = 8+this.size*4; // стартовый гарнизон по размеру
@@ -97,6 +99,9 @@ class City{
   get queued(){return this.batches.reduce((s,b)=>s+b.count,0);}
 
   buildMeshes(){
+    // 🌗 город — ДИНАМИЧЕСКИЙ кастер: после сборки детей (микротаск) уходит в отдельную карту теней
+    //    (castShadow=false — из статичной исключён) и перепекает только её (~0.4M, статика 1.7M не трогается)
+    if(typeof scheduleCityShadowRefresh==='function')scheduleCityShadowRefresh(this);
     while(this.buildGroup.children.length)this.buildGroup.remove(this.buildGroup.children[0]);
     this.mats=[];
     const col=OWNER_COL[this.owner], cold=OWNER_COLD[this.owner];
@@ -394,7 +399,15 @@ class City{
     const def=this.siege?'<span style="color:#ff6a4a">🛡</span>':'';
     const occm=this.occ?`<span style="color:#${(OWNER_COL[this.occFrom]||0).toString(16).padStart(6,'0')};text-shadow:0 0 2px #000">⚑</span>`:''; // занят (флаг де-юре владельца)
     const aa=this.aa>0?`<span class="aa">🚀${this.aa}</span>`:''; // 🚀 зенитки (ПВО)
-    setLabHTML(this.lab,`${occm}${def}${Math.round(this.units)}${aa}${q>0?`<span class="q">⏳${q}</span>`:''}${nm}`);
+    // 👥 гарнизон по типам (⚔ пехота · 🏹 лучники · 🐎 конница); без comp — просто число
+    let garr=String(Math.round(this.units));
+    if(this.comp){ const parts=[];
+      if(this.comp.inf>=0.5)parts.push('⚔'+Math.round(this.comp.inf));
+      if(this.comp.arc>=0.5)parts.push('🏹'+Math.round(this.comp.arc));
+      if(this.comp.cav>=0.5)parts.push('🐎'+Math.round(this.comp.cav));
+      if(parts.length)garr=parts.join(' ');
+    }
+    setLabHTML(this.lab,`${occm}${def}${garr}${aa}${q>0?`<span class="q">⏳${q}</span>`:''}${nm}`);
     setLabColor(this.lab,'#06121e');
   }
   // осаждающие армии видны как сферы у города, дрожат и светятся красным (как полевой бой)

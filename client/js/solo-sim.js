@@ -17,7 +17,9 @@ function projectLocalSim(sim, onMsg) {
       Math.round(cc.queued || 0), Math.round(su), so,
       b0 ? Math.round(b0.time * 10) : 0, b0 ? Math.round(b0.elapsed * 10) : 0,
       cc.shipQueue | 0, Math.round((cc.shipTimer || 0) * 10), cc.planeQueue | 0, Math.round((cc.planeTimer || 0) * 10),
-      cc.branchTier('prod'), cc.branchTier('def'), cc.branchTier('atk')]);
+      cc.branchTier('prod'), cc.branchTier('def'), cc.branchTier('atk'),
+      cc.comp ? Math.round(cc.comp.inf) : Math.round(cc.units), cc.comp ? Math.round(cc.comp.arc) : 0, cc.comp ? Math.round(cc.comp.cav) : 0,
+      cc.occ && cc.occFrom != null ? cc.occFrom : 255]);   // [18..20] 👥 состав, [21] occFrom
   }
   const rel = []; for (const k in sim.relations) rel.push([k, sim.relations[k]]);             // 'war'|'ally'
   const ws = []; for (const k in sim.warSince) if (sim.relations[k] === 'war') ws.push([k, sim.warSince[k]]);
@@ -31,15 +33,17 @@ function projectLocalSim(sim, onMsg) {
   const e = [];
   for (const s of sim.squads) {
     let x = s.x, z = s.z;                                          // прямая интерполяция ребра…
+    let ea = null, eb = null, ef = 0;                              // текущее ребро + доля пути — для потока юнитов (UNIT_STREAM)
     if (typeof hexRoadPos === 'function' && s.path) {              // …но рисуем ВДОЛЬ визуальной дороги — и В БОЮ тоже (иначе прыжок с дороги при сцепке)
       const a = s.path[s.hop], b = s.path[s.hop + 1];
       if (a != null && b != null) {
         const ed = sim.edgeBetween(a, b), frac = ed && ed.len ? Math.min(1, s.prog / ed.len) : 0;
         const rp = hexRoadPos(a, b, frac);
-        if (rp) { x = rp.x; z = rp.z; }
+        if (rp) { x = rp.x; z = rp.z; ea = a; eb = b; ef = frac; }
       }
     }
-    e.push(['sq' + s.id, 0, s.owner, x, gy(x, z) + 0.2, z, Math.round(s.fcount), s.foe ? 1 : 0]);  // [7]=fighting → боевая анимация на клиенте
+    e.push(['sq' + s.id, 0, s.owner, x, gy(x, z) + 0.2, z, Math.round(s.fcount), s.foe ? 1 : 0, ea, eb, ef,
+      s.comp ? Math.round(s.comp.inf) : Math.round(s.fcount), s.comp ? Math.round(s.comp.arc) : 0, s.comp ? Math.round(s.comp.cav) : 0]);  // [7]=fighting; [8..10]=ребро a,b+frac; [11..13] 👥 состав
   }
   for (const s of sim.ships) e.push(['sh' + s.id, 1, s.owner, s.x, WY, s.z, 0]);
   for (const p of sim.planes) e.push(['pl' + p.id, 2, p.owner, p.x, PA, p.z, 0]);
@@ -104,6 +108,7 @@ async function initLocalSim() {
   try {
     _lsApi = await loadServerSim();                      // настоящий server/sim/ в браузере
     _lsMap = await (await fetch('sim/map-data.json')).json();
+    if (typeof ensureHexRoadSamplesForMap === 'function') ensureHexRoadSamplesForMap(_lsMap);
     _lsReady = true;
     const _prev = window.selectCountry;                  // создавать/пересоздавать сим при выборе страны
     window.selectCountry = function (c) { _prev(c); startLocalSim(); };
@@ -132,6 +137,7 @@ function startLocalSim() {
   const balance = _lsApi.makeBalance({ factionDefault: { gold: 200, polit: 80, heroes: [] } });   // прод-старты как на сервере; героев игрок призывает сам
   LOCALSIM = new _lsApi.Sim({ map: simMapForClient(_lsMap), balance, ai: true });
   LOCALSIM.humanFactions = new Set([PLAYER]);            // ИИ не управляет игроком
+  LOCALSIM._clientTowerDmg = true;                        // соло: урон башен по юнитам наносит КЛИЕНТ в момент попадания трассера (сим только выбирает цель)
   if (typeof LOCALSIM.clearFactionHeroes === 'function') LOCALSIM.clearFactionHeroes(PLAYER);
   _lsHeroSig = '';
   _lsTechSig = '';
@@ -154,7 +160,7 @@ function localSimCmd(o) {                                 // MP.cmd в режи�
   const s = LOCALSIM, f = PLAYER; if (!s) { _lsPendingCmds.push({ ...o }); if (_lsPendingCmds.length > 40) _lsPendingCmds.shift(); return; }
   try {
     switch (o.cmd) {
-      case 'buy':      s.cmdBuy(f, _LS_I(o.c), String(o.spec)); break;
+      case 'buy':      s.cmdBuy(f, _LS_I(o.c), String(o.spec), o.unit ? String(o.unit) : undefined); break;   // 👥 unit = тип найма
       case 'upg':      s.cmdUpgrade(f, _LS_I(o.c), _LS_TRACK[o.track]); break;
       case 'army':     s.cmdSend(f, _LS_I(o.a), _LS_I(o.b), (o.pct || 50) / 100); break;
       case 'war':      s.cmdWar(f, _LS_I(o.tg)); break;
@@ -166,6 +172,7 @@ function localSimCmd(o) {                                 // MP.cmd в режи�
       case 'bship':    s.cmdBuildShip(f, _LS_I(o.c)); break;
       case 'bplane':   s.cmdBuildPlane(f, _LS_I(o.c)); break;
       case 'shipmove': (o.ids || []).forEach((id) => s.cmdShipMove(f, parseInt(String(id).replace(/\D/g, '')) || 0, o.x, o.z)); break;
+      case 'planemove': (o.ids || []).forEach((id) => s.cmdPlaneMove(f, parseInt(String(id).replace(/\D/g, '')) || 0, o.x, o.z)); break;
       case 'yard':     s.cmdBuildYard(f, _LS_I(o.c), o.kind); break;
       case 'airorder': s.cmdAirOrder(f, o.recall ? -1 : _LS_I(o.cityIdx), o.x, o.z); break;
       case 'aa':       s.cmdBuildAA(f, _LS_I(o.c)); break;

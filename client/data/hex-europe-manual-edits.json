@@ -1,357 +1,377 @@
 {
   "version": 1,
-  "updatedAt": "2026-07-02T19:33:16.677Z",
+  "updatedAt": "2026-07-07T13:08:58.725Z",
   "edits": [
     {
-      "q": 42,
-      "r": 114,
+      "q": 40,
+      "r": 98,
       "asset": "roadA",
-      "rot": 240,
-      "height": 0.75,
-      "country": "Франция",
-      "biome": "summer",
-      "col": 14221176
+      "rot": 300,
+      "height": 0,
+      "country": "Бельгия",
+      "biome": "burgundyClay",
+      "col": 10115940
     },
     {
-      "q": 43,
-      "r": 113,
-      "asset": "roadB",
-      "rot": 0,
+      "q": 40,
+      "r": 99,
+      "asset": "roadALow",
+      "rot": 300,
       "height": 0,
-      "country": "Франция",
-      "biome": "summer",
-      "col": 14221176
-    },
-    {
-      "q": 43,
-      "r": 114,
-      "asset": "grass",
-      "rot": 0,
-      "height": 0,
-      "country": "Франция",
-      "biome": "summer",
-      "col": 14221176
+      "country": "Бельгия",
+      "biome": "burgundyClay",
+      "col": 10115940
     },
     {
       "q": 39,
-      "r": 114,
-      "asset": "roadA",
-      "rot": 0,
-      "height": 0.75,
-      "country": "Франция",
-      "biome": "summer",
-      "col": 14221176
-    },
-    {
-      "q": 56,
-      "r": 109,
+      "r": 97,
       "asset": "roadF",
       "rot": 300,
       "height": 0,
-      "country": "Австро-Венгерская империя",
-      "biome": "alpineStone",
-      "col": 11123145
+      "country": "Бельгия",
+      "biome": "burgundyClay",
+      "col": 10115940
     },
     {
-      "q": 96,
-      "r": 151,
+      "q": 39,
+      "r": 98,
+      "asset": "roadA",
+      "rot": 240,
+      "height": 0,
+      "country": "Бельгия",
+      "biome": "burgundyClay",
+      "col": 10115940
+    },
+    {
+      "q": 39,
+      "r": 99,
+      "asset": "grass",
+      "rot": 300,
+      "height": 0,
+      "country": "Бельгия",
+      "biome": "burgundyClay",
+      "col": 10115940
+    },
+    {
+      "q": 39,
+      "r": 96,
+      "asset": "roadA",
+      "rot": 300,
+      "height": 0,
+      "country": "Бельгия",
+      "biome": "burgundyClay",
+      "col": 10115940
+    },
+    {
+      "q": 38,
+      "r": 97,
+      "asset": "grass",
+      "rot": 240,
+      "height": 0,
+      "country": "Бельгия",
+      "biome": "burgundyClay",
+      "col": 10115940
+    },
+    {
+      "q": 38,
+      "r": 98,
+      "asset": "roadA",
+      "rot": 300,
+      "height": 0,
+      "country": "Бельгия",
+      "biome": "burgundyClay",
+      "col": 10115940
+    },
+    {
+      "q": 37,
+      "r": 97,
+      "asset": "roadF",
+      "rot": 300,
+      "height": 0,
+      "country": "Бельгия",
+      "biome": "burgundyClay",
+      "col": 10115940
+    },
+    {
+      "q": 41,
+      "r": 94,
+      "asset": "roadE",
+      "rot": 120,
+      "height": 0,
+      "country": "Бельгия",
+      "biome": "burgundyClay",
+      "col": 10115940
+    },
+    {
+      "q": 58,
+      "r": 92,
+      "asset": "roadALow",
+      "rot": 240,
+      "height": 0,
+      "country": "Германия",
+      "biome": "basalt",
+      "col": 8093574
+    },
+    {
+      "q": 21,
+      "r": 89,
+      "asset": "roadA",
+      "rot": 120,
+      "height": 0,
+      "country": "Британия",
+      "biome": "darkForest",
+      "col": 3111493
+    },
+    {
+      "q": 21,
+      "r": 88,
       "asset": "roadB",
       "rot": 240,
       "height": 0,
-      "country": "Турция",
-      "biome": "anatolia",
-      "col": 14068328
+      "country": "Британия",
+      "biome": "darkForest",
+      "col": 3111493
     },
     {
-      "q": 96,
+      "q": 21,
+      "r": 87,
+      "asset": "roadA",
+      "rot": 240,
+      "height": 0,
+      "country": "Британия",
+      "biome": "darkForest",
+      "col": 3111493
+    },
+    {
+      "q": 22,
+      "r": 86,
+      "asset": "roadB",
+      "rot": 60,
+      "height": 0,
+      "country": "Британия",
+      "biome": "darkForest",
+      "col": 3111493
+    },
+    {
+      "q": 22,
+      "r": 87,
+      "asset": "grass",
+      "rot": 60,
+      "height": 0,
+      "country": "Британия",
+      "biome": "darkForest",
+      "col": 3111493
+    },
+    {
+      "q": 22,
+      "r": 88,
+      "asset": "grass",
+      "rot": 240,
+      "height": 0,
+      "country": "Британия",
+      "biome": "darkForest",
+      "col": 3111493
+    },
+    {
+      "q": 136,
+      "r": 147,
+      "asset": "roadA",
+      "rot": 180,
+      "height": 0,
+      "country": "Армения",
+      "biome": "apricotTuff",
+      "col": 13141079
+    },
+    {
+      "q": 137,
+      "r": 147,
+      "asset": "roadA",
+      "rot": 0,
+      "height": 0,
+      "country": "Армения",
+      "biome": "apricotTuff",
+      "col": 13141079
+    },
+    {
+      "q": 138,
+      "r": 147,
+      "asset": "roadA",
+      "rot": 180,
+      "height": 0,
+      "country": "Армения",
+      "biome": "apricotTuff",
+      "col": 13141079
+    },
+    {
+      "q": 139,
+      "r": 147,
+      "asset": "roadE",
+      "rot": 0,
+      "height": 0,
+      "country": "Армения",
+      "biome": "apricotTuff",
+      "col": 13141079
+    },
+    {
+      "q": 136,
+      "r": 146,
+      "asset": "roadB",
+      "rot": 60,
+      "height": 0,
+      "country": "Армения",
+      "biome": "apricotTuff",
+      "col": 13141079
+    },
+    {
+      "q": 65,
+      "r": 57,
+      "asset": "roadA",
+      "rot": 180,
+      "height": 0,
+      "country": "Швеция",
+      "biome": "winter",
+      "col": 16055295
+    },
+    {
+      "q": 65,
+      "r": 56,
+      "asset": "roadA",
+      "rot": 240,
+      "height": 0,
+      "country": "Швеция",
+      "biome": "winter",
+      "col": 16055295
+    },
+    {
+      "q": 79,
+      "r": 12,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Финляндия",
+      "biome": "winter",
+      "col": 16055295
+    },
+    {
+      "q": 60,
+      "r": 158,
+      "asset": "roadA",
+      "rot": 180,
+      "height": 0,
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
+    },
+    {
+      "q": 63,
+      "r": 159,
+      "asset": "roadA",
+      "rot": 240,
+      "height": 0,
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
+    },
+    {
+      "q": 64,
+      "r": 158,
+      "asset": "roadB",
+      "rot": 180,
+      "height": 0,
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
+    },
+    {
+      "q": 65,
+      "r": 158,
+      "asset": "roadB",
+      "rot": 0,
+      "height": 0,
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
+    },
+    {
+      "q": 63,
+      "r": 158,
+      "asset": "grass",
+      "rot": 0,
+      "height": 0,
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
+    },
+    {
+      "q": 62,
+      "r": 158,
+      "asset": "roadB",
+      "rot": 120,
+      "height": 0,
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
+    },
+    {
+      "q": 61,
+      "r": 158,
+      "asset": "roadA",
+      "rot": 0,
+      "height": 0,
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
+    },
+    {
+      "q": 60,
+      "r": 159,
+      "asset": "grass",
+      "rot": 300,
+      "height": 0,
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
+    },
+    {
+      "q": 61,
+      "r": 159,
+      "asset": "grass",
+      "rot": 300,
+      "height": 0,
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
+    },
+    {
+      "q": 62,
       "r": 159,
       "asset": "roadA",
       "rot": 300,
       "height": 0,
-      "country": "Турция",
-      "biome": "anatolia",
-      "col": 14068328
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
     },
     {
-      "q": 97,
+      "q": 62,
       "r": 160,
-      "asset": "roadA",
+      "asset": "grass",
       "rot": 300,
       "height": 0,
-      "country": "Турция",
-      "biome": "anatolia",
-      "col": 14068328
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
     },
     {
-      "q": 100,
-      "r": 161,
-      "asset": "roadA",
-      "rot": 180,
-      "height": 0,
-      "country": "Турция",
-      "biome": "anatolia",
-      "col": 14068328
-    },
-    {
-      "q": 101,
-      "r": 161,
-      "asset": "roadA",
-      "rot": 180,
-      "height": 0,
-      "country": "Турция",
-      "biome": "anatolia",
-      "col": 14068328
-    },
-    {
-      "q": 103,
-      "r": 161,
-      "asset": "roadA",
-      "rot": 180,
-      "height": 0,
-      "country": "Турция",
-      "biome": "anatolia",
-      "col": 14068328
-    },
-    {
-      "q": 104,
-      "r": 161,
-      "asset": "roadA",
-      "rot": 180,
-      "height": 0,
-      "country": "Турция",
-      "biome": "anatolia",
-      "col": 14068328
-    },
-    {
-      "q": 105,
-      "r": 161,
-      "asset": "roadB",
-      "rot": 0,
-      "height": 0,
-      "country": "Турция",
-      "biome": "anatolia",
-      "col": 14068328
-    },
-    {
-      "q": 113,
+      "q": 63,
       "r": 160,
-      "asset": "roadB",
-      "rot": 120,
-      "height": 0,
-      "country": "Турция",
-      "biome": "anatolia",
-      "col": 14068328
-    },
-    {
-      "q": 113,
-      "r": 161,
-      "asset": "roadA",
-      "rot": 120,
-      "height": 0,
-      "country": "Турция",
-      "biome": "anatolia",
-      "col": 14068328
-    },
-    {
-      "q": 110,
-      "r": 122,
-      "asset": "grass",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 110,
-      "r": 121,
-      "asset": "roadA",
+      "asset": "roadC",
       "rot": 300,
       "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 111,
-      "r": 121,
-      "asset": "grass",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 112,
-      "r": 122,
-      "asset": "grass",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 111,
-      "r": 122,
-      "asset": "grass",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 110,
-      "r": 123,
-      "asset": "grass",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 111,
-      "r": 123,
-      "asset": "roadA",
-      "rot": 300,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 112,
-      "r": 124,
-      "asset": "roadD",
-      "rot": 60,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 111,
-      "r": 125,
-      "asset": "roadA",
-      "rot": 240,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 111,
-      "r": 126,
-      "asset": "grass",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 110,
-      "r": 127,
-      "asset": "grass",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 110,
-      "r": 126,
-      "asset": "grass",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 110,
-      "r": 125,
-      "asset": "grass",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 113,
-      "r": 124,
-      "asset": "roadA",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 114,
-      "r": 124,
-      "asset": "roadA",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 115,
-      "r": 124,
-      "asset": "roadA",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 116,
-      "r": 124,
-      "asset": "roadA",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 118,
-      "r": 124,
-      "asset": "roadA",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 124,
-      "r": 127,
-      "asset": "roadA",
-      "rot": 60,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
-    },
-    {
-      "q": 122,
-      "r": 124,
-      "asset": "roadB",
-      "rot": 0,
-      "height": 0,
-      "country": "Россия",
-      "biome": "volcanic",
-      "col": 4078135
+      "country": "Италия",
+      "biome": "terracotta",
+      "col": 13203792
     }
   ],
-  "savedAt": "2026-07-02T19:33:19.496Z"
+  "savedAt": "2026-07-07T13:09:03.926Z"
 }

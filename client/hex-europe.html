@@ -74,6 +74,25 @@
   #cityEditor .row2 { display: grid; grid-template-columns: 1fr 92px; gap: 6px; }
   #cityEditor .danger { color: #ffd1ca; border-color: rgba(231,76,60,.38); }
   #cityEditor .good { color: #d8ffe7; border-color: rgba(76,201,120,.38); }
+  #pathEditor {
+    position: fixed; top: 12px; right: 12px; z-index: 14; width: 330px; color: #e8edf2;
+    background: rgba(16,20,27,.84); border: 1px solid rgba(255,255,255,.12); border-radius: 10px;
+    padding: 10px; display: none; gap: 8px; flex-direction: column; backdrop-filter: blur(6px);
+    box-shadow: 0 12px 32px rgba(0,0,0,.28); user-select: none;
+  }
+  #pathEditor.on { display: flex; }
+  #pathEditor .title { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700; }
+  #pathEditor .meta { color: #93a1b0; font-size: 11px; line-height: 1.35; min-height: 30px; }
+  #pathEditor select, #pathEditor button {
+    width: 100%; background: rgba(28,36,47,.92); color: #e8edf2; border: 1px solid rgba(255,255,255,.14);
+    border-radius: 8px; padding: 7px 9px; font-size: 12px;
+  }
+  #pathEditor button { cursor: pointer; }
+  #pathEditor button:hover { background: rgba(46,59,76,.96); }
+  #pathEditor .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px; }
+  #pathEditor .danger { color: #ffd1ca; border-color: rgba(231,76,60,.38); }
+  #pathEditor .good { color: #d8ffe7; border-color: rgba(76,201,120,.38); }
+  #pathEditor button.on { background: rgba(47,111,214,.62); border-color: rgba(101,165,255,.7); }
   #lightEditor {
     position: fixed; top: 12px; right: 12px; z-index: 60; width: 340px; max-height: calc(100vh - 24px);
     color: #e8edf2; background: rgba(16,20,27,.86); border: 1px solid rgba(255,255,255,.12);
@@ -180,6 +199,9 @@
   <button id="bDecor" class="on">декор</button>
   <button id="bWater">вода</button>
   <button id="bGraph">граф</button>
+  <button id="bGraphEdges">ребра</button>
+  <button id="bGraphPaths">пути</button>
+  <button id="bPathEdit">пути-редактор</button>
   <button id="bHeight">высоты</button>
   <button id="bEdit">редактор</button>
   <button id="bDecorEdit">декор-редактор</button>
@@ -296,6 +318,27 @@
     <button id="cityExport">CITY_LIST</button>
   </div>
   <div class="meta" id="cityMeta">выбери город или нажми “новый”, затем кликни по hex</div>
+</div>
+<div id="pathEditor">
+  <div class="title"><span>Граф дорог</span><span id="pathEdCount">0</span></div>
+  <div id="pathCountryHead" style="display:flex;gap:6px;align-items:center;font-size:11px;color:#93a1b0;margin:2px 0;">
+    <span>Страны:</span><button id="pathCountryAll" type="button" style="font-size:11px;padding:1px 6px;">все</button><button id="pathCountryNone" type="button" style="font-size:11px;padding:1px 6px;">никого</button>
+  </div>
+  <div id="pathCountryBox" style="max-height:118px;overflow-y:auto;background:rgba(20,28,40,.5);border-radius:6px;padding:3px 4px;margin-bottom:6px;"></div>
+  <select id="pathCountry" style="display:none"></select>
+  <div class="grid">
+    <button id="pathNewPoint" class="good">＋ ответвление</button>
+    <button id="pathModeAdd" class="good">＋ на ребре</button>
+    <button id="pathConnectEdge">🔗 ребро</button>
+    <button id="pathMerge">⛓ объединить</button>
+    <button id="pathConnect">🏙 город</button>
+    <button id="pathDeletePoint" class="danger">удалить узел</button>
+    <button id="pathDeleteEdge" class="danger">удалить ребро</button>
+    <button id="pathReset" class="danger">пересобрать</button>
+    <button id="pathSave" class="good">сохранить</button>
+  </div>
+  <button id="pathToGame" class="good">💾 Сохранить карту в игру</button>
+  <div class="meta" id="pathMeta">клик по пустому — новый узел; по узлу/ребру — выбрать; тяни узел. «＋ ответвление» — отросток от узла. «＋ на ребре» — узел в середину ребра. «🔗 ребро»/«⛓ объединить» — выбери узел, жми, кликни второй (ребро / слить в один). «🏙 город» — привязать к ближайшему. Города золотые. «💾 в игру» = граф → дороги.</div>
 </div>
 <div id="editor">
   <div class="title"><span>Ручной редактор</span><span id="edCount">0</span></div>
@@ -2549,8 +2592,18 @@
   const visibleEntrances = cityCellsByIndex.filter((c, i) => c && (roadDegree[i] > 0 || hasVisibleRoadAccess(c) || visibleDegree[i] > 0)).length;
   const graphOverlay = new THREE.Group();
   graphOverlay.visible = false;
+  graphOverlay.name = 'road-graph-debug';
   scene.add(graphOverlay);
+  const graphEdgesOverlay = new THREE.Group();
+  graphEdgesOverlay.name = 'road-graph-debug-edges';
+  graphEdgesOverlay.visible = false;
+  graphOverlay.add(graphEdgesOverlay);
+  const graphPathsOverlay = new THREE.Group();
+  graphPathsOverlay.name = 'road-graph-debug-paths';
+  graphPathsOverlay.visible = false;
+  graphOverlay.add(graphPathsOverlay);
   const graphPos = [];
+  const graphEdgePos = [];
   const graphYCache = new Map();
   const graphY = (wx, wz) => {
     const key = worldCellKey(wx, wz);
@@ -2560,23 +2613,33 @@
     graphYCache.set(key, y);
     return y;
   };
+  const pushGraphSegment = (out, ax, az, bx, bz, lift = 0) => {
+    out.push(ax, graphY(ax, az) + lift, az, bx, graphY(bx, bz) + lift, bz);
+  };
+  for (const [ai, bi] of networkLinks) {
+    const a = cityCellsByIndex[ai], b = cityCellsByIndex[bi];
+    if (!a || !b) continue;
+    pushGraphSegment(graphEdgePos, a.wx, a.wz, b.wx, b.wz, 0.22);
+  }
   for (const rd of roadPaths) {
     const pts = Array.isArray(rd.pts) ? rd.pts : [];
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1], b = pts[i];
       if (!Array.isArray(a) || !Array.isArray(b)) continue;
-      graphPos.push(a[0], graphY(a[0], a[1]), a[1], b[0], graphY(b[0], b[1]), b[1]);
+      pushGraphSegment(graphPos, a[0], a[1], b[0], b[1], 0);
     }
   }
-  const makeGraphLines = (positions, color, opacity) => {
+  const makeGraphLines = (parent, positions, color, opacity, order = 20) => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false });
     const lines = new THREE.LineSegments(geo, mat);
-    lines.renderOrder = 20;
-    graphOverlay.add(lines);
+    lines.renderOrder = order;
+    parent.add(lines);
+    return lines;
   };
-  if (graphPos.length) makeGraphLines(graphPos, 0x050505, 0.8);
+  if (graphEdgePos.length) makeGraphLines(graphEdgesOverlay, graphEdgePos, 0xffd24d, 0.9, 21);
+  if (graphPos.length) makeGraphLines(graphPathsOverlay, graphPos, 0x111111, 0.78, 20);
 
   // 7b) природа: скалы ТОЛЬКО по морскому берегу, горы в горных зонах, леса
   let mtn = 0, forest = 0, cliff = 0;
@@ -2616,6 +2679,7 @@
 
   // 7c) инстансы декора
   const decor = new THREE.Group(); scene.add(decor);
+  const generatedDecorPickTargets = [];
   const generatedTreeAssets = new Set(['treesA', 'treesB', 'tree1']);
   const generatedTreeByKey = new Map();
   const generatedDecorByKey = new Map();
@@ -2642,7 +2706,8 @@
       const m = new THREE.InstancedMesh(model.geo, model.mat, biomeList.length);
       m.castShadow = true; m.receiveShadow = true;
       for (let i = 0; i < biomeList.length; i++) { const c = biomeList[i]; c.decorMesh = m; c.decorInstance = i; const s = c.s * HEXS; dummy.position.set(c.x, c.y || 0, c.z); dummy.rotation.set(0, c.yaw, 0); dummy.scale.set(s, s, s); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); }
-      m.instanceMatrix.needsUpdate = true; decor.add(m); decorCount += biomeList.length;
+      m.userData.decorEntries = biomeList.map(item => ({ asset: k, item }));
+      m.instanceMatrix.needsUpdate = true; decor.add(m); generatedDecorPickTargets.push(m); decorCount += biomeList.length;
     }
   }
 
@@ -2741,6 +2806,7 @@
     for (const c of land) pushCell(c, false);
     for (const c of river) pushCell(c, true);
     for (const c of sea) pushCell(c, true);
+    const removedDecorKeys = (typeof decorEditState !== 'undefined' && decorEditState.removedGenerated) ? decorEditState.removedGenerated : new Set();
     const bridgeEditByKey = new Map();
     if (typeof decorEditState !== 'undefined' && decorEditState.edits) {
       for (const d of decorEditState.edits.values()) {
@@ -2752,18 +2818,19 @@
       const cellH = (typeof editHeightForCell === 'function' ? editHeightForCell(c) : 0);
       return (c.elev || 0) + cellH + h + 0.06 - BRIDGE_VISUAL_LIFT;
     };
-    const bridges = bridge.map((c) => {
+    const bridges = bridge.filter(c => !removedDecorKeys.has(ek(c.q, c.r))).map((c) => {
       const d = bridgeEditByKey.get(ek(c.q, c.r));
       if (d) return [r3(c.wx), r3(c.wz), d.asset, r4(deg2rad(d.rot || 0)), r3(bridgeBankFromEdit(c, d)), r3(d.scale != null ? d.scale : BRIDGE_DEFAULT_SCALE)];
       return [r3(c.wx), r3(c.wz), keyOf.get(c.bridgeModel) || 'bridgeA', r4(c.bridgeRy), r3(c.bridgeBankY != null ? c.bridgeBankY : c.elev), r3(c.bridgeScale || BRIDGE_DEFAULT_SCALE)];
     });
-    const savedBridgeKeys = new Set(bridge.map(c => ek(c.q, c.r)));
+    const savedBridgeKeys = new Set(bridge.filter(c => !removedDecorKeys.has(ek(c.q, c.r))).map(c => ek(c.q, c.r)));
     if (typeof decorEditState !== 'undefined' && decorEditState.edits) {
       for (const d of decorEditState.edits.values()) {
         if (!d || !d.asset || !String(d.asset).startsWith('bridge')) continue;
         const c = (typeof findCellByQR === 'function') ? findCellByQR(d.q, d.r) : null;
         if (!c) continue;
         const k = ek(c.q, c.r);
+        if (removedDecorKeys.has(k)) continue;
         if (savedBridgeKeys.has(k)) continue;
         savedBridgeKeys.add(k);
         const h = (typeof normalizeDecorHeight === 'function' ? normalizeDecorHeight(d.height) : (d.height || 0));
@@ -2772,7 +2839,7 @@
       }
     }
     // декор: генерённый (БЕЗ замков на городах — их рисует игра), минус удалённый, плюс ручной (localStorage)
-    const removed = (typeof decorEditState !== 'undefined' && decorEditState.removedGenerated) ? decorEditState.removedGenerated : new Set();
+    const removed = removedDecorKeys;
     const editedDecor = (typeof decorEditState !== 'undefined' && decorEditState.edits) ? decorEditState.edits : new Map();
     for (const k in P) {
       if (k === 'castle') continue;                                                          // ← дубль с городами игры убран
@@ -3128,9 +3195,23 @@
     };
     // маршруты дорог по парам городов → пути юнитов в игре идут по визуальным дорогам
     const seenPair = new Set(), roads = [];
+    const roadPathOverrides = (typeof roadPathEditState !== 'undefined' && roadPathEditState.edits)
+      ? new Map([...roadPathEditState.edits.entries()].map(([k, v]) => [k, cloneRoadPath(v)]))
+      : new Map();
+    const deletedRoadPaths = (typeof roadPathEditState !== 'undefined' && roadPathEditState.deleted)
+      ? new Set(roadPathEditState.deleted)
+      : new Set();
     for (const rp of inferRoadPaths()) {
       const key = Math.min(rp.a, rp.b) + '_' + Math.max(rp.a, rp.b);
-      if (seenPair.has(key) || rp.pts.length < 2) continue; seenPair.add(key);
+      if (deletedRoadPaths.has(key)) continue;
+      const outPath = roadPathOverrides.get(key) || rp;
+      if (seenPair.has(key) || !outPath.pts || outPath.pts.length < 2) continue; seenPair.add(key);
+      roads.push([outPath.a, outPath.b, outPath.pts.map((p) => [r3(p[0]), r3(p[1])])]);
+    }
+    for (const [key, rp] of roadPathOverrides) {
+      if (deletedRoadPaths.has(key)) continue;
+      if (seenPair.has(key) || !rp.pts || rp.pts.length < 2) continue;
+      seenPair.add(key);
       roads.push([rp.a, rp.b, rp.pts.map((p) => [r3(p[0]), r3(p[1])])]);
     }
     const nearestCityCountryByQR = (q, r) => {
@@ -3342,6 +3423,7 @@
       if (status) status.textContent = 'сохраняю...';
       if (btn) btn.disabled = true;
       if (typeof saveManualEdits === 'function') saveManualEdits();
+      if (typeof persistRoadPathEdits === 'function') persistRoadPathEdits();
       const map = window.bakeHexMap();
       const localSummary = saveLocalHexMapSnapshot(map, 'before-save-hex-map');
       if (status) status.textContent = 'локальный бэкап: ' + localSummary.tiles + ' клеток · сохраняю...';
@@ -3440,13 +3522,15 @@
   }
   applyCam();
   canvas.addEventListener('mousedown', (e) => {
+    if (roadPathEditState.on && e.button === 0) { handleGraphPointerDown(e); e.preventDefault(); return; }
     if (cityEditState.on && e.button === 0) { placeCityEdit(e); e.preventDefault(); return; }
     if (editState.on && e.button === 0) { placeManualEdit(e); e.preventDefault(); return; }
     if (decorEditState.on && e.button === 0) { placeManualDecor(e); e.preventDefault(); return; }
     drag = e.button === 2 ? 'pan' : 'rot'; pmx = e.clientX; pmy = e.clientY; e.preventDefault();
   });
-  addEventListener('mouseup', () => { drag = null; });
+  addEventListener('mouseup', () => { finishGraphDrag(); drag = null; });
   addEventListener('mousemove', (e) => {
+    if (roadPathEditState.on && nodeEditState.dragging) { moveGraphNode(e); e.preventDefault(); return; }
     if (drag === 'rot') { az -= (e.clientX - pmx) * 0.005; el += (e.clientY - pmy) * 0.005; pmx = e.clientX; pmy = e.clientY; applyCam(); auto = false; $('bRot').classList.remove('on'); }
     else if (drag === 'pan') { const k = dist * 0.0012; ctr.x -= (e.clientX - pmx) * k * Math.cos(az); ctr.z += (e.clientX - pmx) * k * Math.sin(az); ctr.x -= (e.clientY - pmy) * k * Math.sin(az); ctr.z -= (e.clientY - pmy) * k * Math.cos(az); pmx = e.clientX; pmy = e.clientY; applyCam(); }
   });
@@ -3663,6 +3747,8 @@
   }
   const decorEditState = { on: false, asset: 'treesA', rot: 0, scale: 1, height: 0, offsetX: 0, offsetZ: 0, edits: new Map(), meshes: new Map(), hiddenBridges: new Map(), hiddenGenerated: new Map(), removedGenerated: new Set(), selected: null, selectedKey: null };
   const cityEditState = { on: false, selected: 0, mode: 'move', dirty: false, addDraft: null };
+  const ROAD_PATH_EDIT_KEY = 'hexEuropeRoadPathEdits:v1';
+  const roadPathEditState = { on: false, country: '', selectedKey: null, selectedPoint: -1, selectedEdge: null, dragging: false, moved: false, edits: new Map(), deleted: new Set(), edgeHits: [], pointHits: [], dirty: false, connectAnchor: null, welds: [], pendingDrag: null };
   const deletePickMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
   const editKey = (q, r) => q + ',' + r;
   const normalizeEditHeight = (value) => Math.max(-3, Math.min(6, Math.round((Number(value) || 0) * 4) / 4));
@@ -4113,6 +4199,721 @@
     ray.setFromCamera(m2, camera);
     return pickCellFromHits(ray.intersectObjects(pickSceneObjects(), true));
   };
+  const roadPathEditGroup = new THREE.Group();
+  roadPathEditGroup.name = 'road-path-edit';
+  roadPathEditGroup.visible = false;
+  scene.add(roadPathEditGroup);
+  const roadPathEdgeGeo = new THREE.CylinderGeometry(0.14, 0.14, 1, 10, 1);
+  const roadPathPointGeo = new THREE.SphereGeometry(0.24, 10, 6);
+  const roadPathEdgeMat = new THREE.MeshBasicMaterial({ color: 0xff2d2d, transparent: true, opacity: 0.92, depthTest: false });
+  const roadPathPointMat = new THREE.MeshBasicMaterial({ color: 0x72d7ff, transparent: true, opacity: 0.94, depthTest: false });
+  const roadPathSelectedEdgeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.98, depthTest: false });
+  const roadPathSelectedPointMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.98, depthTest: false });
+  const roadPathEditDummy = new THREE.Object3D();
+  const roadPathKey = (a, b) => Math.min(a, b) + '_' + Math.max(a, b);
+  const roadPathPointKey = (key, i) => key + ':' + i;
+  const roadPathLabel = (rp) => {
+    const a = CITY_LIST[rp.a], b = CITY_LIST[rp.b];
+    return (a ? a[0] : rp.a) + ' ↔ ' + (b ? b[0] : rp.b);
+  };
+  const cloneRoadPath = (rp) => ({ a: rp.a, b: rp.b, pts: (rp.pts || []).map(p => [Number(p[0]) || 0, Number(p[1]) || 0]) });
+  const baseRoadPathByKey = (key) => roadPaths.find(rp => roadPathKey(rp.a, rp.b) === key) || null;
+  const effectiveRoadPathByKey = (key) => roadPathEditState.edits.get(key) || baseRoadPathByKey(key);
+  const selectedRoadPath = () => roadPathEditState.selectedKey ? effectiveRoadPathByKey(roadPathEditState.selectedKey) : null;
+  const roadPathCountries = (rp) => [CITY_LIST[rp.a]?.[5] || '', CITY_LIST[rp.b]?.[5] || ''].filter(Boolean);
+  // '*' = все страны (медленно); по умолчанию — первая страна, чтобы НЕ строить оверлей всей карты (лагает)
+  const roadPathMatchesCountry = (rp) => roadPathEditState.country === '*' || !roadPathEditState.country || roadPathCountries(rp).includes(roadPathEditState.country);
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ГРАФ УЗЛОВ/РЁБЕР — новая модель редактора путей: свободные точки + рёбра, без «дороги».
+  // Узел: {x,z (мир), city:idx|null}. Ребро: [i,j] индексы узлов. Города — те же узлы (помечены).
+  // В игру экспортируется как обычные дороги город↔город (кратчайший путь по графу), формат не меняется.
+  // ═══════════════════════════════════════════════════════════════════════════
+  const NODE_GRAPH_KEY = 'hexEuropeNodeGraph:v1';
+  const NODE_MERGE_THR = 0.25;                                    // узлы ближе этого при миграции → один общий узел
+  const nodeGraph = { nodes: [], edges: [] };                    // nodes:[{x,z,city}], edges:[[i,j]]
+  const cityWorld = (idx) => { const cc = cityCellsByIndex[idx]; if (cc) return { x: cc.wx, z: cc.wz };   // ТА ЖЕ клетка, что в редакторе городов/игре
+    const c = CITY_LIST[idx]; if (!c) return null; const w = lngLatToWorld(c[1], c[2]); return { x: w.wx, z: w.wz }; };
+  // как в игре (js/data.js): сырые регионы сливаются в игровые страны-фракции
+  const COUNTRY_ALIASES = { 'Испания': 'Иберия', 'Португалия': 'Иберия', 'Норвегия': 'Северная империя', 'Швеция': 'Северная империя', 'Финляндия': 'Северная империя' };
+  const cityFaction = (idx) => { const c = CITY_LIST[idx] && CITY_LIST[idx][5]; return c ? (COUNTRY_ALIASES[c] || c) : ''; };
+  const graphFindOrAddNode = (x, z, cityIdx) => {
+    for (let i = 0; i < nodeGraph.nodes.length; i++) {
+      const n = nodeGraph.nodes[i];
+      if (n.city != null && cityIdx != null && n.city !== cityIdx) continue;   // разные города не сливаем
+      if (Math.hypot(n.x - x, n.z - z) <= NODE_MERGE_THR) { if (cityIdx != null && n.city == null) n.city = cityIdx; return i; }
+    }
+    nodeGraph.nodes.push({ x, z, city: cityIdx != null ? cityIdx : null });
+    return nodeGraph.nodes.length - 1;
+  };
+  const graphAddEdge = (a, b) => {
+    if (a === b || a < 0 || b < 0) return;
+    if (!nodeGraph.edges.some((e) => (e[0] === a && e[1] === b) || (e[0] === b && e[1] === a))) nodeGraph.edges.push([a, b]);
+  };
+  const ensureAllCityNodes = () => {                             // узел-город для КАЖДОГО города, позиция ВСЕГДА = клетка города (как в редакторе городов)
+    const have = new Set();
+    for (const n of nodeGraph.nodes) if (n.city != null) { const cw = cityWorld(n.city); if (cw) { n.x = cw.x; n.z = cw.z; } have.add(n.city); }   // синхронизировать существующие
+    let added = 0;
+    for (let ci = 0; ci < CITY_LIST.length; ci++) { if (have.has(ci)) continue; const cw = cityWorld(ci); if (cw) { nodeGraph.nodes.push({ x: cw.x, z: cw.z, city: ci }); added++; } }   // добавить недостающие (острова)
+    return added;
+  };
+  const migrateRoadPathsToGraph = () => {                        // строим граф из ЭФФЕКТИВНЫХ путей (база + твои правки), сливая совпадающие точки
+    nodeGraph.nodes = []; nodeGraph.edges = [];
+    for (const base of roadPaths) {
+      const key = roadPathKey(base.a, base.b);
+      const rp = effectiveRoadPathByKey(key);
+      if (!rp || !rp.pts || rp.pts.length < 2) continue;
+      let prev = -1;
+      for (let i = 0; i < rp.pts.length; i++) {
+        const cityIdx = i === 0 ? rp.a : (i === rp.pts.length - 1 ? rp.b : null);
+        let x = rp.pts[i][0], z = rp.pts[i][1];
+        if (cityIdx != null) { const cw = cityWorld(cityIdx); if (cw) { x = cw.x; z = cw.z; } }   // концы прилипают к клетке города
+        const ni = graphFindOrAddNode(x, z, cityIdx);
+        if (prev >= 0) graphAddEdge(prev, ni);
+        prev = ni;
+      }
+    }
+    ensureAllCityNodes();                                        // добавить города без дорог
+  };
+  const persistNodeGraph = () => { try { localStorage.setItem(NODE_GRAPH_KEY, JSON.stringify(nodeGraph)); } catch (_) {} };
+  const loadNodeGraph = () => { try { const raw = localStorage.getItem(NODE_GRAPH_KEY); if (!raw) return false; const g = JSON.parse(raw); if (g && Array.isArray(g.nodes) && Array.isArray(g.edges)) { nodeGraph.nodes = g.nodes.map((n) => ({ x: +n.x, z: +n.z, city: Number.isInteger(n.city) ? n.city : null })); nodeGraph.edges = g.edges.filter((e) => Array.isArray(e) && e.length === 2).map((e) => [e[0] | 0, e[1] | 0]); return true; } } catch (_) {} return false; };
+  const initNodeGraph = () => { if (!loadNodeGraph()) { migrateRoadPathsToGraph(); } if (ensureAllCityNodes() > 0) nodeCountryCache = null; persistNodeGraph(); };   // и в загруженном графе добавить недостающие города
+  // ── состояние + отрисовка графа (переиспользуем группу/геометрии/материалы roadPath-оверлея) ──
+  const nodeEditState = { selNode: -1, selEdge: -1, connectAnchor: -1, connectMode: 'edge', dragging: false, pendingDrag: null, nodeHits: [], edgeHits: [], countries: new Set() };
+  // ── фильтр по стране: страна узла = страна ближайшего города (кэш пересчитывается при структурных правках) ──
+  let nodeCountryCache = null;
+  // страна узла = страна города, к которому узел ближе всего ПО ГРАФУ (мульти-старт Дейкстра от всех городов).
+  // Раньше брали евклидово-ближайший город → на границе (Португалия/Испания) узлы путались. Топология по дорогам — точно.
+  const rebuildNodeCountryCache = () => {
+    const N = nodeGraph.nodes.length;
+    nodeCountryCache = new Array(N).fill('');
+    const dist = new Float64Array(N).fill(Infinity);
+    const adj = Array.from({ length: N }, () => []);
+    for (const ed of nodeGraph.edges) { const a = ed[0], b = ed[1]; if (a < 0 || b < 0 || a >= N || b >= N) continue; const na = nodeGraph.nodes[a], nb = nodeGraph.nodes[b], w = Math.hypot(na.x - nb.x, na.z - nb.z) || 0.001; adj[a].push([b, w]); adj[b].push([a, w]); }
+    const h = [];
+    for (let i = 0; i < N; i++) { const n = nodeGraph.nodes[i]; if (n.city != null) { dist[i] = 0; nodeCountryCache[i] = cityFaction(n.city); _hpush(h, [0, i]); } }
+    while (h.length) { const it = _hpop(h), d = it[0], u = it[1]; if (d > dist[u]) continue; const au = adj[u]; for (let k = 0; k < au.length; k++) { const v = au[k][0], nd = d + au[k][1]; if (nd < dist[v]) { dist[v] = nd; nodeCountryCache[v] = nodeCountryCache[u]; _hpush(h, [nd, v]); } } }
+    for (let i = 0; i < N; i++) { if (nodeCountryCache[i]) continue; const n = nodeGraph.nodes[i]; let best = '', bd = Infinity; for (let ci = 0; ci < CITY_LIST.length; ci++) { const cw = cityWorld(ci); if (!cw) continue; const dd = (cw.x - n.x) ** 2 + (cw.z - n.z) ** 2; if (dd < bd) { bd = dd; best = cityFaction(ci); } } nodeCountryCache[i] = best; }   // изолированные узлы без пути к городу — по евклиду
+  };
+  const nodeCountry = (i) => { if (!nodeCountryCache || nodeCountryCache.length !== nodeGraph.nodes.length) rebuildNodeCountryCache(); return nodeCountryCache[i] || ''; };
+  const graphCountries = () => [...new Set(CITY_LIST.map((c) => COUNTRY_ALIASES[c[5]] || c[5]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+  const nodeShown = (i) => { const cs = nodeEditState.countries; return !cs || cs.size === 0 || cs.has(nodeCountry(i)); };
+  const edgeShown = (ei) => { const cs = nodeEditState.countries; if (!cs || cs.size === 0) return true; const e = nodeGraph.edges[ei]; return cs.has(nodeCountry(e[0])) || cs.has(nodeCountry(e[1])); };
+  const nodeGraphMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.96, depthTest: false });
+  const _cGold = new THREE.Color(0xffcc44), _cBlue = new THREE.Color(0x72d7ff), _cAnchor = new THREE.Color(0x8cff6b);
+  const projectNode = (n) => { roadPathProjVec.set(n.x, pathPointY(n.x, n.z) + 0.42, n.z).project(camera); if (roadPathProjVec.z > 1) return null; return { x: (roadPathProjVec.x * 0.5 + 0.5) * innerWidth, y: (-roadPathProjVec.y * 0.5 + 0.5) * innerHeight }; };
+  const updateGraphCount = () => { const el = $('pathEdCount'); if (!el) return; const cs = nodeEditState.countries, label = cs && cs.size ? [...cs].join('+') + ': ' : ''; el.textContent = label + 'узлов ' + nodeEditState.nodeHits.length + '/' + nodeGraph.nodes.length + ' · рёбер ' + nodeEditState.edgeHits.length + '/' + nodeGraph.edges.length; };
+  const renderNodeGraphOverlay = () => {
+    clearRoadPathEditOverlay();
+    roadPathEditGroup.visible = roadPathEditState.on;
+    if (!roadPathEditState.on) return;
+    nodeEditState.edgeHits = []; nodeEditState.nodeHits = [];
+    const es = [];
+    for (let ei = 0; ei < nodeGraph.edges.length; ei++) {
+      if (ei === nodeEditState.selEdge) continue;
+      if (!edgeShown(ei)) continue;                               // фильтр по стране
+      const [a, b] = nodeGraph.edges[ei], na = nodeGraph.nodes[a], nb = nodeGraph.nodes[b];
+      if (!na || !nb) continue;
+      nodeEditState.edgeHits.push(ei); es.push([na, nb]);
+    }
+    if (es.length) {
+      const mesh = new THREE.InstancedMesh(roadPathEdgeGeo, roadPathEdgeMat, es.length); mesh.renderOrder = 90;
+      for (let i = 0; i < es.length; i++) if (roadPathSegmentMatrix([es[i][0].x, es[i][0].z], [es[i][1].x, es[i][1].z], 0.11, roadPathEditDummy)) mesh.setMatrixAt(i, roadPathEditDummy.matrix);
+      mesh.instanceMatrix.needsUpdate = true; mesh.frustumCulled = false; mesh.userData.graphType = 'edge'; roadPathEditGroup.add(mesh);
+    }
+    const ns = [];
+    for (let ni = 0; ni < nodeGraph.nodes.length; ni++) { if (ni === nodeEditState.selNode) continue; if (!nodeShown(ni)) continue; nodeEditState.nodeHits.push(ni); ns.push(ni); }
+    if (ns.length) {
+      const mesh = new THREE.InstancedMesh(roadPathPointGeo, nodeGraphMat, ns.length); mesh.renderOrder = 93;
+      for (let i = 0; i < ns.length; i++) {
+        const n = nodeGraph.nodes[ns[i]], s = n.city != null ? 1.5 : 1;
+        roadPathEditDummy.position.set(n.x, pathPointY(n.x, n.z) + 0.42, n.z); roadPathEditDummy.rotation.set(0, 0, 0); roadPathEditDummy.scale.set(s, s, s); roadPathEditDummy.updateMatrix();
+        mesh.setMatrixAt(i, roadPathEditDummy.matrix);
+        mesh.setColorAt(i, ns[i] === nodeEditState.connectAnchor ? _cAnchor : (n.city != null ? _cGold : _cBlue));
+      }
+      mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.frustumCulled = false; mesh.userData.graphType = 'node'; roadPathEditGroup.add(mesh);
+    }
+    if (nodeEditState.selEdge >= 0 && nodeGraph.edges[nodeEditState.selEdge]) {
+      const [a, b] = nodeGraph.edges[nodeEditState.selEdge], na = nodeGraph.nodes[a], nb = nodeGraph.nodes[b];
+      if (na && nb) { const m = new THREE.Mesh(roadPathEdgeGeo, roadPathSelectedEdgeMat); roadPathSegmentMatrix([na.x, na.z], [nb.x, nb.z], 0.18, m); m.renderOrder = 94; m.frustumCulled = false; roadPathEditGroup.add(m); }
+    }
+    if (nodeEditState.selNode >= 0 && nodeGraph.nodes[nodeEditState.selNode]) {
+      const n = nodeGraph.nodes[nodeEditState.selNode]; const m = new THREE.Mesh(roadPathPointGeo, roadPathSelectedPointMat);
+      m.position.set(n.x, pathPointY(n.x, n.z) + 0.42, n.z); m.scale.set(1.9, 1.9, 1.9); m.renderOrder = 95; m.frustumCulled = false; roadPathEditGroup.add(m);
+    }
+    updateGraphCount();
+  };
+  const graphPersistRender = () => { nodeCountryCache = null; persistNodeGraph(); renderNodeGraphOverlay(); };
+  const pickGraphScreen = (e) => {                               // детерминированный пик среди ПОКАЗАННЫХ (по фильтру страны): узел 16px, иначе ребро 12px
+    const PX_N = 16, PX_E = 12; let bestN = -1, bnd = Infinity, bestE = -1, bed = Infinity;
+    const scr = nodeGraph.nodes.map(projectNode);
+    for (let i = 0; i < nodeGraph.nodes.length; i++) { if (!nodeShown(i)) continue; const s = scr[i]; if (!s) continue; const d = Math.hypot(s.x - e.clientX, s.y - e.clientY); if (d <= PX_N && d < bnd) { bnd = d; bestN = i; } }
+    if (bestN >= 0) return { node: bestN };
+    for (let ei = 0; ei < nodeGraph.edges.length; ei++) { if (!edgeShown(ei)) continue; const [a, b] = nodeGraph.edges[ei], sa = scr[a], sb = scr[b]; if (!sa || !sb) continue; const dx = sb.x - sa.x, dy = sb.y - sa.y, l2 = dx * dx + dy * dy; const t = l2 ? Math.max(0, Math.min(1, ((e.clientX - sa.x) * dx + (e.clientY - sa.y) * dy) / l2)) : 0; const d = Math.hypot(e.clientX - (sa.x + dx * t), e.clientY - (sa.y + dy * t)); if (d <= PX_E && d < bed) { bed = d; bestE = ei; } }
+    if (bestE >= 0) return { edge: bestE };
+    return {};
+  };
+  const graphAddNodeAt = (e) => {                                // клик по пустому → новый узел на земле под курсором
+    const cur = roadPathTerrainXZ(e); if (!cur) return -1;
+    nodeGraph.nodes.push({ x: cur.wx, z: cur.wz, city: null });
+    return nodeGraph.nodes.length - 1;
+  };
+  const graphDeleteNode = (ni) => {                              // удалить узел + его рёбра, переиндексировать
+    nodeGraph.edges = nodeGraph.edges.filter((ed) => ed[0] !== ni && ed[1] !== ni).map((ed) => [ed[0] > ni ? ed[0] - 1 : ed[0], ed[1] > ni ? ed[1] - 1 : ed[1]]);
+    nodeGraph.nodes.splice(ni, 1);
+  };
+  const graphBindCity = (ni) => {
+    const n = nodeGraph.nodes[ni]; if (!n) return 'нет узла';
+    if (n.city != null) { const nm = CITY_LIST[n.city] ? CITY_LIST[n.city][0] : n.city; n.city = null; return 'город отвязан (' + nm + ')'; }
+    let best = -1, bd = Infinity; for (let ci = 0; ci < CITY_LIST.length; ci++) { const cw = cityWorld(ci); if (!cw) continue; const d = Math.hypot(cw.x - n.x, cw.z - n.z); if (d < bd) { bd = d; best = ci; } }
+    if (best < 0 || bd > 6) return 'нет города рядом (подведи узел ближе)';
+    const cw = cityWorld(best); n.city = best; n.x = cw.x; n.z = cw.z;
+    return 'привязан к городу: ' + CITY_LIST[best][0];
+  };
+  const graphMergeNodes = (a, b) => {                             // ⛓ объединить: слить b в a (рёбра b → a, b удаляется). Возвращает новый индекс a.
+    if (a === b || !nodeGraph.nodes[a] || !nodeGraph.nodes[b]) return -1;
+    if (nodeGraph.nodes[b].city != null && nodeGraph.nodes[a].city == null) nodeGraph.nodes[a].city = nodeGraph.nodes[b].city;
+    for (const e of nodeGraph.edges) { if (e[0] === b) e[0] = a; if (e[1] === b) e[1] = a; }
+    const seen = new Set(); nodeGraph.edges = nodeGraph.edges.filter((e) => { if (e[0] === e[1]) return false; const k = Math.min(e[0], e[1]) + '_' + Math.max(e[0], e[1]); if (seen.has(k)) return false; seen.add(k); return true; });
+    nodeGraph.edges = nodeGraph.edges.map((e) => [e[0] > b ? e[0] - 1 : e[0], e[1] > b ? e[1] - 1 : e[1]]);
+    nodeGraph.nodes.splice(b, 1);
+    return a > b ? a - 1 : a;
+  };
+  const graphBranchFromNode = (ni) => {                           // ＋ ответвление: новый узел, соединённый ребром с выбранным (отросток наружу)
+    const p = nodeGraph.nodes[ni]; if (!p) return -1;
+    // сместить наружу от средней СУММЫ направлений соседей (если есть) — чтобы отросток торчал в новую сторону
+    let dx = 0, dz = 0, cnt = 0;
+    for (const e of nodeGraph.edges) { let o = -1; if (e[0] === ni) o = e[1]; else if (e[1] === ni) o = e[0]; if (o < 0) continue; const q = nodeGraph.nodes[o]; dx += q.x - p.x; dz += q.z - p.z; cnt++; }
+    let ox = 2, oz = 0; if (cnt) { const l = Math.hypot(dx, dz) || 1; ox = -(dx / l) * 2.5; oz = -(dz / l) * 2.5; }   // против среднего направления соседей
+    nodeGraph.nodes.push({ x: p.x + ox, z: p.z + oz, city: null });
+    const nn = nodeGraph.nodes.length - 1; graphAddEdge(ni, nn); return nn;
+  };
+  const graphSubdivideEdge = (ei) => {                            // ＋ на ребре: вставить узел в середину ребра, разбив на два
+    const e = nodeGraph.edges[ei]; if (!e) return -1;
+    const a = e[0], b = e[1], na = nodeGraph.nodes[a], nb = nodeGraph.nodes[b]; if (!na || !nb) return -1;
+    nodeGraph.nodes.push({ x: (na.x + nb.x) / 2, z: (na.z + nb.z) / 2, city: null });
+    const mi = nodeGraph.nodes.length - 1;
+    nodeGraph.edges.splice(ei, 1); graphAddEdge(a, mi); graphAddEdge(b, mi);
+    return mi;
+  };
+  const beginGraphNodeDrag = (ni, e) => { nodeEditState.selNode = ni; nodeEditState.selEdge = -1; nodeEditState.pendingDrag = { sx: e.clientX, sy: e.clientY, offX: 0, offZ: 0, ready: false }; nodeEditState.dragging = true; };
+  const handleGraphPointerDown = (e) => {
+    const hit = pickGraphScreen(e);
+    if (nodeEditState.connectAnchor >= 0) {                       // режим «ребро»/«объединить»: ждём второй узел
+      if (hit.node != null && hit.node !== nodeEditState.connectAnchor) {
+        if (nodeEditState.connectMode === 'merge') { const k = graphMergeNodes(nodeEditState.connectAnchor, hit.node); nodeEditState.selNode = k; setPathMeta('узлы объединены в один'); }
+        else { graphAddEdge(nodeEditState.connectAnchor, hit.node); nodeEditState.selNode = hit.node; setPathMeta('ребро создано'); }
+        nodeEditState.connectAnchor = -1; $('pathConnectEdge').classList.remove('on'); if ($('pathMerge')) $('pathMerge').classList.remove('on'); graphPersistRender(); return;
+      }
+      nodeEditState.connectAnchor = -1; $('pathConnectEdge').classList.remove('on'); if ($('pathMerge')) $('pathMerge').classList.remove('on'); renderNodeGraphOverlay(); setPathMeta('отменено'); return;
+    }
+    if (hit.node != null) { beginGraphNodeDrag(hit.node, e); renderNodeGraphOverlay(); setPathMeta('узел ' + hit.node + (nodeGraph.nodes[hit.node].city != null ? ' (город ' + CITY_LIST[nodeGraph.nodes[hit.node].city][0] + ')' : '')); return; }
+    if (hit.edge != null) { nodeEditState.selNode = -1; nodeEditState.selEdge = hit.edge; renderNodeGraphOverlay(); setPathMeta('ребро ' + hit.edge); return; }
+    const ni = graphAddNodeAt(e);                                // пусто → новый узел
+    if (ni >= 0) { nodeEditState.selNode = ni; nodeEditState.selEdge = -1; graphPersistRender(); setPathMeta('новый узел — тяни/соединяй'); }
+  };
+  const moveGraphNode = (e) => {
+    if (!nodeEditState.dragging || nodeEditState.selNode < 0) return false;
+    const pd = nodeEditState.pendingDrag, n = nodeGraph.nodes[nodeEditState.selNode]; if (!n) return true;
+    if (pd && !pd.ready) { if (Math.hypot(e.clientX - pd.sx, e.clientY - pd.sy) < 5) return true; const c0 = roadPathTerrainXZ(e); if (c0) { pd.offX = n.x - c0.wx; pd.offZ = n.z - c0.wz; } pd.ready = true; }
+    const cur = roadPathTerrainXZ(e); if (!cur) return true;
+    n.x = cur.wx + (pd ? pd.offX : 0); n.z = cur.wz + (pd ? pd.offZ : 0);
+    nodeEditState.moved = true; renderNodeGraphOverlay(); return true;
+  };
+  const finishGraphDrag = () => {
+    if (!nodeEditState.dragging) return false;
+    nodeEditState.dragging = false; nodeEditState.pendingDrag = null;
+    if (nodeEditState.moved) { nodeCountryCache = null; persistNodeGraph(); setPathMeta('узел сохранён'); } nodeEditState.moved = false;
+    return true;
+  };
+  // ── ЭКСПОРТ ГРАФА → ДОРОГИ ИГРЫ: для каждой пары городов кратчайший ПРЯМОЙ путь по графу (минуя чужие города) ──
+  const _hpush = (h, it) => { h.push(it); let i = h.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (h[p][0] <= h[i][0]) break; const t = h[p]; h[p] = h[i]; h[i] = t; i = p; } };
+  const _hpop = (h) => { const top = h[0], last = h.pop(); if (h.length) { h[0] = last; let i = 0; const n = h.length; for (;;) { let l = 2 * i + 1, r = l + 1, s = i; if (l < n && h[l][0] < h[s][0]) s = l; if (r < n && h[r][0] < h[s][0]) s = r; if (s === i) break; const t = h[s]; h[s] = h[i]; h[i] = t; i = s; } } return top; };
+  const graphCityNodeIndex = () => { const m = {}; for (let i = 0; i < nodeGraph.nodes.length; i++) { const c = nodeGraph.nodes[i].city; if (c != null && m[c] == null) m[c] = i; } return m; };
+  const dijkstraDirect = (adj, isCity, src, dst, N) => {          // кратчайший src→dst, не проходя через ЧУЖИЕ города-узлы
+    const dist = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1);
+    dist[src] = 0; const h = [[0, src]];
+    while (h.length) {
+      const [d, u] = _hpop(h);
+      if (u === dst) break;
+      if (d > dist[u]) continue;
+      const au = adj[u];
+      for (let k = 0; k < au.length; k++) { const v = au[k][0]; if (isCity[v] && v !== dst) continue; const nd = d + au[k][1]; if (nd < dist[v]) { dist[v] = nd; prev[v] = u; _hpush(h, [nd, v]); } }
+    }
+    if (dist[dst] === Infinity) return null;
+    const path = []; let c = dst; while (c !== -1) { path.push(c); if (c === src) break; c = prev[c]; } path.reverse();
+    return path[0] === src ? path : null;
+  };
+  const graphToRoadPaths = () => {                                // Map<"a_b", {a,b,pts}> из графа для существующих дорог
+    const N = nodeGraph.nodes.length, cityNode = graphCityNodeIndex();
+    const adj = Array.from({ length: N }, () => []), isCity = new Uint8Array(N);
+    for (let i = 0; i < N; i++) if (nodeGraph.nodes[i].city != null) isCity[i] = 1;
+    for (const [a, b] of nodeGraph.edges) { if (a < 0 || b < 0 || a >= N || b >= N || a === b) continue; const na = nodeGraph.nodes[a], nb = nodeGraph.nodes[b], w = Math.hypot(na.x - nb.x, na.z - nb.z) || 0.001; adj[a].push([b, w]); adj[b].push([a, w]); }
+    const out = new Map(); let ok = 0, miss = 0;
+    const seen = new Set();
+    for (const base of roadPaths) {
+      const key = roadPathKey(base.a, base.b); if (seen.has(key)) continue; seen.add(key);
+      const src = cityNode[base.a], dst = cityNode[base.b];
+      if (src == null || dst == null) { miss++; continue; }
+      const pn = dijkstraDirect(adj, isCity, src, dst, N);
+      if (!pn || pn.length < 2) { miss++; continue; }
+      out.set(key, { a: base.a, b: base.b, pts: pn.map((ni) => [nodeGraph.nodes[ni].x, nodeGraph.nodes[ni].z]) });
+      ok++;
+    }
+    return { paths: out, ok, miss };
+  };
+  const refreshRoadPathCountrySelect = () => {
+    const sel = $('pathCountry');
+    if (!sel) return;
+    const countries = [...new Set(roadPaths.flatMap(roadPathCountries))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ru'));
+    const prev = roadPathEditState.country || sel.value || countries[0] || '';
+    sel.innerHTML = '';
+    for (const name of countries) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    }
+    const all = document.createElement('option');
+    all.value = '*';
+    all.textContent = '— все страны (медленно) —';
+    sel.appendChild(all);
+    roadPathEditState.country = (prev === '*' || countries.includes(prev)) ? prev : (countries[0] || '*');
+    sel.value = roadPathEditState.country;
+  };
+  const setPathMeta = (text) => { const el = $('pathMeta'); if (el) el.textContent = text; };
+  const updatePathEditCount = () => {
+    const el = $('pathEdCount');
+    if (el) el.textContent = (roadPathEditState.country || 'страна') + ' · ' + roadPathEditState.edits.size + ' прав. · ' + roadPathEditState.deleted.size + ' удал.';
+  };
+  const clearRoadPathEditOverlay = () => {
+    while (roadPathEditGroup.children.length) {
+      const child = roadPathEditGroup.children.pop();
+      if (child.isInstancedMesh) child.dispose && child.dispose();
+      if (child.geometry && child.userData.disposeGeometry) child.geometry.dispose();
+      if (child.material && child.userData.disposeMaterial) child.material.dispose();
+    }
+  };
+  const pathPointY = (wx, wz) => {
+    const c = nearestCellByWorld(wx, wz);
+    return (c ? (c.water ? (c.elev || 0) + 0.16 : (c.elev || 0) + 0.28) + editHeightForCell(c) : 0.35);
+  };
+  const roadPathEditPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const roadPathEditVec = new THREE.Vector3();
+  let roadPathEditDragY = 0;
+  const roadPathMouseWorld = (e, planeY = null) => {
+    m2.x = (e.clientX / innerWidth) * 2 - 1;
+    m2.y = -(e.clientY / innerHeight) * 2 + 1;
+    ray.setFromCamera(m2, camera);
+    if (planeY != null) roadPathEditPlane.constant = -planeY;
+    if (!ray.ray.intersectPlane(roadPathEditPlane, roadPathEditVec)) return null;
+    return { wx: roadPathEditVec.x, wz: roadPathEditVec.z };
+  };
+  const roadPathSegmentMatrix = (a, b, radius, target) => {
+    const ay = pathPointY(a[0], a[1]) + 0.24;
+    const by = pathPointY(b[0], b[1]) + 0.24;
+    const start = new THREE.Vector3(a[0], ay, a[1]);
+    const end = new THREE.Vector3(b[0], by, b[1]);
+    const dir = end.clone().sub(start);
+    const len = dir.length();
+    if (len < 0.001) return false;
+    target.position.copy(start).add(end).multiplyScalar(0.5);
+    target.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+    target.scale.set(radius / 0.14, len, radius / 0.14);
+    target.updateMatrix();
+    return true;
+  };
+  const eachEffectiveRoadPath = (fn) => {
+    for (const base of roadPaths) {
+      const key = roadPathKey(base.a, base.b);
+      if (roadPathEditState.deleted.has(key)) continue;
+      const rp = effectiveRoadPathByKey(key);
+      if (rp && !roadPathMatchesCountry(rp)) continue;
+      if (rp && Array.isArray(rp.pts) && rp.pts.length >= 2) fn(key, rp);
+    }
+  };
+  const renderRoadPathEditOverlay = () => {
+    clearRoadPathEditOverlay();
+    roadPathEditGroup.visible = roadPathEditState.on;
+    if (!roadPathEditState.on) return;
+    const edges = [];
+    const points = [];
+    let selectedEdgePts = null;
+    let selectedPointPos = null;
+    roadPathEditState.edgeHits = [];
+    roadPathEditState.pointHits = [];
+    eachEffectiveRoadPath((key, rp) => {
+      for (let i = 1; i < rp.pts.length; i++) {
+        const selected = roadPathEditState.selectedEdge && roadPathEditState.selectedEdge.key === key && roadPathEditState.selectedEdge.seg === i - 1;
+        if (selected) selectedEdgePts = [rp.pts[i - 1], rp.pts[i]];
+        else {
+          roadPathEditState.edgeHits.push({ key, seg: i - 1 });
+          edges.push([rp.pts[i - 1], rp.pts[i]]);
+        }
+      }
+    });
+    eachEffectiveRoadPath((key, rp) => {
+      for (let i = 0; i < rp.pts.length; i++) {
+        const p = rp.pts[i];
+        const selected = key === roadPathEditState.selectedKey && i === roadPathEditState.selectedPoint;
+        if (selected) selectedPointPos = p;
+        else {
+          roadPathEditState.pointHits.push({ key, index: i });
+          points.push(p);
+        }
+      }
+    });
+    if (edges.length) {
+      const mesh = new THREE.InstancedMesh(roadPathEdgeGeo, roadPathEdgeMat, edges.length);
+      mesh.renderOrder = 90;
+      for (let i = 0; i < edges.length; i++) {
+        if (roadPathSegmentMatrix(edges[i][0], edges[i][1], 0.14, roadPathEditDummy)) mesh.setMatrixAt(i, roadPathEditDummy.matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.frustumCulled = false;
+      mesh.userData.pathEditType = 'edge';
+      roadPathEditGroup.add(mesh);
+    }
+    if (points.length) {
+      const mesh = new THREE.InstancedMesh(roadPathPointGeo, roadPathPointMat, points.length);
+      mesh.renderOrder = 93;
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+        roadPathEditDummy.position.set(p[0], pathPointY(p[0], p[1]) + 0.42, p[1]);
+        roadPathEditDummy.rotation.set(0, 0, 0);
+        roadPathEditDummy.scale.set(1, 1, 1);
+        roadPathEditDummy.updateMatrix();
+        mesh.setMatrixAt(i, roadPathEditDummy.matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.frustumCulled = false;
+      mesh.userData.pathEditType = 'point';
+      roadPathEditGroup.add(mesh);
+    }
+    if (selectedEdgePts) {
+      const mesh = new THREE.Mesh(roadPathEdgeGeo, roadPathSelectedEdgeMat);
+      roadPathSegmentMatrix(selectedEdgePts[0], selectedEdgePts[1], 0.24, mesh);
+      mesh.renderOrder = 94;
+      mesh.frustumCulled = false;
+      mesh.userData.pathEdit = roadPathEditState.selectedEdge ? { type: 'edge', key: roadPathEditState.selectedEdge.key, seg: roadPathEditState.selectedEdge.seg } : null;
+      roadPathEditGroup.add(mesh);
+    }
+    if (selectedPointPos) {
+      const mesh = new THREE.Mesh(roadPathPointGeo, roadPathSelectedPointMat);
+      mesh.position.set(selectedPointPos[0], pathPointY(selectedPointPos[0], selectedPointPos[1]) + 0.42, selectedPointPos[1]);
+      mesh.scale.set(1.75, 1.75, 1.75);
+      mesh.renderOrder = 95;
+      mesh.frustumCulled = false;
+      mesh.userData.pathEdit = roadPathEditState.selectedKey ? { type: 'point', key: roadPathEditState.selectedKey, index: roadPathEditState.selectedPoint } : null;
+      roadPathEditGroup.add(mesh);
+    }
+    updatePathEditCount();
+  };
+  const cloneWelds = () => roadPathEditState.welds.map((g) => g.map((m) => ({ ...m })));
+  const persistRoadPathEdits = () => {
+    const edits = [...roadPathEditState.edits.values()].map(cloneRoadPath);
+    const payload = { updatedAt: new Date().toISOString(), edits, deleted: [...roadPathEditState.deleted], welds: cloneWelds() };
+    try { localStorage.setItem(ROAD_PATH_EDIT_KEY, JSON.stringify(payload)); } catch (_) {}
+    roadPathEditState.dirty = false;
+    updatePathEditCount();
+    renderRoadPathEditOverlay();
+    return payload;
+  };
+  const loadRoadPathEdits = () => {
+    try {
+      const raw = localStorage.getItem(ROAD_PATH_EDIT_KEY);
+      if (!raw) return;
+      const payload = JSON.parse(raw);
+      for (const rp of payload.edits || []) {
+        if (!Number.isInteger(rp.a) || !Number.isInteger(rp.b) || !Array.isArray(rp.pts) || rp.pts.length < 2) continue;
+        const key = roadPathKey(rp.a, rp.b);
+        if (baseRoadPathByKey(key)) roadPathEditState.edits.set(key, cloneRoadPath(rp));
+      }
+      for (const key of payload.deleted || []) {
+        if (baseRoadPathByKey(key)) roadPathEditState.deleted.add(key);
+      }
+      for (const g of payload.welds || []) {                     // связи ПОПАРНО; старые группы (>2) режем на последовательные пары
+        if (!Array.isArray(g)) continue;
+        const grp = g.filter((m) => m && typeof m.key === 'string' && baseRoadPathByKey(m.key) && (m.end === 'start' || m.end === 'end' || Number.isInteger(m.idx)));
+        for (let i = 1; i < grp.length; i++) roadPathEditState.welds.push([grp[i - 1], grp[i]]);
+      }
+    } catch (_) {}
+  };
+  const sqDistPointSeg = (px, pz, ax, az, bx, bz) => {
+    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+    const t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / l2)) : 0;
+    const x = ax + dx * t, z = az + dz * t;
+    return { d2: (px - x) ** 2 + (pz - z) ** 2, t };
+  };
+  const nearestRoadEdgeTo = (wx, wz) => {
+    let best = null;
+    eachEffectiveRoadPath((key, rp) => {
+      for (let i = 1; i < rp.pts.length; i++) {
+        const a = rp.pts[i - 1], b = rp.pts[i];
+        const hit = sqDistPointSeg(wx, wz, a[0], a[1], b[0], b[1]);
+        if (!best || hit.d2 < best.d2) best = { key, rp, seg: i - 1, d2: hit.d2, t: hit.t };
+      }
+    });
+    return best;
+  };
+  const nearestRoadPointTo = (wx, wz) => {
+    let best = null;
+    eachEffectiveRoadPath((key, rp) => {
+      for (let i = 0; i < rp.pts.length; i++) {
+        const p = rp.pts[i], d2 = (p[0] - wx) ** 2 + (p[1] - wz) ** 2;
+        if (!best || d2 < best.d2) best = { key, rp, index: i, d2 };
+      }
+    });
+    return best;
+  };
+  const pickRoadPathEditObject = (e) => {
+    m2.x = (e.clientX / innerWidth) * 2 - 1;
+    m2.y = -(e.clientY / innerHeight) * 2 + 1;
+    ray.setFromCamera(m2, camera);
+    const hits = ray.intersectObjects(roadPathEditGroup.children, true);
+    let bestEdge = null;
+    for (const h of hits) {
+      const obj = h.object;
+      const direct = obj && obj.userData && obj.userData.pathEdit;
+      if (direct) return direct;
+      if (!obj || !obj.userData || h.instanceId == null) continue;
+      if (obj.userData.pathEditType === 'point') {
+        const data = roadPathEditState.pointHits[h.instanceId];
+        if (data) return { type: 'point', ...data };
+      }
+      if (obj.userData.pathEditType === 'edge' && !bestEdge) {
+        const data = roadPathEditState.edgeHits[h.instanceId];
+        if (data) bestEdge = { type: 'edge', ...data };
+      }
+    }
+    return bestEdge;
+  };
+  const ensureEditedRoadPath = (key) => {
+    let rp = roadPathEditState.edits.get(key);
+    if (rp) return rp;
+    const base = baseRoadPathByKey(key);
+    if (!base) return null;
+    rp = cloneRoadPath(base);
+    roadPathEditState.edits.set(key, rp);
+    roadPathEditState.dirty = true;
+    return rp;
+  };
+  const selectRoadPathPoint = (key, point) => {
+    if (!key || point < 0 || !effectiveRoadPathByKey(key)) return false;
+    roadPathEditState.selectedKey = key;
+    roadPathEditState.selectedPoint = point;
+    roadPathEditState.selectedEdge = null;
+    const rp = effectiveRoadPathByKey(key);
+    renderRoadPathEditOverlay();
+    setPathMeta('точка #' + point + ' · ' + roadPathLabel(rp));
+    return true;
+  };
+  const selectRoadPathEdge = (key, seg) => {
+    if (!key || seg < 0 || !effectiveRoadPathByKey(key)) return false;
+    roadPathEditState.selectedKey = key;
+    roadPathEditState.selectedPoint = -1;
+    roadPathEditState.selectedEdge = { key, seg };
+    const rp = effectiveRoadPathByKey(key);
+    renderRoadPathEditOverlay();
+    setPathMeta('ребро #' + (seg + 1) + ' · ' + roadPathLabel(rp));
+    return true;
+  };
+  // 🎯 пик В ЭКРАННЫХ ПИКСЕЛЯХ: выбирается ровно тот маркер, по которому кликнул.
+  //    (Старый фолбэк проецировал клик на плоскость Y=0 — на рельефе выбиралась СОСЕДНЯЯ точка,
+  //     и при драге она прыгала к курсору: выглядело как «создалась новая точка».)
+  const roadPathProjVec = new THREE.Vector3();
+  const projectRoadPathPoint = (p) => {
+    roadPathProjVec.set(p[0], pathPointY(p[0], p[1]) + 0.42, p[1]).project(camera);
+    if (roadPathProjVec.z > 1) return null;                             // за камерой
+    return { x: (roadPathProjVec.x * 0.5 + 0.5) * innerWidth, y: (-roadPathProjVec.y * 0.5 + 0.5) * innerHeight };
+  };
+  const pickRoadPathScreen = (e) => {
+    const PX_POINT = 16, PX_EDGE = 12;                                  // допуски в пикселях
+    let bestPoint = null, bestEdge = null;
+    eachEffectiveRoadPath((key, rp) => {
+      const scr = rp.pts.map(projectRoadPathPoint);
+      for (let i = 0; i < rp.pts.length; i++) {
+        const s = scr[i]; if (!s) continue;
+        const d = Math.hypot(s.x - e.clientX, s.y - e.clientY);
+        if (d <= PX_POINT && (!bestPoint || d < bestPoint.d)) bestPoint = { key, index: i, d };
+      }
+      for (let i = 1; i < rp.pts.length; i++) {
+        const a = scr[i - 1], b = scr[i]; if (!a || !b) continue;
+        const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+        const t = l2 ? Math.max(0, Math.min(1, ((e.clientX - a.x) * dx + (e.clientY - a.y) * dy) / l2)) : 0;
+        const d = Math.hypot(e.clientX - (a.x + dx * t), e.clientY - (a.y + dy * t));
+        if (d <= PX_EDGE && (!bestEdge || d < bestEdge.d)) bestEdge = { key, seg: i - 1, d };
+      }
+    });
+    return { point: bestPoint, edge: bestEdge };
+  };
+  const beginRoadPathPointDrag = (key, index, e) => {
+    selectRoadPathPoint(key, index);
+    const rp = effectiveRoadPathByKey(key);
+    const p = rp && rp.pts && rp.pts[index];
+    roadPathEditDragY = p ? pathPointY(p[0], p[1]) + 0.42 : 0;
+    roadPathEditPlane.constant = -roadPathEditDragY;
+    // ЗАПОМИНАЕМ точку нажатия. Пока курсор не сдвинулся ≥5px — это КЛИК (только выбор), точку НЕ двигаем.
+    roadPathEditState.pendingDrag = { sx: e ? e.clientX : 0, sy: e ? e.clientY : 0, offX: 0, offZ: 0, ready: false };
+    roadPathEditState.dragging = true;
+    roadPathEditState.moved = false;
+  };
+  const roadPathTerrainXZ = (e) => {                              // XZ земли под курсором (рейкаст), фолбэк — плоскость высоты драга
+    m2.x = (e.clientX / innerWidth) * 2 - 1; m2.y = -(e.clientY / innerHeight) * 2 + 1;
+    ray.setFromCamera(m2, camera);
+    const gh = ray.intersectObjects(pickSceneObjects(), true);
+    if (gh.length) return { wx: gh[0].point.x, wz: gh[0].point.z };
+    const pos = roadPathMouseWorld(e, roadPathEditDragY);
+    return pos ? { wx: pos.wx, wz: pos.wz } : null;
+  };
+  // ── СВЯЗЬ (weld) — строго ПОПАРНАЯ: соединил A с B → в welds добавляется ТОЛЬКО пара [A,B].
+  // Никаких групп/слияний: если A уже связан с C, соединение A-B НЕ трогает C (раньше группы сливались → авто-связи).
+  // Участник {key, end:'start'|'end'} (концы стабильны к правкам середины; середина — по idx).
+  const weldMemberFor = (key, index) => {
+    const rp = effectiveRoadPathByKey(key);
+    if (!rp) return { key, idx: index };
+    if (index === 0) return { key, end: 'start' };
+    if (index === rp.pts.length - 1) return { key, end: 'end' };
+    return { key, idx: index };
+  };
+  const weldResolveIndex = (mem, rp) => (mem.end === 'start' ? 0 : mem.end === 'end' ? rp.pts.length - 1 : mem.idx);
+  const weldSameMember = (a, b) => a.key === b.key && ((a.end != null && a.end === b.end) || (a.idx != null && a.idx === b.idx));
+  const weldPairExists = (mA, mB) => roadPathEditState.welds.some((p) => p.length === 2 && ((weldSameMember(p[0], mA) && weldSameMember(p[1], mB)) || (weldSameMember(p[0], mB) && weldSameMember(p[1], mA))));
+  const weldPair = (mA, mB) => { if (!weldPairExists(mA, mB)) roadPathEditState.welds.push([mA, mB]); };   // одна пара, ничего больше
+  const weldSetCoord = (key, index, wx, wz) => {   // двигаем только ПРЯМЫХ партнёров точки (напрямую спаренных), не транзитивно
+    const self = weldMemberFor(key, index);
+    for (const p of roadPathEditState.welds) {
+      let other = null;
+      if (weldSameMember(p[0], self)) other = p[1];
+      else if (weldSameMember(p[1], self)) other = p[0];
+      if (!other) continue;
+      const mrp = ensureEditedRoadPath(other.key); if (!mrp) continue;
+      const mi = weldResolveIndex(other, mrp);
+      if (mrp.pts[mi]) mrp.pts[mi] = [wx, wz];
+    }
+  };
+  // Обе операции соединяют РОВНО две выбранные точки (любых РАЗНЫХ дорог, где угодно — середина/конец).
+  // НИКОГДА не вставляют новых точек и не создают новых рёбер (раньше вставка точки в середину давала крюк).
+  // ⛓ ОБЪЕДИНИТЬ: вторая точка СРАЗУ прыгает в координату первой (совпали) + связь. Двигаются вместе.
+  const weldRoadPathPoints = (A, B) => {
+    if (!A || !B) { setPathMeta('нет точки-якоря'); return; }
+    if (A.key === B.key) { setPathMeta('обе точки в ОДНОЙ дороге — выбери точки РАЗНЫХ дорог'); return; }
+    const rpA = effectiveRoadPathByKey(A.key), rpB = ensureEditedRoadPath(B.key);
+    if (!rpA || !rpB || !rpA.pts[A.index] || !rpB.pts[B.index]) { setPathMeta('точка не найдена'); return; }
+    rpB.pts[B.index] = rpA.pts[A.index].slice();               // B → в координату A (совпали). Никаких новых точек/рёбер.
+    weldPair(weldMemberFor(A.key, A.index), weldMemberFor(B.key, B.index));
+    roadPathEditState.selectedKey = A.key; roadPathEditState.selectedPoint = A.index; roadPathEditState.selectedEdge = null;
+    persistRoadPathEdits();
+    setPathMeta('точки слиты в одну — двигаются вместе (' + roadPathLabel(rpA) + ' ↔ ' + roadPathLabel(rpB) + ')');
+    renderRoadPathEditOverlay();
+  };
+  // 🔗 СОЕДИНИТЬ: обе точки ОСТАЮТСЯ на месте, но СВЯЗАНЫ — тянешь одну, вторая едет за ней (совпадут при драге).
+  const edgeConnectRoadPathPoints = (A, B) => {
+    if (!A || !B) { setPathMeta('нет точки-якоря'); return; }
+    if (A.key === B.key) { setPathMeta('обе точки в ОДНОЙ дороге — выбери точки РАЗНЫХ дорог'); return; }
+    const rpA = effectiveRoadPathByKey(A.key), rpB = effectiveRoadPathByKey(B.key);
+    if (!rpA || !rpB || !rpA.pts[A.index] || !rpB.pts[B.index]) { setPathMeta('точка не найдена'); return; }
+    weldPair(weldMemberFor(A.key, A.index), weldMemberFor(B.key, B.index));   // только связь — ни новых точек, ни рёбер, ни сдвига
+    roadPathEditState.selectedKey = A.key; roadPathEditState.selectedPoint = A.index; roadPathEditState.selectedEdge = null;
+    persistRoadPathEdits();
+    setPathMeta('точки связаны — обе на месте, тянешь одну → вторая едет (' + roadPathLabel(rpA) + ' ↔ ' + roadPathLabel(rpB) + ')');
+    renderRoadPathEditOverlay();
+  };
+  const resolvePointHit = (e) => {
+    // ПЕРВИЧНО — экранный пик (детерминирован: ближайшая точка по пикселям, стабильный тай-брейк по порядку путей).
+    // Рейкаст по сферам на совпадающих точках наложенных дорог возвращал СЛУЧАЙНЫЙ путь → «соединялось не то».
+    const scr = pickRoadPathScreen(e);
+    if (scr.point) return { point: scr.point };
+    if (scr.edge) return { edge: scr.edge };
+    const objectHit = pickRoadPathEditObject(e);                  // фолбэк: рейкаст по мешам (если экранный промахнулся)
+    if (objectHit && objectHit.type === 'point' && objectHit.key != null) return { point: { key: objectHit.key, index: objectHit.index } };
+    if (objectHit && objectHit.type === 'edge' && objectHit.key != null) return { edge: { key: objectHit.key, seg: objectHit.seg } };
+    return {};
+  };
+  const clearConnectAnchor = () => { roadPathEditState.connectAnchor = null; $('pathConnect').classList.remove('on'); $('pathConnectEdge').classList.remove('on'); };
+  const handleRoadPathEditPointerDown = (e) => {
+    const hit = resolvePointHit(e);
+    // режим соединения/объединения: якорь ждёт второй точки, mode выбирает операцию
+    if (roadPathEditState.connectAnchor) {
+      const anchor = roadPathEditState.connectAnchor;
+      if (hit.point) { (anchor.mode === 'weld' ? weldRoadPathPoints : edgeConnectRoadPathPoints)(anchor, hit.point); clearConnectAnchor(); return; }
+      clearConnectAnchor(); setPathMeta('операция отменена (клик мимо точки)'); return;
+    }
+    if (hit.point) { beginRoadPathPointDrag(hit.point.key, hit.point.index, e); return; }
+    if (hit.edge) { selectRoadPathEdge(hit.edge.key, hit.edge.seg); return; }
+    roadPathEditState.selectedKey = null;
+    roadPathEditState.selectedPoint = -1;
+    roadPathEditState.selectedEdge = null;
+    renderRoadPathEditOverlay();
+    setPathMeta('рядом нет точки или ребра');
+  };
+  const DRAG_THRESH_PX = 5;
+  const moveSelectedRoadPathPointTo = (e) => {
+    if (!roadPathEditState.dragging || !roadPathEditState.selectedKey || roadPathEditState.selectedPoint < 0) return false;
+    const pd = roadPathEditState.pendingDrag;
+    if (pd && !pd.ready) {
+      if (Math.hypot(e.clientX - pd.sx, e.clientY - pd.sy) < DRAG_THRESH_PX) return true;    // ПОРОГ: <5px — это клик, точку НЕ двигаем
+      const cur0 = roadPathTerrainXZ(e), rp0 = effectiveRoadPathByKey(roadPathEditState.selectedKey), p0 = rp0 && rp0.pts[roadPathEditState.selectedPoint];
+      if (cur0 && p0) { pd.offX = p0[0] - cur0.wx; pd.offZ = p0[1] - cur0.wz; }               // grab-offset: точка не прыгает под курсор (маркер висит +0.42, рейкаст даёт смещённый XZ)
+      pd.ready = true;
+    }
+    const cur = roadPathTerrainXZ(e); if (!cur) return true;
+    const wx = cur.wx + (pd ? pd.offX : 0), wz = cur.wz + (pd ? pd.offZ : 0);
+    const rp = ensureEditedRoadPath(roadPathEditState.selectedKey);
+    if (!rp || !rp.pts[roadPathEditState.selectedPoint]) return true;
+    rp.pts[roadPathEditState.selectedPoint] = [wx, wz];                                     // двигаем ТОЛЬКО выбранную точку
+    weldSetCoord(roadPathEditState.selectedKey, roadPathEditState.selectedPoint, wx, wz);   // + только ЯВНЫЕ сварки (кнопки соединить/объединить)
+    roadPathEditState.dirty = true;
+    roadPathEditState.moved = true;
+    renderRoadPathEditOverlay();
+    setPathMeta('точка #' + roadPathEditState.selectedPoint + ' перемещается · ' + roadPathLabel(rp));
+    return true;
+  };
+  const finishRoadPathPointDrag = () => {
+    if (!roadPathEditState.dragging) return false;
+    roadPathEditState.dragging = false;
+    roadPathEditState.pendingDrag = null;
+    if (roadPathEditState.moved) {
+      persistRoadPathEdits();
+      const rp = selectedRoadPath();
+      if (rp) setPathMeta('точка сохранена · ' + roadPathLabel(rp));
+    } else { const rp = selectedRoadPath(); if (rp) setPathMeta('точка выбрана (клик — не сдвиг) · ' + roadPathLabel(rp)); }
+    roadPathEditState.moved = false;
+    return true;
+  };
+  const addPointToSelectedRoadPathEdge = () => {
+    const edge = roadPathEditState.selectedEdge;
+    if (!edge) { setPathMeta('сначала кликни по ребру'); return; }
+    const rp = ensureEditedRoadPath(edge.key);
+    if (!rp || !rp.pts[edge.seg] || !rp.pts[edge.seg + 1]) { setPathMeta('ребро больше не найдено'); return; }
+    const a = rp.pts[edge.seg], b = rp.pts[edge.seg + 1];
+    const point = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+    const insertAt = edge.seg + 1;
+    rp.pts.splice(insertAt, 0, point);
+    roadPathEditState.selectedPoint = insertAt;
+    roadPathEditState.selectedEdge = null;
+    roadPathEditState.dirty = true;
+    persistRoadPathEdits();
+    setPathMeta('точка добавлена в центр ребра · ' + roadPathLabel(rp));
+  };
+  const setRoadPathEditorOpen = (on) => {
+    if (on && editState.on) setEditorOpen(false);
+    if (on && decorEditState.on) setDecorEditorOpen(false);
+    if (on && cityEditState.on) setCityEditorOpen(false);
+    if (on && lightEditorState.on) setLightEditorOpen(false);
+    roadPathEditState.on = on;
+    $('pathEditor').classList.toggle('on', on);
+    $('bPathEdit').classList.toggle('on', on);
+    roadPathEditGroup.visible = on;
+    if (on) {
+      auto = false; $('bRot').classList.remove('on');
+      renderNodeGraphOverlay();                                   // редактор путей = граф узлов/рёбер
+      updateGraphCount();
+    } else {
+      nodeEditState.selNode = -1; nodeEditState.selEdge = -1; nodeEditState.connectAnchor = -1; nodeEditState.dragging = false; nodeEditState.pendingDrag = null;
+      clearRoadPathEditOverlay();
+    }
+  };
   const cityMarkerGeo = new THREE.CylinderGeometry(Rg * 0.26, Rg * 0.26, 0.14, 6);
   const cityLabelsLayer = $('cityLabels');
   const cityCountries = Array.from(new Set(CITY_LIST.map(c => c[5]).concat(facList.map(f => f.name)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ru'));
@@ -4353,8 +5154,6 @@
   const normalizeDecorScale = (value) => Math.max(0.1, Math.min(3, Math.round((Number(value) || 1) * 10) / 10));
   const normalizeDecorHeight = (value) => Math.max(-3, Math.min(6, Math.round((Number(value) || 0) * 10) / 10));
   const normalizeDecorOffset = (value) => Math.max(-5, Math.min(5, Math.round((Number(value) || 0) * 10) / 10));
-  const isBridgeDecorAsset = (asset) => String(asset || '').startsWith('bridge');
-  const bridgeDecorKeySet = () => new Set(bridge.map(c => editKey(c.q, c.r)));
   const setDecorMeta = (txt) => { const el = $('decorMeta'); if (el) el.textContent = txt; };
   const updateDecorCount = () => { const el = $('decorEdCount'); if (el) el.textContent = String(decorEditState.edits.size); };
   const effectiveBiomeForCell = (c) => {
@@ -4365,12 +5164,11 @@
     return c.biome || 'default';
   };
   const persistManualDecor = () => {
-    const bridgeKeys = bridgeDecorKeySet();
     const payload = {
       version: 2,
       updatedAt: new Date().toISOString(),
-      edits: [...decorEditState.edits.values()].filter(e => !isBridgeDecorAsset(e && e.asset)),
-      removedGenerated: [...decorEditState.removedGenerated].filter(k => !bridgeKeys.has(k)),
+      edits: [...decorEditState.edits.values()],
+      removedGenerated: [...decorEditState.removedGenerated],
     };
     try {
       localStorage.setItem(DECOR_EDIT_KEY, JSON.stringify(payload));
@@ -4426,9 +5224,14 @@
     const k = editKey(q, r);
     removeManualDecorMesh(k);
     decorEditState.edits.delete(k);
-    restoreBridgeVisual(k);
     const c = findCellByQR(q, r);
-    if ((c && c.bridgeModel) || generatedDecorByKey.has(k)) decorEditState.removedGenerated.add(k);
+    if (c && c.bridgeModel) {
+      decorEditState.removedGenerated.add(k);
+      hideBridgeVisual(c, k);
+    } else {
+      restoreBridgeVisual(k);
+    }
+    if (generatedDecorByKey.has(k)) decorEditState.removedGenerated.add(k);
     hideGeneratedDecorVisuals(k);
     updateDecorCount();
     if (!silent) {
@@ -4458,11 +5261,11 @@
   });
   const generatedDecorEdit = (entry) => {
     const item = entry.item;
-    const c = findCellByQR(item.q, item.r);
+    const c = findCellByQR(item.q, item.r) || nearestCellByWorld(item.x || 0, item.z || 0);
     const baseY = c ? (c.elev || 0) + editHeightForCell(c) + 0.06 : 0;
     return {
-      q: item.q,
-      r: item.r,
+      q: c ? c.q : item.q,
+      r: c ? c.r : item.r,
       asset: entry.asset,
       rot: ((item.yaw || 0) * 180 / Math.PI + 360) % 360,
       scale: item.s || decorDefaultScale[entry.asset] || 1,
@@ -4470,6 +5273,37 @@
       offsetX: c ? normalizeDecorOffset((item.x || 0) - c.wx) : 0,
       offsetZ: c ? normalizeDecorOffset((item.z || 0) - c.wz) : 0,
     };
+  };
+  const pickGeneratedDecorAt = (e) => {
+    if (!generatedDecorPickTargets.length) return null;
+    m2.x = (e.clientX / innerWidth) * 2 - 1; m2.y = -(e.clientY / innerHeight) * 2 + 1;
+    ray.setFromCamera(m2, camera);
+    for (const hit of ray.intersectObjects(generatedDecorPickTargets, true)) {
+      const entries = hit.object && hit.object.userData && hit.object.userData.decorEntries;
+      const entry = entries && entries[hit.instanceId];
+      if (entry) return entry;
+    }
+    return null;
+  };
+  const selectGeneratedDecorEntry = (entry) => {
+    const edit = generatedDecorEdit(entry);
+    const c = findCellByQR(edit.q, edit.r);
+    if (!c) { setDecorMeta('декор не привязан к hex'); return false; }
+    const k = editKey(c.q, c.r);
+    if (decorEditState.removedGenerated.has(k)) return false;
+    applyManualDecor(edit, true);
+    decorEditState.selected = c;
+    decorEditState.selectedKey = k;
+    decorEditState.asset = edit.asset;
+    decorEditState.rot = edit.rot || 0;
+    decorEditState.scale = normalizeDecorScale(edit.scale);
+    decorEditState.height = normalizeDecorHeight(edit.height);
+    decorEditState.offsetX = normalizeDecorOffset(edit.offsetX);
+    decorEditState.offsetZ = normalizeDecorOffset(edit.offsetZ);
+    syncDecorInputs();
+    setDecorOutline(c);
+    setDecorMeta('выбран baked-декор · q' + c.q + ' r' + c.r + ' · ' + decorEditState.asset + ' · ×' + decorEditState.scale + ' · h ' + decorEditState.height);
+    return true;
   };
   function seedGeneratedDecor() {
     for (const [k, entry] of generatedTreeByKey) {
@@ -4486,10 +5320,15 @@
       }
       const raw = localStorage.getItem(DECOR_EDIT_KEY);
       const local = raw ? JSON.parse(raw) : { edits: [], removedGenerated: [] };
-      const bridgeKeys = bridgeDecorKeySet();
-      decorEditState.removedGenerated = new Set([...(saved.removedGenerated || []), ...(local.removedGenerated || [])].filter(k => !bridgeKeys.has(k)));
-      for (const edit of saved.edits || []) if (!isBridgeDecorAsset(edit && edit.asset)) applyManualDecor(edit, true);
-      for (const edit of local.edits || []) if (!isBridgeDecorAsset(edit && edit.asset)) applyManualDecor(edit, true);
+      decorEditState.removedGenerated = new Set([...(saved.removedGenerated || []), ...(local.removedGenerated || [])]);
+      for (const k of decorEditState.removedGenerated) {
+        const [q, r] = String(k).split(',').map(Number);
+        const c = findCellByQR(q, r);
+        if (c && c.bridgeModel) hideBridgeVisual(c, k);
+        hideGeneratedDecorVisuals(k);
+      }
+      for (const edit of saved.edits || []) if (!decorEditState.removedGenerated.has(editKey(edit.q, edit.r))) applyManualDecor(edit, true);
+      for (const edit of local.edits || []) if (!decorEditState.removedGenerated.has(editKey(edit.q, edit.r))) applyManualDecor(edit, true);
       if (!usingGameMapTiles) seedGeneratedDecor();
       updateDecorCount();
       setDecorMeta((usingGameMapTiles ? 'hex-map: ' : '') + 'загружено: ' + decorEditState.edits.size + ' правок');
@@ -4515,6 +5354,15 @@
       decorEditState.height = normalizeDecorHeight(existing.height);
       decorEditState.offsetX = normalizeDecorOffset(existing.offsetX);
       decorEditState.offsetZ = normalizeDecorOffset(existing.offsetZ);
+    } else if (c.bridgeModel && !decorEditState.removedGenerated.has(k)) {
+      const edit = bridgeDecorEdit(c);
+      applyManualDecor(edit, true);
+      decorEditState.asset = edit.asset;
+      decorEditState.rot = edit.rot || 0;
+      decorEditState.scale = normalizeDecorScale(edit.scale);
+      decorEditState.height = normalizeDecorHeight(edit.height);
+      decorEditState.offsetX = 0;
+      decorEditState.offsetZ = 0;
     } else if (generatedDecorByKey.has(k) && !decorEditState.removedGenerated.has(k)) {
       const entry = (generatedDecorByKey.get(k) || []).find(e => decorDefaultScale[e.asset]) || generatedDecorByKey.get(k)[0];
       const edit = generatedDecorEdit(entry);
@@ -4537,7 +5385,11 @@
     setDecorOutline(c);
     setDecorMeta('выбран q' + c.q + ' r' + c.r + ' · ' + decorEditState.asset + ' · ×' + decorEditState.scale + ' · h ' + decorEditState.height + ' · x ' + decorEditState.offsetX + ' · z ' + decorEditState.offsetZ);
   };
-  const placeManualDecor = (e) => selectManualDecorCell(pickCellAt(e));
+  const placeManualDecor = (e) => {
+    const decorHit = pickGeneratedDecorAt(e);
+    if (decorHit && selectGeneratedDecorEntry(decorHit)) return;
+    selectManualDecorCell(pickCellAt(e));
+  };
   const updateSelectedDecor = () => {
     if (!decorEditState.selected) return;
     applyManualDecor({
@@ -4579,6 +5431,7 @@
   const setEditorOpen = (on) => {
     if (on && decorEditState.on) setDecorEditorOpen(false);
     if (on && cityEditState.on) setCityEditorOpen(false);
+    if (on && roadPathEditState.on) setRoadPathEditorOpen(false);
     if (on && lightEditorState.on) setLightEditorOpen(false);
     editState.on = on;
     $('editor').classList.toggle('on', on);
@@ -4589,6 +5442,7 @@
   const setDecorEditorOpen = (on) => {
     if (on && editState.on) setEditorOpen(false);
     if (on && cityEditState.on) setCityEditorOpen(false);
+    if (on && roadPathEditState.on) setRoadPathEditorOpen(false);
     if (on && lightEditorState.on) setLightEditorOpen(false);
     decorEditState.on = on;
     $('decorEditor').classList.toggle('on', on);
@@ -4605,6 +5459,7 @@
   const setCityEditorOpen = (on) => {
     if (on && editState.on) setEditorOpen(false);
     if (on && decorEditState.on) setDecorEditorOpen(false);
+    if (on && roadPathEditState.on) setRoadPathEditorOpen(false);
     if (on && lightEditorState.on) setLightEditorOpen(false);
     cityEditState.on = on;
     $('cityEditor').classList.toggle('on', on);
@@ -4688,6 +5543,7 @@
     if (on && editState.on) setEditorOpen(false);
     if (on && decorEditState.on) setDecorEditorOpen(false);
     if (on && cityEditState.on) setCityEditorOpen(false);
+    if (on && roadPathEditState.on) setRoadPathEditorOpen(false);
     lightEditorState.on = on;
     $('lightEditor').classList.toggle('on', on);
     $('bLightEdit').classList.toggle('on', on);
@@ -5155,7 +6011,85 @@
   };
   $('decorClear').onclick = clearManualDecor;
   await loadManualDecor();
+  loadRoadPathEdits();
+  initNodeGraph();                                                // граф узлов/рёбер: загрузить или мигрировать из путей
+  updatePathEditCount();
+  // ── КНОПКИ РЕДАКТОРА ГРАФА (переиспользуем id, меняем подписи/действия) ──
+  // выбор стран — ГАЛОЧКИ (можно несколько). Рендерим только отмеченные (иначе весь граф лагает). Ничего = всё.
+  { const box = $('pathCountryBox');
+    if (box) {
+      const cs = graphCountries(); box.innerHTML = '';
+      const applyCountries = () => {
+        nodeEditState.countries = new Set([...box.querySelectorAll('input[type=checkbox]:checked')].map((c) => c.value));
+        nodeEditState.selNode = -1; nodeEditState.selEdge = -1; nodeEditState.connectAnchor = -1; $('pathConnectEdge').classList.remove('on'); if ($('pathMerge')) $('pathMerge').classList.remove('on');
+        renderNodeGraphOverlay();
+        setPathMeta('страны: ' + ([...nodeEditState.countries].join(', ') || 'все'));
+      };
+      cs.forEach((nm, i) => {
+        const lbl = document.createElement('label'); lbl.style.cssText = 'display:flex;align-items:center;gap:6px;padding:1px 3px;font-size:12px;cursor:pointer;white-space:nowrap;';
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = nm; cb.checked = (i === 0); cb.onchange = applyCountries;
+        lbl.appendChild(cb); lbl.appendChild(document.createTextNode(nm)); box.appendChild(lbl);
+      });
+      nodeEditState.countries = new Set(cs[0] ? [cs[0]] : []);
+      const setAll = (v) => { box.querySelectorAll('input[type=checkbox]').forEach((c) => { c.checked = v; }); applyCountries(); };
+      { const b = $('pathCountryAll'); if (b) b.onclick = () => setAll(true); }
+      { const b = $('pathCountryNone'); if (b) b.onclick = () => setAll(false); }
+    }
+  }
+  // ＋ ответвление: новый узел, соединённый ребром с выбранным (отросток наружу) — тяни его на место
+  $('pathNewPoint').onclick = () => {
+    if (nodeEditState.selNode < 0) { setPathMeta('выбери узел — от него вырастет ответвление'); return; }
+    const nn = graphBranchFromNode(nodeEditState.selNode); if (nn < 0) { setPathMeta('не удалось'); return; }
+    nodeEditState.selNode = nn; nodeEditState.selEdge = -1; graphPersistRender(); setPathMeta('ответвление создано — тяни узел на место');
+  };
+  // ＋ на ребре: вставить узел в СЕРЕДИНУ выбранного ребра (разбить его на два)
+  $('pathModeAdd').onclick = () => {
+    if (nodeEditState.selEdge < 0) { setPathMeta('выбери РЕБРО — в его середину добавится узел'); return; }
+    const mi = graphSubdivideEdge(nodeEditState.selEdge); if (mi < 0) { setPathMeta('не удалось'); return; }
+    nodeEditState.selNode = mi; nodeEditState.selEdge = -1; graphPersistRender(); setPathMeta('узел добавлен на ребро — тяни на место');
+  };
+  const armGraphConnect = (mode, btnId) => {
+    const otherBtn = mode === 'edge' ? 'pathMerge' : 'pathConnectEdge';
+    if (nodeEditState.connectAnchor >= 0 && nodeEditState.connectMode === mode) { nodeEditState.connectAnchor = -1; $(btnId).classList.remove('on'); renderNodeGraphOverlay(); setPathMeta('отменено'); return; }
+    if (nodeEditState.selNode < 0) { setPathMeta('выбери первый узел, жми кнопку, потом кликни второй узел'); return; }
+    nodeEditState.connectAnchor = nodeEditState.selNode; nodeEditState.connectMode = mode;
+    $(btnId).classList.add('on'); if ($(otherBtn)) $(otherBtn).classList.remove('on'); renderNodeGraphOverlay();
+    setPathMeta('якорь-узел выбран (зелёный) — кликни ВТОРОЙ узел' + (mode === 'merge' ? ' для объединения' : ' для ребра'));
+  };
+  $('pathConnectEdge').onclick = () => armGraphConnect('edge', 'pathConnectEdge');
+  { const e = $('pathMerge'); if (e) e.onclick = () => armGraphConnect('merge', 'pathMerge'); }
+  { const e = $('pathConnect'); if (e) e.textContent = '🏙 город'; }
+  $('pathConnect').onclick = () => {
+    if (nodeEditState.selNode < 0) { setPathMeta('выбери узел, потом «город» (привяжет к ближайшему городу / отвяжет)'); return; }
+    setPathMeta(graphBindCity(nodeEditState.selNode)); graphPersistRender();
+  };
+  { const e = $('pathDeletePoint'); if (e) e.textContent = 'удалить узел'; }
+  $('pathDeletePoint').onclick = () => {
+    if (nodeEditState.selNode < 0) { setPathMeta('выбери узел'); return; }
+    graphDeleteNode(nodeEditState.selNode); nodeEditState.selNode = -1; nodeEditState.connectAnchor = -1; $('pathConnectEdge').classList.remove('on'); graphPersistRender(); setPathMeta('узел удалён (с рёбрами)');
+  };
+  $('pathDeleteEdge').onclick = () => {
+    if (nodeEditState.selEdge < 0) { setPathMeta('выбери ребро'); return; }
+    nodeGraph.edges.splice(nodeEditState.selEdge, 1); nodeEditState.selEdge = -1; graphPersistRender(); setPathMeta('ребро удалено');
+  };
+  { const e = $('pathReset'); if (e) e.textContent = 'пересобрать из дорог'; }
+  $('pathReset').onclick = () => {
+    migrateRoadPathsToGraph(); nodeEditState.selNode = -1; nodeEditState.selEdge = -1; nodeEditState.connectAnchor = -1; $('pathConnectEdge').classList.remove('on'); graphPersistRender();
+    setPathMeta('граф пересобран из исходных дорог: ' + nodeGraph.nodes.length + ' узлов');
+  };
+  $('pathSave').onclick = () => { persistNodeGraph(); setPathMeta('граф сохранён: ' + nodeGraph.nodes.length + ' узлов, ' + nodeGraph.edges.length + ' рёбер'); };
+  $('pathToGame').onclick = async () => {
+    persistNodeGraph();
+    setPathMeta('⏳ считаю дороги из графа...');
+    const { paths, ok, miss } = graphToRoadPaths();              // граф → геометрия дорог город↔город
+    roadPathEditState.edits = paths;                             // подменяем правки путей на выведенные из графа
+    roadPathEditState.deleted = new Set();
+    persistRoadPathEdits();                                      // чтобы bakeHexMap взял их как overrides
+    setPathMeta('дороги из графа: ' + ok + ' готово' + (miss ? (', ' + miss + ' без прямого маршрута (старая геометрия)') : '') + ' · сохраняю в игру...');
+    await window.saveHexMapToGame();
+  };
   addEventListener('mousemove', (e) => {
+    if (roadPathEditState.on && nodeEditState.dragging) return;
     if (drag) return;
     m2.x = (e.clientX / innerWidth) * 2 - 1; m2.y = -(e.clientY / innerHeight) * 2 + 1;
     ray.setFromCamera(m2, camera);
@@ -5181,10 +6115,29 @@
   });
 
   // 10) кнопки + HUD
+  const syncGraphButtons = () => {
+    $('bGraph').classList.toggle('on', graphOverlay.visible && graphEdgesOverlay.visible && graphPathsOverlay.visible);
+    $('bGraphEdges').classList.toggle('on', graphOverlay.visible && graphEdgesOverlay.visible);
+    $('bGraphPaths').classList.toggle('on', graphOverlay.visible && graphPathsOverlay.visible);
+  };
+  const setGraphDebug = ({ all, edges, paths } = {}) => {
+    if (all != null) {
+      graphOverlay.visible = !!all;
+      graphEdgesOverlay.visible = !!all;
+      graphPathsOverlay.visible = !!all;
+    }
+    if (edges != null) graphEdgesOverlay.visible = !!edges;
+    if (paths != null) graphPathsOverlay.visible = !!paths;
+    graphOverlay.visible = graphEdgesOverlay.visible || graphPathsOverlay.visible;
+    syncGraphButtons();
+  };
   $('bRot').onclick = function () { auto = !auto; this.classList.toggle('on', auto); };
   $('bDecor').onclick = function () { decor.visible = !decor.visible; this.classList.toggle('on', decor.visible); };
   $('bWater').onclick = function () { seaMesh.visible = !seaMesh.visible; this.classList.toggle('on', !seaMesh.visible); };
-  $('bGraph').onclick = function () { graphOverlay.visible = !graphOverlay.visible; this.classList.toggle('on', graphOverlay.visible); };
+  $('bGraph').onclick = function () { setGraphDebug({ all: !(graphOverlay.visible && graphEdgesOverlay.visible && graphPathsOverlay.visible) }); };
+  $('bGraphEdges').onclick = function () { setGraphDebug({ edges: !graphEdgesOverlay.visible }); };
+  $('bGraphPaths').onclick = function () { setGraphDebug({ paths: !graphPathsOverlay.visible }); };
+  $('bPathEdit').onclick = function () { setRoadPathEditorOpen(!roadPathEditState.on); };
   $('bHeight').onclick = function () { setHeightLabelsOpen(!heightLabelState.on); };
   $('bEdit').onclick = function () { setEditorOpen(!editState.on); };
   $('bDecorEdit').onclick = function () { setDecorEditorOpen(!decorEditState.on); };
@@ -5196,7 +6149,8 @@
   $('dec').textContent = decorCount.toLocaleString('ru') + ' (лес ' + forest + ', горы ' + mtn + ', скалы ' + cliff + ', замки ' + P.castle.length + ')';
   $('net').textContent = networkReachable + '/' + CITY_LIST.length + (finalComps.length > 1 ? ' · ' + finalComps.length + ' группы' : ' · связана');
   $('ports').textContent = visibleEntrances + '/' + CITY_LIST.length;
-  document.body.dataset.roadDebug = JSON.stringify({ graphRoadEdges: graphRoadEdgeCount, selectedRoadEdges: roadEdges.length, builtRoadEdges: roadPaths.length, source: roadsFromGameMap ? 'hex-map' : 'generated', failedRoadEdges: roadBuildFailures, extraFerryLinks, roadTiles: road.length, bridges: bridge.length, seaRoadLinks: seaRoadLinks.length, ferryLinks: ferryLinks.length, reachable: networkReachable, groups: finalComps.length, cities: CITY_LIST.length });
+  syncGraphButtons();
+  document.body.dataset.roadDebug = JSON.stringify({ graphRoadEdges: graphRoadEdgeCount, selectedRoadEdges: roadEdges.length, builtRoadEdges: roadPaths.length, debugEdgeSegments: graphEdgePos.length / 6, debugPathSegments: graphPos.length / 6, source: roadsFromGameMap ? 'hex-map' : 'generated', failedRoadEdges: roadBuildFailures, extraFerryLinks, roadTiles: road.length, bridges: bridge.length, seaRoadLinks: seaRoadLinks.length, ferryLinks: ferryLinks.length, reachable: networkReachable, groups: finalComps.length, cities: CITY_LIST.length });
   addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
   // debug-хук (скриншоты при фоновой вкладке)
@@ -5204,8 +6158,15 @@
     look: (a, e, df, cx, cz) => { az = a; el = e; dist = worldW * df; ctr.set(cx || 0, 0, cz || 0); auto = false; applyCam(); renderer.render(scene, camera); }, W: () => worldW,
     water: (o) => { const u = waterFX; if (!o) return { scale: u.flowScale.value, speed: u.flowSpeed.value, strength: u.flowStrength.value, contrast: u.flowContrast.value, noiseScale: u.noiseScale.value, noiseStrength: u.noiseStrength.value }; if (o.scale != null) u.flowScale.value = o.scale; if (o.speed != null) u.flowSpeed.value = o.speed; if (o.strength != null) u.flowStrength.value = o.strength; if (o.contrast != null) u.flowContrast.value = o.contrast; if (o.noiseScale != null) u.noiseScale.value = o.noiseScale; if (o.noiseStrength != null) u.noiseStrength.value = o.noiseStrength; if (o.foamWidth != null) u.shoreFoamWidth.value = o.foamWidth; if (o.foamSharp != null) u.shoreFoamSharp.value = o.foamSharp; if (o.deep) u.uColorDeep.value.set(o.deep); if (o.shallow) u.uColorShallow.value.set(o.shallow); if (o.foam) u.uColorFoam.value.set(o.foam); renderer.render(scene, camera); return { scale: u.flowScale.value, speed: u.flowSpeed.value }; },
     heightLabels: (v) => { setHeightLabelsOpen(v == null ? !heightLabelState.on : !!v); return { on: heightLabelState.on, labels: heightLabelState.pool.length }; },
+    graph: (mode, value) => {
+      if (mode === 'edges') setGraphDebug({ edges: value == null ? !graphEdgesOverlay.visible : !!value });
+      else if (mode === 'paths') setGraphDebug({ paths: value == null ? !graphPathsOverlay.visible : !!value });
+      else setGraphDebug({ all: value == null ? !(graphOverlay.visible && graphEdgesOverlay.visible && graphPathsOverlay.visible) : !!value });
+      return { on: graphOverlay.visible, edges: graphEdgesOverlay.visible, paths: graphPathsOverlay.visible, edgeSegments: graphEdgePos.length / 6, pathSegments: graphPos.length / 6 };
+    },
     state: () => ({ az, el, dist, ctr: [ctr.x, ctr.y, ctr.z], cam: [camera.position.x, camera.position.y, camera.position.z], auto }),
-    roads: () => ({ graphRoadEdges: graphRoadEdgeCount, selectedRoadEdges: roadEdges.length, builtRoadEdges: roadPaths.length, source: roadsFromGameMap ? 'hex-map' : 'generated', failedRoadEdges: roadBuildFailures.slice(), extraFerryLinks: extraFerryLinks.slice(), roadTiles: road.length, bridges: bridge.length, seaRoadLinks: seaRoadLinks.length, ferryLinks: ferryLinks.length, reachable: networkReachable, groups: finalComps.length, cities: CITY_LIST.length }),
+    roads: () => ({ graphRoadEdges: graphRoadEdgeCount, selectedRoadEdges: roadEdges.length, builtRoadEdges: roadPaths.length, debugEdgeSegments: graphEdgePos.length / 6, debugPathSegments: graphPos.length / 6, source: roadsFromGameMap ? 'hex-map' : 'generated', failedRoadEdges: roadBuildFailures.slice(), extraFerryLinks: extraFerryLinks.slice(), roadTiles: road.length, bridges: bridge.length, seaRoadLinks: seaRoadLinks.length, ferryLinks: ferryLinks.length, reachable: networkReachable, groups: finalComps.length, cities: CITY_LIST.length }),
+    pathEdits: () => ({ count: roadPathEditState.edits.size, deleted: [...roadPathEditState.deleted], selected: roadPathEditState.selectedKey, selectedPoint: roadPathEditState.selectedPoint, selectedEdge: roadPathEditState.selectedEdge, edits: [...roadPathEditState.edits.values()].map(cloneRoadPath) }),
     edits: () => ({ edits: [...editState.edits.values()], hidden: editState.hidden.size, selected: editState.selected ? { q: editState.selected.q, r: editState.selected.r } : null }),
     clearEdits: clearManualEdits,
     stats: () => { renderer.render(scene, camera); const i = renderer.info; let meshes = 0; scene.traverse(o => { if (o.isMesh || o.isInstancedMesh) meshes++; }); return { drawCalls: i.render.calls, triangles: i.render.triangles, meshes, geometries: i.memory.geometries, textures: i.memory.textures }; },

@@ -3,6 +3,25 @@
 const C = require('./constants');
 const ONE = () => 1;
 
+// ── 👥 состав по типам юнитов: {inf,arc,cav}, сумма ≡ units/fcount ─────────────
+// Прямые мутации units/fcount (урон башен/осады/ракеты/эффекты) comp НЕ трогают —
+// syncComp() приводит состав к сумме ПРОПОРЦИОНАЛЬНО (вызов в начале update()).
+// Точечные правки только при ПЕРЕНОСЕ между контейнерами: takeComp/addComp.
+function syncComp(comp, total) {
+  if (!comp) return comp;
+  const s = comp.inf + comp.arc + comp.cav;
+  if (!(s > 1e-9)) { comp.inf = Math.max(0, total); comp.arc = 0; comp.cav = 0; return comp; }
+  if (Math.abs(s - total) > 1e-6) { const k = Math.max(0, total) / s; comp.inf *= k; comp.arc *= k; comp.cav *= k; }
+  return comp;
+}
+function takeComp(comp, n, total) {         // изъять n из comp (пропорционально составу)
+  const k = total > 1e-9 ? Math.max(0, Math.min(1, n / total)) : 0;
+  const out = { inf: comp.inf * k, arc: comp.arc * k, cav: comp.cav * k };
+  comp.inf -= out.inf; comp.arc -= out.arc; comp.cav -= out.cav;
+  return out;
+}
+function addComp(dst, src, k = 1) { dst.inf += src.inf * k; dst.arc += src.arc * k; dst.cav += src.cav * k; return dst; }
+
 class City {
   constructor(o) {
     this.idx = o.idx;
@@ -13,6 +32,8 @@ class City {
     this.capital = !!o.capital;
     this.isShipyard = !!o.isShipyard;
     this.isAirport = !!o.isAirport;
+    this.hasShipyard = !!o.hasShipyard;
+    this.hasAirport = !!o.hasAirport;
     this.shipQueue = 0; this.shipTimer = 0;   // очередь постройки кораблей
     this.planeQueue = 0; this.planeTimer = 0; // очередь постройки самолётов
     this.aa = 0; this.aaTimer = 0;            // 🛡 ПВО (число стволов) + таймер залпа
@@ -36,6 +57,12 @@ class City {
     this.tm = o.tm || ONE;              // techMul(owner, branch)
     this.tv = o.tv || ONE;              // techVal(owner, key)
     this.K = o.K || C;                  // константы комнаты (balance.tune); фолбэк — код-дефолты
+
+    // 👥 состав гарнизона по типам (сумма ≡ units); старт — по START_COMP
+    const sc = this.K.START_COMP || { inf: 1, arc: 0, cav: 0 };
+    this.comp = { inf: this.units * (sc.inf || 0), arc: this.units * (sc.arc || 0), cav: this.units * (sc.cav || 0) };
+    syncComp(this.comp, this.units);
+    this.recruitType = 'inf';           // тип, который производит город (задел под здания-специализаторы)
   }
 
   branchTier(track) { const v = this[track + 'Tier']; return v == null ? (this.spec === track ? this.tier : 0) : v; }
@@ -61,6 +88,7 @@ class City {
 
   // Возвращает заработанную за тик голду (Sim начисляет владельцу).
   update(dt) {
+    syncComp(this.comp, this.units);    // 👥 состав ≡ units (урон/эффекты с прошлого тика распределяются пропорционально)
     // ── осада: бой за город во времени ──
     if (this.siege) {
       const pools = Object.values(this.siege);
@@ -79,6 +107,10 @@ class City {
           if (bo != null) {
             const prev = this.owner;
             this.owner = bo; this.units = Math.max(this.K.GARRISON_FLOOR, this.siege[bo].units);
+            // 👥 гарнизон = выжившие атакующие → состав от их пула (fallback: вся пехота)
+            const pc = this.siege[bo].comp;
+            this.comp = pc ? { inf: pc.inf, arc: pc.arc, cav: pc.cav } : { inf: this.units, arc: 0, cav: 0 };
+            syncComp(this.comp, this.units);
             if (this.occ && this.occFrom === bo) { this.occ = false; this.occFrom = null; } // вернул свой город
             else { this.occ = true; this.occFrom = prev; }                                  // оккупация
             delete this.siege[bo];
@@ -97,10 +129,15 @@ class City {
     // ── производство: FIFO, продвигается только batches[0] ──
     if (this.batches.length) {
       const b = this.batches[0]; b.elapsed += dt;
-      if (b.elapsed >= b.time) { this.units = Math.min(this.capacity, this.units + b.count); this.batches.shift(); }
+      if (b.elapsed >= b.time) {
+        const add = Math.max(0, Math.min(this.capacity - this.units, b.count));   // 👥 рекруты идут в тип батча (или recruitType города)
+        this.units += add;
+        if (this.comp) this.comp[b.type || this.recruitType || 'inf'] += add;
+        this.batches.shift();
+      }
     }
     return income;
   }
 }
 
-module.exports = { City };
+module.exports = { City, syncComp, takeComp, addComp };
