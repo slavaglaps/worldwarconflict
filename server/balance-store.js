@@ -6,7 +6,7 @@
 // GameRoom.onCreate берёт current()/currentMeta() и фиксирует на комнату (новые комнаты подхватывают
 // свежий баланс; идущие матчи не меняются). Правится в Supabase Studio / Directus: строка
 // balance.id='active', колонка data = JSON-override, version = ревизия. JSON ВАЛИДИРУЕТСЯ перед кэшем.
-const { sanitizeOverride } = require('./sim/balance');
+const { sanitizeOverride, deepMerge } = require('./sim/balance');
 const F = require('./balance-fields');   // плоские параметры politics/tune/ai (отдельные колонки формы Directus) → секции
 
 let cache = {};                                  // последний валидный override (или {})
@@ -24,23 +24,25 @@ async function refresh() {
     const ov = {};
     if (row) {
       if (row.data && typeof row.data === 'object' && !Array.isArray(row.data)) Object.assign(ov, row.data);
-      // politics/tune/ai — из ПЛОСКИХ колонок формы Directus (отдельные числовые поля/слайдеры)
+      // politics/tune/ai/faction/heroMeta — из ПЛОСКИХ колонок формы Directus (числовые поля/слайдеры)
       const flat = F.buildSections(row);
       if (Object.keys(flat.politics).length) ov.politics = flat.politics;
       if (Object.keys(flat.tune).length) ov.tune = flat.tune;
       if (Object.keys(flat.ai).length) ov.ai = flat.ai;
-      // tech/heroes — JSONB-секции (вложенные/динамические — остаются JSON)
-      for (const sec of ['tech', 'heroes']) {
-        const v = row[sec];
-        if (v && typeof v === 'object' && !Array.isArray(v)) ov[sec] = v;
-      }
+      // factionDefault: плоские колонки формы (старты + mods atk/def/speed/eco/prod) — БАЗА; JSONB factions.factionDefault — поверх (advanced)
+      let fd = Object.keys(flat.factionDefault).length ? flat.factionDefault : null;
+      // tech — JSONB-секция (вложенное дерево); heroes — JSONB pool (определения) поверх плоских perFaction/maxSlots
+      if (row.tech && typeof row.tech === 'object' && !Array.isArray(row.tech)) ov.tech = row.tech;
+      const heroesJson = (row.heroes && typeof row.heroes === 'object' && !Array.isArray(row.heroes)) ? row.heroes : null;
+      if (Object.keys(flat.heroMeta).length || heroesJson) ov.heroes = deepMerge(flat.heroMeta || {}, heroesJson || {});
       // секция factions = {factionDefault:{общие старты}, "<id>":{асимметрия страны}} → раскладываем по override
       const fs = row.factions;
       if (fs && typeof fs === 'object' && !Array.isArray(fs)) {
-        if (fs.factionDefault && typeof fs.factionDefault === 'object') ov.factionDefault = fs.factionDefault;
+        if (fs.factionDefault && typeof fs.factionDefault === 'object') fd = fd ? deepMerge(fd, fs.factionDefault) : fs.factionDefault;
         const per = {}; for (const k in fs) if (k !== 'factionDefault') per[k] = fs[k];
         if (Object.keys(per).length) ov.factions = per;
       }
+      if (fd) ov.factionDefault = fd;
     }
     cache = sanitizeOverride(ov);                            // ВАЛИДАЦИЯ: дропаем кривые типы, клампим числа (нет отрицательных цен/NaN/огромных значений)
     meta = { version: row && Number.isFinite(+row.version) ? +row.version : 0, updatedAt: row ? row.updated_at : null };

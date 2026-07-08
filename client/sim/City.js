@@ -22,6 +22,21 @@ function takeComp(comp, n, total) {         // изъять n из comp (про�
   return out;
 }
 function addComp(dst, src, k = 1) { dst.inf += src.inf * k; dst.arc += src.arc * k; dst.cav += src.cav * k; return dst; }
+// ⚔ counter-множитель урона состава `a` (атакующий) против `d` (защитник) по треугольнику inf›cav›arc›inf.
+//   Взвешенное среднее по долям типов; сила = bonus. При bonus=0 → ВСЕГДА 1 (типы не различаются, бой 1:1 как раньше).
+const CTR_BEATS = { inf: 'cav', cav: 'arc', arc: 'inf' };
+function counterMul(a, d, bonus) {
+  if (!bonus) return 1;
+  const at = a.inf + a.arc + a.cav, dt = d.inf + d.arc + d.cav;
+  if (at <= 0 || dt <= 0) return 1;
+  const T = ['inf', 'arc', 'cav'];
+  let sum = 0;
+  for (const x of T) { const af = a[x] / at; if (!af) continue;
+    for (const y of T) { const df = d[y] / dt; if (!df) continue;
+      const m = CTR_BEATS[x] === y ? 1 + bonus : (CTR_BEATS[y] === x ? Math.max(0, 1 - bonus) : 1);
+      sum += af * df * m; } }
+  return sum;
+}
 
 class City {
   constructor(o) {
@@ -97,9 +112,10 @@ class City {
       if (totalAtk < this.K.UNIT_MIN) { this.siege = null; }
       else {
         let dmgToCity = 0;
-        for (const p of pools) dmgToCity += p.units * p.atkMult * this.K.SIEGE_ATK;
+        const cb = this.K.UNIT_COUNTER_BONUS || 0;                          // ⚔ бонус треугольника типов (0 = типы не различаются)
+        for (const p of pools) dmgToCity += p.units * p.atkMult * counterMul(p.comp, this.comp, cb) * this.K.SIEGE_ATK;
         const defDps = this.units * this.defMult * this.K.SIEGE_DEF;
-        for (const p of pools) p.units -= defDps * (p.units / totalAtk) * dt;
+        for (const p of pools) p.units -= defDps * (p.units / totalAtk) * counterMul(this.comp, p.comp, cb) * dt;
         this.units = Math.max(0, this.units - dmgToCity * dt);
         for (const o of Object.keys(this.siege)) if (this.siege[o].units < this.K.SIEGE_POOL_MIN) delete this.siege[o];
         if (this.units <= this.K.CITY_CAPTURE_MIN) {
@@ -141,4 +157,4 @@ class City {
   }
 }
 
-module.exports = { City, syncComp, takeComp, addComp };
+module.exports = { City, syncComp, takeComp, addComp, counterMul };

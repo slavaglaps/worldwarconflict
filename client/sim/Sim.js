@@ -3,7 +3,7 @@
 // Фаза 1a: экономика + производство + манпауэр + осада/захват/оккупация.
 // Пункт 1 (1b): дипломатия (война/мир/союз/поддержка), политочки, древо технологий.
 // Фаза 1b далее: реальная карта-граф, движение отрядов, флот/авиация + spatial-grid.
-const { City, syncComp, takeComp, addComp } = require('./City');
+const { City, syncComp, takeComp, addComp, counterMul } = require('./City');
 const { Squad } = require('./Squad');
 const { Ship } = require('./Ship');
 const { Plane } = require('./Plane');
@@ -217,7 +217,8 @@ class Sim {
       });
       if (best) { s.foe = best; if (!best.foe) best.foe = s; }
     }
-    for (const s of this.squads) if (s.foe && s.foe.fcount >= 0.5 && s.fcount >= 0.5) s.foe.fcount -= s.fcount * s.atkMult * this.K.FIGHT_RATE * dt;
+    const cb = this.K.UNIT_COUNTER_BONUS || 0;                        // ⚔ бонус треугольника типов (0 = типы не различаются, урон как раньше)
+    for (const s of this.squads) if (s.foe && s.foe.fcount >= 0.5 && s.fcount >= 0.5) s.foe.fcount -= s.fcount * counterMul(s.comp, s.foe.comp, cb) * s.atkMult * this.K.FIGHT_RATE * dt;
   }
 
   // ── флот / авиация ──

@@ -63,7 +63,12 @@ const TUNE_SKIP = new Set([
   'PASS_MULT', 'FERRY_MULT', 'MAX_LINK', 'WAR_PATH_PENALTY',                                    // RESERVED / неиспользуемые
 ]);
 const TUNE = fields('tune', (k) => tuneGroup(k), Object.keys(C).filter(k => typeof C[k] === 'number' && !TUNE_SKIP.has(k)).map(k => ({ path: [k], def: C[k] })));
-const ALL = [...POLITICS, ...AI, ...TUNE];
+// секция faction: скаляры factionDefault (старты + mods atk/def/speed/eco/prod) плоскими колонками с префиксом faction_.
+//   Пер-страновая асимметрия (factions[id]) остаётся в JSONB factions — вложенное/динамическое.
+const FACTION = fields('faction', () => 'Фракция (дефолт)', flatten(DEFAULTS.factionDefault)).map(f => ({ ...f, col: 'faction_' + f.col }));
+// секция heroMeta: скаляры heroes (perFaction/maxSlots). Определения способностей (сила/кулдаун) остаются в JSONB heroes.pool.
+const HEROMETA = fields('heroMeta', () => 'Герои (мета)', flatten(DEFAULTS.heroes)).map(f => ({ ...f, col: 'hero_' + f.col }));
+const ALL = [...POLITICS, ...AI, ...TUNE, ...FACTION, ...HEROMETA];
 
 // набор групп (для генератора Directus): порядок секций → подгруппы
 const GROUPS = [];
@@ -75,11 +80,13 @@ function setPath(obj, path, v) { let o = obj; for (let i = 0; i < path.length - 
 
 // собрать секции override из плоской строки БД (только не-null значения). Возвращает {politics, tune, ai}.
 function buildSections(row) {
-  const politics = {}, tune = {}, ai = {};
+  const politics = {}, tune = {}, ai = {}, factionDefault = {}, heroMeta = {};
   for (const f of POLITICS) if (row[f.col] != null) setPath(politics, f.path, +row[f.col]);
   for (const f of AI) if (row[f.col] != null) setPath(ai, f.path, +row[f.col]);
   for (const f of TUNE) if (row[f.col] != null) tune[f.key] = +row[f.col];
-  return { politics, tune, ai };
+  for (const f of FACTION) if (row[f.col] != null) setPath(factionDefault, f.path, +row[f.col]);
+  for (const f of HEROMETA) if (row[f.col] != null) setPath(heroMeta, f.path, +row[f.col]);
+  return { politics, tune, ai, factionDefault, heroMeta };
 }
 
-module.exports = { POLITICS, AI, TUNE, ALL, GROUPS, buildSections };
+module.exports = { POLITICS, AI, TUNE, FACTION, HEROMETA, ALL, GROUPS, buildSections };

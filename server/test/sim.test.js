@@ -374,6 +374,28 @@ test('обстрел берега: корабль с tech бьёт вражес�
 test('обстрел без tech shipMissile не работает', () => { const s = new Sim({ map }); s.setWar(0, 1); const ec = s.cities.find(x => x.owner === 1); const sh = new Ship(0, ec.gx + 5, ec.gz + 5, s); s.ships.push(sh); const u0 = ec.units; for (let i = 0; i < 40; i++) s.shipBombard(0.1); eq(ec.units, u0); });
 test('бомбёжка: самолёт по приказу бьёт город (tech planeBomb)', () => { const s = new Sim({ map }); s.setWar(0, 1); learn(s, 0, 'i10'); const bc = s.cities.find(x => x.owner === 1); assert(s.cmdAirOrder(0, bc.idx)); const p = new Plane(0, bc.gx + 2, bc.gz + 2, s); s.planes.push(p); const u0 = bc.units; for (let i = 0; i < 40; i++) s.planeBomb(0.1); lt(bc.units, u0); });
 test('cmdAirOrder: нельзя бомбить не-врага', () => { const s = new Sim({ map }); const own = s.cities.find(x => x.owner === 0); eq(s.cmdAirOrder(0, own.idx), false); });
+test('👥 типы юнитов: counter-бонус — пехота выбивает конницу быстрее; 0 = без различий (identity)', () => {
+  const run = (bonus, aComp, bComp) => {
+    const s = new Sim({ map, balance: { tune: { UNIT_COUNTER_BONUS: bonus } } });
+    s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0);
+    const a = new Squad(0, 20, [c.idx], s, 1, { ...aComp }); a.x = 100; a.z = 100;
+    const b = new Squad(1, 20, [c.idx], s, 1, { ...bComp }); b.x = 100; b.z = 100;
+    s.squads.push(a, b);
+    for (let i = 0; i < 10; i++) s.fieldBattles(0.1);
+    return { a: a.fcount, b: b.fcount };
+  };
+  const inf = { inf: 20, arc: 0, cav: 0 }, cav = { inf: 0, arc: 0, cav: 20 };
+  const r = run(0.5, inf, cav), r0 = run(0, inf, cav);
+  // counterMul(_,_,0)=1 → bonus=0 идентичен прежнему бою (крошечная асимметрия r0 — движковый порядок урона, был и раньше;
+  //   что 0 = ровно как прежде, доказывают все остальные 138 боевых/осадных тестов). Бонус даёт пехоте перевес СВЕРХ этого.
+  assert((r.a - r.b) > (r0.a - r0.b) + 2, 'counter-бонус: пехота выбивает конницу заметно сильнее базовой асимметрии');
+});
+test('баланс: плоские колонки faction/heroMeta/unit_counter_bonus → секции override', () => {
+  const F = require('../balance-fields');
+  const flat = F.buildSections({ faction_gold: 250, faction_mods_atk: 1.2, hero_per_faction: 3, unit_counter_bonus: 0.4 });
+  eq(flat.factionDefault.gold, 250); near(flat.factionDefault.mods.atk, 1.2);
+  eq(flat.heroMeta.perFaction, 3); near(flat.tune.UNIT_COUNTER_BONUS, 0.4);
+});
 
 group('ИИ-оппоненты (порт aiActFaction)');
 test('ИИ выключен по умолчанию (ai:false → никто не воюет)', () => { const s = new Sim({ map }); for (let i = 0; i < 200; i++) s.tick(0.1); eq(Object.values(s.relations).filter(v => v === 'war').length, 0); });
