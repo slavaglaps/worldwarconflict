@@ -51,7 +51,7 @@
     window.researchNode=function(id){ if(room){ try{room.send('research',{node:id});}catch(e){} return; } _rn(id); }; }
 
   async function joinColyseus(fid){
-    let t=0; while(typeof Colyseus==='undefined' && t++<120) await new Promise(r=>setTimeout(r,50));
+    let tries=0; while(typeof Colyseus==='undefined' && tries++<120) await new Promise(r=>setTimeout(r,50));   // ⚠ НЕ 't': затеняло бы i18n-функцию t() ниже (DENY/toast) → краш join → онлайн не синкался
     if(typeof Colyseus==='undefined'){ console.warn('[cs] colyseus.js не готов'); return; }
     if(!client) client = new Colyseus.Client(ENDPOINT);
     if(room){ try{ await room.leave(); }catch(e){} room=null; }
