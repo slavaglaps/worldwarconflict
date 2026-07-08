@@ -539,8 +539,8 @@ test('balance-store: startAutoRefresh возвращает await-able проми
 
 group('Герои: пер-фракционный движок (пассивы/активки/кулдауны/баффы)');
 const HB = (ids) => ({ balance: { factionDefault: { heroes: [] }, factions: { 0: { heroes: ids } } } });
-test('авто-ротация: у каждой страны есть герои по умолчанию, разные', () => {
-  const s = new Sim({ factions: 4, cities: 8 });
+test('авто-ротация: при perFaction>0 у каждой страны есть герои, разные', () => {
+  const s = new Sim({ factions: 4, cities: 8, balance: { heroes: { perFaction: 2 } } });   // дефолт perFaction=0 → включаем явно
   for (let f = 0; f < 4; f++) assert(s.heroSlots[f].length > 0, `у фракции ${f} есть герои`);
   assert(s.heroSlots[0][0].id !== s.heroSlots[1][0].id, 'разные страны → разные герои');
 });

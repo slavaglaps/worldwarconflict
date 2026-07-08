@@ -30,7 +30,7 @@ const planes = (room, f) => [...room.state.planes.values()].filter(s => s.owner 
 const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
 
 (async () => {
-  GameRoom.simOptions = { map, goldStart: 4000, politStart: 400, warPrep: 0, rng: () => 0.01 };   // без ai → доска статична; warPrep:0 → атака сразу (мобилизацию тестит sim.test)
+  GameRoom.simOptions = { map, goldStart: 4000, politStart: 400, warPrep: 0, rng: () => 0.01, balance: { heroes: { perFaction: 2 } } };   // perFaction:2 — тестим авто-слоты героев (дефолт теперь 0)
   const server = new Server({ transport: new WebSocketTransport({ server: require('http').createServer() }), presence: new LocalPresence(), driver: new LocalDriver() });
   server.define('game', GameRoom);
   await server.listen(PORT);

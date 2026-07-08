@@ -45,7 +45,7 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
 const findAbil = (bal, type) => { const { pool, slots } = bal.heroes; let r = null; slots.forEach((id, si) => pool[id].abilities.filter(a => a.kind === 'active').forEach((a, ai) => { if (!r && a.fx.type === type) r = { si, ai, fx: a.fx, name: a.name }; })); return r; };
 
 (async () => {
-  GameRoom.simOptions = { map, goldStart: 3000, politStart: 400, warPrep: 3, rng: () => 0.01, balance: { politics: { max: 500 } } };   // warPrep=3 → мобилизация; max=500 → хватает политочков на войну+союз+мир; без ai → детерминизм
+  GameRoom.simOptions = { map, goldStart: 3000, politStart: 400, warPrep: 3, rng: () => 0.01, balance: { politics: { max: 500 }, heroes: { perFaction: 2 } } };   // warPrep=3 → мобилизация; perFaction:2 — тестим героев (дефолт теперь 0); без ai → детерминизм
   const server = new Server({ transport: new WebSocketTransport({ server: require('http').createServer() }), presence: new LocalPresence(), driver: new LocalDriver() });
   server.define('game', GameRoom);
   await server.listen(PORT);

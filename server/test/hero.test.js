@@ -16,16 +16,16 @@ const enemyCity = (s, f) => s.cities.find((c) => c.owner !== f);
 
 // ── ВСЕ СТРАНЫ ──────────────────────────────────────────────────────────────
 group('Герои: ВСЕ страны (карта) получают валидных героев');
-test('каждая из 24 стран авто-получает героев из пула, все id валидны', () => {
-  const s = new Sim({ map });
+test('каждая из 24 стран авто-получает героев из пула (perFaction>0), все id валидны', () => {
+  const s = new Sim({ map, balance: { heroes: { perFaction: 2 } } });   // дефолт perFaction=0 → фичу авто-ротации включаем явно
   gt(s.factions, 20, 'страны на карте');
   for (let f = 0; f < s.factions; f++) {
     assert(s.heroSlots[f] && s.heroSlots[f].length > 0, `у страны ${f} есть герои`);
     for (const h of s.heroSlots[f]) assert(POOL[h.id], `страна ${f}: герой "${h.id}" есть в пуле`);
   }
 });
-test('у каждой страны пассивы её героев реально применяются', () => {
-  const s = new Sim({ map });
+test('у каждой страны пассивы её героев реально применяются (perFaction>0)', () => {
+  const s = new Sim({ map, balance: { heroes: { perFaction: 2 } } });
   for (let f = 0; f < s.factions; f++) {
     const want = {};   // суммарные пассивы героев страны по ключам
     for (const h of s.heroSlots[f]) for (const ab of POOL[h.id].abilities) if (ab.kind === 'passive') for (const p of ab.pass) want[p.key] = (want[p.key] || 0) + p.add;
