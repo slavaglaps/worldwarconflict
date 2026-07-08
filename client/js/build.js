@@ -262,6 +262,7 @@
     if (panelEl) return;
     panelEl = document.createElement('div');
     panelEl.id = 'buildPanel';
+    panelEl.style.display = 'none';       // инлайн — чтобы toggle() читал состояние корректно с первого клика (CSS-none в инлайне не виден)
     const head = document.createElement('div'); head.className = 'bpHead';
     head.innerHTML = '<span class="bpTitle">' + t('build.panel_title') + '</span>';
     const close = document.createElement('button'); close.className = 'bpClose'; close.textContent = '✕';
