@@ -57,10 +57,10 @@ function runHeroFx(fid, fx){
     if(!tgt){ const cap=cities.find(c=>c.owner===fid&&c.capital)||cities.find(c=>c.owner===fid);
       let bd=1e18; for(const c of cities){ if(c.owner===fid||!atWar(fid,c.owner))continue;
         const dd=cap?((c.gx-cap.gx)**2+(c.gz-cap.gz)**2):0; if(dd<bd){bd=dd;tgt=c;} } }
-    if(!tgt){ if(fid===PLAYER)toast('🚀 Нет цели — нужна война'); return false; }
+    if(!tgt){ if(fid===PLAYER)toast(t('hero.noTarget')); return false; }
     tgt.units=Math.max(1,tgt.units-fx.amount); suppressAA(tgt); suppressAA(tgt);
     for(let i=0;i<7;i++){ const ax=tgt.gx+(Math.random()-.5)*1.5, az=tgt.gz+(Math.random()-.5)*1.5; spawnBlast(ax,getTerrainHeight(ax,az)+0.2,az); }
-    if(fid===PLAYER)toast(`💥 Удар по ${CITY_NAMES[tgt.idx]}: −${fx.amount} гарнизона`);
+    if(fid===PLAYER)toast(t('hero.airstrike',{city:cityDisp(tgt.idx),n:fx.amount}));
     return true;
   }
   return true;
@@ -70,27 +70,21 @@ function activateHeroAbility(fid, h, abIndex){
   const d=heroDef(h.id); if(!d)return; const ab=d.abilities[abIndex]; if(!ab||ab.kind!=='active')return;
   const actives=d.abilities.filter(a=>a.kind==='active'); const ai=actives.indexOf(ab);
   if(!h.cd)h.cd=actives.map(()=>0);
-  if(h.cd[ai]>0){ toast(`⏳ ${ab.name}: перезарядка ${Math.ceil(h.cd[ai])}с`); return; }
+  if(h.cd[ai]>0){ toast(t('hero.cooldown',{name:tName('heroab',ab.name),s:Math.ceil(h.cd[ai])})); return; }
   if(MP.guest){                            // онлайн: активку применяет СЕРВЕР авторитетно (кулдаун/эффект прилетят в econ)
     const hi=(heroSlots[fid]||[]).indexOf(h); if(hi<0)return;
     MP.cmd({cmd:'hero', h:hi, ab:ai});
     h.cd[ai]=ab.cd;                        // оптимистичный КД; сервер подтвердит/сбросит через econ (или denied)
-    toast(`${ab.icon} ${ab.name}`); refreshHeroBar(); return;
+    toast(`${ab.icon} ${tName('heroab',ab.name)}`); refreshHeroBar(); return;
   }
   if(!runHeroFx(fid, ab.fx))return;        // не применилось (нет цели) → КД не тратим
   h.cd[ai]=ab.cd;
-  toast(`${ab.icon} ${ab.name}`);
+  toast(`${ab.icon} ${tName('heroab',ab.name)}`);
   refreshHeroBar();
 }
 function buildAA(c){
-  if(MP.guest){ MP.cmd({cmd:'aa',c:c.idx}); return; }   // гость → команда хосту/серверу
-  if(c.owner!==PLAYER)return;
-  if(c.occ){toast('🏴 Оккупированный город — нельзя строить ПВО');return;}
-  if((c.aa||0)>=AA_MAX){toast('🚀 ПВО уже максимум');return;}
-  const cost=aaCost(c);
-  if(gold[PLAYER]<cost){toast('Не хватает голды на зенитку');return;}
-  if((manpower[PLAYER]||0)<AA_MP){toast(`👥 Не хватает манпауэра (нужно ${AA_MP})`);return;}
-  gold[PLAYER]-=cost; manpower[PLAYER]-=AA_MP; c.aa=(c.aa||0)+1;
+  toast(t('hero.aaNoBuild'));
+  return false;
 }
 // бомбёжка/обстрел города может выбить зенитку
 function suppressAA(c){ if(c&&c.aa>0&&Math.random()<AA_KILL_CHANCE)c.aa=Math.max(0,c.aa-1); }

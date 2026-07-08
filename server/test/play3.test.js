@@ -1,4 +1,4 @@
-// 3-ИГРОКА E2E: прогон ВСЕХ фич (армии/осада/война/флот/авиация/верфи/дипломатия/ПВО).
+// 3-ИГРОКА E2E: прогон фич (армии/осада/война/флот/авиация/верфи/дипломатия).
 // Франция(1) ↔ Германия(5) ↔ Польша(8) — соседи с морем. Сервер in-process, без ИИ (детерминизм).
 process.env.DB_FILE = require('path').join(require('os').tmpdir(), 'wwc-play3-db.json');
 require('fs').rmSync(process.env.DB_FILE, { force: true });
@@ -152,12 +152,12 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
     assert(p, 'есть самолёт у Франции');
   });
 
-  await testAsync('ПВО: зенитка ставится', async () => {
+  await testAsync('ПВО: городская зенитка больше не строится', async () => {
     const k = own(FR)[2];
     const before = rFR.state.cities.get(String(k)).aa;
     rFR.send('aa', { city: k });
     await sleep(600);
-    gt(rFR.state.cities.get(String(k)).aa, before, 'ПВО построена');
+    eq(rFR.state.cities.get(String(k)).aa, before, 'ПВО не построена');
   });
 
   await testAsync('ДИПЛОМАТИЯ: союз Франция-Польша', async () => {

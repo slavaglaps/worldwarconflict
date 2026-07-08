@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-08T11:06:18.850Z",
+  "source": "tools/model-stamps.js",
+  "models": [
+    {
+      "id": "stunt-plane",
+      "label": "Stunt Plane",
+      "path": "stunt_plane.glb",
+      "url": "models/stunt_plane.glb",
+      "format": "glb",
+      "supported": true,
+      "size": 264956,
+      "mtimeMs": 1783430466338,
+      "sidecars": {
+        "textures": [
+          {
+            "path": "Polygon_Plane_Texture_01.png",
+            "url": "models/Polygon_Plane_Texture_01.png",
+            "name": "Polygon_Plane_Texture_01.png",
+            "format": "png",
+            "size": 234637
+          },
+          {
+            "path": "Polygon_Plane_Texture_02.png",
+            "url": "models/Polygon_Plane_Texture_02.png",
+            "name": "Polygon_Plane_Texture_02.png",
+            "format": "png",
+            "size": 224380
+          },
+          {
+            "path": "Polygon_Plane_Texture_03.png",
+            "url": "models/Polygon_Plane_Texture_03.png",
+            "name": "Polygon_Plane_Texture_03.png",
+            "format": "png",
+            "size": 223156
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -73,10 +73,10 @@
 
   function setStatus(t, cls){ statusEl.textContent = t; statusEl.className = 'status' + (cls?' '+cls:''); }
 
-  // создать комнату → game.html создаёт её с этим именем
+  // создать комнату → game-hex.html создаёт её с этим именем
   $('createBtn').onclick = () => {
     const name = ($('roomName').value || '').trim() || ('Игра-' + Math.random().toString(36).slice(2,6));
-    location.href = 'game.html?cs=1&create=1&mp=' + encodeURIComponent(name);
+    location.href = 'game-hex.html?cs=1&create=1&mp=' + encodeURIComponent(name);
   };
   $('roomName').addEventListener('keydown', e => { if(e.key==='Enter') $('createBtn').click(); });
 
@@ -94,7 +94,7 @@
         <div class="meta">👥 <b class="${full?'full':''}">${cur}/${max}</b> игроков${(r.metadata&&r.metadata.over)?' · завершена':''}</div></div>`;
       const btn = document.createElement('button');
       btn.className='ghost'; btn.textContent = full ? 'Заполнена' : 'Войти'; btn.disabled = full;
-      btn.onclick = () => { location.href = 'game.html?cs=1&rid=' + encodeURIComponent(r.roomId); };
+      btn.onclick = () => { location.href = 'game-hex.html?cs=1&rid=' + encodeURIComponent(r.roomId); };
       el.appendChild(btn);
       roomsEl.appendChild(el);
     }

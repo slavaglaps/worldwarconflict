@@ -17,6 +17,9 @@ group('Single-source карты (client CITY_LIST ⟷ server map-data.json)');
 const dataJs = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'data.js'), 'utf8');
 const P = 0, N = 0, E = 0;                                       // плейсхолдеры колонки владельца в CITY_LIST
 const CITY_LIST = eval(dataJs.match(/const\s+CITY_LIST\s*=\s*(\[[\s\S]*?\n\];)/)[1].replace(/;$/, ''));
+const aliasesBlock = dataJs.match(/const\s+COUNTRY_ALIASES\s*=\s*(\{[\s\S]*?\n\});/);
+const COUNTRY_ALIASES = aliasesBlock ? Function(`return ${aliasesBlock[1]};`)() : {};
+const canonicalCountry = (country) => COUNTRY_ALIASES[country] || country;
 const num = (name) => Number(dataJs.match(new RegExp(name + '\\s*=\\s*(-?\\d+(?:\\.\\d+)?)'))[1]);
 const LON0 = num('LON0'), LON1 = num('LON1'), LAT0 = num('LAT0'), LAT1 = num('LAT1'), GRID = 256;
 const proj = (c) => [Math.round((c[1] - LON0) / (LON1 - LON0) * GRID), Math.round((LAT1 - c[2]) / (LAT1 - LAT0) * GRID)];
@@ -27,8 +30,9 @@ const AIRPORT_NAMES = new Set(['Аэропорт Париж']);
 const seenCountry = new Set();
 const clientCities = CITY_LIST.map((c) => {
   const [gx, gz] = proj(c);
-  const capital = !seenCountry.has(c[5]); seenCountry.add(c[5]);
-  return { name: c[0], gx, gz, size: c[3], country: c[5], capital, shipyard: SHIPYARD_NAMES.has(c[0]), airport: AIRPORT_NAMES.has(c[0]) };
+  const country = canonicalCountry(c[5]);
+  const capital = !seenCountry.has(country); seenCountry.add(country);
+  return { name: c[0], gx, gz, size: c[3], country, capital, shipyard: SHIPYARD_NAMES.has(c[0]), airport: AIRPORT_NAMES.has(c[0]) };
 });
 
 test('одинаковое число городов', () => eq(clientCities.length, MAP.cities.length));
@@ -44,7 +48,7 @@ test('проекция/имена/размеры/страны/столицы/в�
 });
 
 test('порядок стран (= faction id) совпадает', () => {
-  const clientOrder = [...new Set(CITY_LIST.map((c) => c[5]))];
+  const clientOrder = [...new Set(CITY_LIST.map((c) => canonicalCountry(c[5])))];
   const serverOrder = MAP.factions.map((f) => f.country);
   eq(JSON.stringify(clientOrder), JSON.stringify(serverOrder));
 });

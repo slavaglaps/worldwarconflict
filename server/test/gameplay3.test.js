@@ -4,7 +4,7 @@
 // (по-фичная проверка), здесь — сквозной сценарий, где системы работают ВМЕСТЕ, с
 // упором на новые подсистемы и их НАБЛЮДАЕМЫЕ эффекты:
 //   • герои (пассивы+активки: gold/garrison/manpower/buff/airstrike, кулдауны, приватность)
-//   • экономика/юниты из balance (найм/верфь/корабль/аэродром/самолёт/ПВО — списание по цене)
+//   • экономика/юниты из balance (найм/верфь/корабль/аэродром/самолёт — списание по цене)
 //   • синк цен/политики/техов/героев в balance-сообщении + приватность econ
 //   • таймер мобилизации (warPrep) — война, отказ во время мобилизации, атака после
 //   • дипломатия (союз/поддержка/мир), осада/захват, технологии
@@ -144,7 +144,7 @@ const findAbil = (bal, type) => { const { pool, slots } = bal.heroes; let r = nu
     gt(u0 + 11, rFR.state.cities.get(String(k)).units, 'гарнизон вырос (≤ +10)');
     assert(gold(rFR, FR) <= g0 - 10 * price + 5, `списано ≈10×${price} голды`);
   });
-  await testAsync('АКТ4 · верфь → корабль, аэродром → самолёт, ПВО — всё строится', async () => {
+  await testAsync('АКТ4 · верфь → корабль, аэродром → самолёт строятся; городская ПВО отключена', async () => {
     const yc = coastalCity(FR); assert(yc != null, 'есть прибрежный город');
     const ny = rFR.state.cities.size;
     rFR.send('yard', { city: yc, kind: 'ship' }); await sleep(700);
@@ -159,8 +159,11 @@ const findAbil = (bal, type) => { const { pool, slots } = bal.heroes; let r = nu
     const p0 = planesN(rFR, FR); rFR.send('bplane', { city: port }); rFR.send('bplane', { city: port });
     assert(await until(() => planesN(rFR, FR) > p0, 16000), 'самолёт заспавнился');
     const aac = own(FR)[2]; const aa0 = rFR.state.cities.get(String(aac)).aa;
+    rFR.__denied = [];
     rFR.send('aa', { city: aac });
-    assert(await until(() => rFR.state.cities.get(String(aac)).aa > aa0, 4000), 'ПВО построена');
+    await sleep(700);
+    eq(rFR.state.cities.get(String(aac)).aa, aa0, 'ПВО не построена');
+    assert(rFR.__denied.includes('aa'), 'команда aa отклонена сервером');
   });
 
   // ── АКТ 5: ВОЙНА + ТАЙМЕР МОБИЛИЗАЦИИ + ОСАДА ─────────────────────────────

@@ -12,11 +12,13 @@ group('Проекция Sim → схема (schema-project)');
 test('город: owner/units(округл.)/spec/tier/occ/occFrom', () => {
   const s = new Sim({ map, ai: false }), st = new GameState(), techN = [];
   const c = s.cities.find((x) => x.idx === 7); c.spec = 'atk'; c.tier = 2; c.units = 123.6; c.occ = true; c.occFrom = 3;
+  c.comp = { inf: 80.2, arc: 30.3, cav: 13.1 };
   projectState(s, st, techN);
   const cs = st.cities.get('7');
   eq(cs.owner, c.owner); eq(cs.units, 124); eq(cs.spec, SPEC_ID.atk); eq(cs.tier, 2); eq(cs.occ, 1);
   eq(cs.occFrom, 3);
   eq(cs.prodTier, 0); eq(cs.defTier, 0); eq(cs.atkTier, 2);
+  eq(cs.compInf, 80); eq(cs.compArc, 30); eq(cs.compCav, 13);
 });
 
 test('город: occFrom сбрасывается в sentinel, когда оккупации нет', () => {
@@ -45,6 +47,10 @@ test('fixed-point позиции отрядов: QPOS=round(x*POS_Q), обрат
   const sq = s.squads[0], ss = st.squads.get(String(sq.id));
   eq(ss.x, Math.round(sq.x * POS_Q)); eq(ss.owner, sq.owner);
   near(ss.x / POS_Q, sq.x, 1 / POS_Q);                // декод восстанавливает позицию с точностью кванта
+  eq(ss.compInf, Math.round(sq.comp.inf)); eq(ss.compArc, Math.round(sq.comp.arc)); eq(ss.compCav, Math.round(sq.comp.cav));
+  const a = sq.path[sq.hop], b = sq.path[sq.hop + 1], edge = s.edgeBetween(a, b);
+  eq(ss.edgeA, edge ? a : 65535); eq(ss.edgeB, edge ? b : 65535);
+  if (edge && edge.len) near(ss.frac / 65535, sq.prog / edge.len, 1 / 65535);
 });
 
 test('дипломатия: war=1/ally=2 в схему; конец войны/нейтрал вычищаются', () => {

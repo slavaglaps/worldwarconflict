@@ -79,10 +79,10 @@ for (const asset of [
   if (!fs.existsSync(path.join(root, asset))) fail('missing local asset ' + asset);
 }
 
-// Dev server should now default to normal welcome menu (Farm) on bare access.
-// Vehicle demo is available via the button in the welcome menu or by adding ?demo=vehicles manually.
-if (!devServer.includes("if (pathname === '/') return { redirect: '/tiny-world-builder' };")) {
-  fail('dev server bare root should redirect to /tiny-world-builder (welcome menu)');
+// Dev server should default to the WWC game. Tiny World Builder remains available
+// directly, but is no longer the root client.
+if (!devServer.includes("if (pathname === '/') return { redirect: '/game-hex.html' };")) {
+  fail('dev server bare root should redirect to /game-hex.html');
 }
 if (!devServer.includes("if (pathname === '/tiny-world-builder') return { file:")) {
   fail('dev server should serve tiny-world-builder.html for normal access');

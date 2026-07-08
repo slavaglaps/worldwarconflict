@@ -21,6 +21,9 @@ defineTypes(CityState, {
   occ:   'uint8',   // 0/1 оккупирован
   occFrom: 'uint8', // де-юре владелец до оккупации; 255 = нет/неизвестно
   aa:    'uint8',   // 🛡 число зениток
+  compInf: 'uint16',
+  compArc: 'uint16',
+  compCav: 'uint16',
   queued: 'uint16', // ⏳ солдат в очереди производства
   siegeUnits: 'uint16', // осаждающая армия (сильнейший пул)
   siegeOwner: 'uint8',  // чья осада
@@ -44,6 +47,15 @@ defineTypes(SquadState, {
   x:        'uint16',  // ×POS_Q
   z:        'uint16',  // ×POS_Q
   fighting: 'uint8',   // 0/1 в полевом бою
+  edgeA:    'uint16',  // текущая дорога: city idx или 65535 = нет ребра
+  edgeB:    'uint16',
+  frac:     'uint16',  // доля текущего ребра ×65535
+  compInf:  'uint16',
+  compArc:  'uint16',
+  compCav:  'uint16',
+  mode:     'uint8',   // 🚢 0 суша / 1 посадка / 2 плывёт / 3 высадка
+  prog:     'uint8',   // прогресс посадки/высадки 0..255 (÷255)
+  heading:  'uint8',   // курс 0..255 (×2π/256) — для корабля без дёрганья
 });
 
 class ShipState extends Schema {}

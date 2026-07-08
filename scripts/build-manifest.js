@@ -9,6 +9,9 @@ const CLIENT = path.join(ROOT, 'client');
 
 // порядок = MODS из game.html (рантайм-лоадер) и из build.js. ДОЛЖЕН совпадать.
 const MODS = [
+  'js/i18n.js', 'js/i18n-en.js', 'js/i18n-ru.js',   // 🌍 локализация ПЕРВОЙ: t()/tName() + словари (EN база)
+  'js/i18n-en-ui.js', 'js/i18n-ru-ui.js',           // 🌍 UI-строки
+  'js/i18n-en-data.js', 'js/i18n-ru-data.js',       // 🌍 дисплей-имена данных
   'js/_rules.gen.js', 'js/_tech.gen.js', 'js/_balance.gen.js',
   'js/sim-loader.js', 'js/solo-sim.js',
   'js/data.js', 'js/world.js', 'js/heroes.js', 'js/decor.js', 'js/roads.js',

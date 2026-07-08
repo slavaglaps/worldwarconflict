@@ -7,6 +7,8 @@ const { CityState, SquadState, ShipState, PlaneState, POS_Q } = require('./schem
 const SPEC_ID = { prod: 1, def: 2, atk: 3 };                                  // спец города → uint8
 const RELN = { war: 1, ally: 2 };                                            // отношение → uint8
 const QPOS = (v) => Math.min(65535, Math.max(0, Math.round(v * POS_Q)));     // позиция → fixed-point uint16 (вдвое меньше трафика, чем float32)
+const QCOUNT = (v) => Math.min(65535, Math.max(0, Math.round(v || 0)));
+const QFRAC = (v) => Math.min(65535, Math.max(0, Math.round(Math.max(0, Math.min(1, v || 0)) * 65535)));
 
 // techN — внешний счётчик «версий» завершённых техов на фракцию (живёт в комнате; techDone только растёт).
 function projectState(sim, state, techN) {
@@ -29,7 +31,10 @@ function projectState(sim, state, techN) {
     s.occ = c.occ ? 1 : 0;
     s.occFrom = c.occ && c.occFrom != null ? c.occFrom : 255;
     s.shipyard = c.isShipyard ? 1 : 0; s.airport = c.isAirport ? 1 : 0;
-    s.aa = c.aa | 0;
+    s.aa = 0;                                                               // legacy ПВО убрано из города
+    s.compInf = QCOUNT(c.comp ? c.comp.inf : c.units);
+    s.compArc = QCOUNT(c.comp ? c.comp.arc : 0);
+    s.compCav = QCOUNT(c.comp ? c.comp.cav : 0);
     s.queued = Math.min(65535, Math.round(c.queued));
     let su = 0, so = 0;                                                       // сильнейший осаждающий пул
     if (c.siege) for (const o in c.siege) if (c.siege[o].units > su) { su = c.siege[o].units; so = +o; }
@@ -44,7 +49,25 @@ function projectState(sim, state, techN) {
   }
   // ── движущиеся: добавить новые, обновить, удалить дошедшие ──
   const sq = state.squads, live = new Set();
-  for (const s of sim.squads) { const k = String(s.id); live.add(k); let ss = sq.get(k); if (!ss) { ss = new SquadState(); ss.owner = s.owner; sq.set(k, ss); } ss.count = Math.round(s.fcount); ss.x = QPOS(s.x); ss.z = QPOS(s.z); ss.fighting = s.foe ? 1 : 0; }
+  for (const s of sim.squads) {
+    const k = String(s.id); live.add(k);
+    let ss = sq.get(k);
+    if (!ss) { ss = new SquadState(); ss.owner = s.owner; sq.set(k, ss); }
+    const a = s.path && s.path[s.hop], b = s.path && s.path[s.hop + 1];
+    const e = a != null && b != null ? sim.edgeBetween(a, b) : null;
+    ss.count = Math.round(s.fcount);
+    ss.x = QPOS(s.x); ss.z = QPOS(s.z);
+    ss.fighting = s.foe ? 1 : 0;
+    ss.edgeA = e ? a : 65535;
+    ss.edgeB = e ? b : 65535;
+    ss.frac = e && e.len ? QFRAC(s.prog / e.len) : 0;
+    ss.compInf = QCOUNT(s.comp ? s.comp.inf : s.fcount);
+    ss.compArc = QCOUNT(s.comp ? s.comp.arc : 0);
+    ss.compCav = QCOUNT(s.comp ? s.comp.cav : 0);
+    ss.mode = s.mode | 0;
+    ss.prog = 0;
+    ss.heading = ((Math.round((s.heading || 0) / (2 * Math.PI) * 256) % 256) + 256) % 256;
+  }
   for (const k of [...sq.keys()]) if (!live.has(k)) sq.delete(k);
   const shp = state.ships, slive = new Set();
   for (const s of sim.ships) { const k = String(s.id); slive.add(k); let ss = shp.get(k); if (!ss) { ss = new ShipState(); ss.owner = s.owner; shp.set(k, ss); } ss.x = QPOS(s.x); ss.z = QPOS(s.z); ss.hp = Math.max(0, Math.round(s.hp)); ss.fighting = s.foe ? 1 : 0; }

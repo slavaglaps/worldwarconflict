@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -13,44 +13,44 @@
 <div id="topbar">
   <div class="cell fcell">
     <div class="emblem"><svg id="emblemSvg" viewBox="0 0 44 50"></svg></div>
-    <div><div class="fname" id="hFaction">Франция</div><div class="fbar" id="fBar"></div></div>
+    <div><div class="fname" id="hFaction">France</div><div class="fbar" id="fBar"></div></div>
   </div>
 
   <div class="cell">
     <div class="ic"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#f0c460" stroke="#a9772a" stroke-width="2"/><circle cx="16" cy="16" r="9.5" fill="none" stroke="#c9912f" stroke-width="1.4"/><text x="16" y="21.5" text-anchor="middle" font-size="15" font-weight="900" fill="#8a5a17">$</text></svg></div>
-    <div><div class="lbl">Голда</div><div class="val" id="hGold">0</div><div class="rate"><span class="d">–</span><span id="hGoldRate">+0/с</span></div></div>
+    <div><div class="lbl">Gold</div><div class="val" id="hGold">0</div><div class="rate"><span class="d">–</span><span id="hGoldRate">+0/s</span></div></div>
   </div>
 
   <div class="cell">
     <div class="ic"><svg viewBox="0 0 32 32"><g fill="#f0c460" stroke="#a9772a" stroke-width="1" stroke-linejoin="round"><polygon points="16,4 29,11 3,11"/><rect x="6" y="12" width="3" height="11"/><rect x="12" y="12" width="3" height="11"/><rect x="17" y="12" width="3" height="11"/><rect x="23" y="12" width="3" height="11"/><rect x="3" y="24" width="26" height="3"/></g></svg></div>
-    <div><div class="lbl">Политочки</div><div class="val" id="hPol">0</div><div class="rate"><span class="d">–</span><span id="hPolRate">+0/с</span></div></div>
+    <div><div class="lbl">Politics</div><div class="val" id="hPol">0</div><div class="rate"><span class="d">–</span><span id="hPolRate">+0/s</span></div></div>
   </div>
 
   <div class="cell">
     <div class="ic"><svg viewBox="0 0 32 32" fill="#f0c460" stroke="#a9772a" stroke-width="1"><circle cx="11" cy="11" r="4.6"/><circle cx="22" cy="12" r="3.9"/><path d="M2.5 27c0-5.2 4-8.5 8.5-8.5s8.5 3.3 8.5 8.5z"/><path d="M17.5 27c.4-4.2 3-7 6.5-7 3.2 0 5.5 2.6 5.5 7z"/></svg></div>
-    <div><div class="lbl">Манпауэр</div><div class="val"><span id="hMp">0</span><span class="den">/<span id="hMpCap">0</span></span></div></div>
+    <div><div class="lbl">Manpower</div><div class="val"><span id="hMp">0</span><span class="den">/<span id="hMpCap">0</span></span></div></div>
   </div>
 
   <div class="cell">
-    <div><div class="lbl">Города</div><div class="val"><span id="hMine">0</span><span class="den"> / <span id="hTotal">0</span></span></div></div>
+    <div><div class="lbl">Cities</div><div class="val"><span id="hMine">0</span><span class="den"> / <span id="hTotal">0</span></span></div></div>
   </div>
 
   <div class="cell">
-    <div><div class="lbl">Место</div><div class="val"><span id="hRank">1</span><span class="den"> / <span id="hRankTot">24</span></span></div></div>
+    <div><div class="lbl">Rank</div><div class="val"><span id="hRank">1</span><span class="den"> / <span id="hRankTot">24</span></span></div></div>
   </div>
 
   <div class="cell">
-    <div><div class="lbl">Фракций живо</div><div class="val" id="hAlive">24</div></div>
+    <div><div class="lbl">Factions alive</div><div class="val" id="hAlive">24</div></div>
   </div>
 
   <div class="cell">
     <div class="ic"><svg viewBox="0 0 32 32"><g stroke="#9a6b27" stroke-width="1.3" stroke-linejoin="round"><path d="M7 25l13-13 3 3-13 13z" fill="#e9e3d6"/><path d="M25 25L12 12l-3 3 13 13z" fill="#e9e3d6"/></g><g stroke="#caa64a" stroke-width="2.6" stroke-linecap="round"><path d="M5.5 26.5l3.5-3.5M26.5 26.5l-3.5-3.5"/></g></svg></div>
-    <div><div class="lbl">Армия</div><div class="val" id="hUnits">0</div></div>
+    <div><div class="lbl">Army</div><div class="val" id="hUnits">0</div></div>
   </div>
 </div>
 <div id="slider">
   <div>
-    <div class="lbl">Отправлять</div>
+    <div class="lbl">Send</div>
     <div class="srow"><input id="pct" type="range" min="10" max="100" step="10" value="50"><b class="pctv" id="pctVal">50%</b></div>
   </div>
 </div>
@@ -61,12 +61,12 @@
 <div id="panel" class="panelbox">
   <div class="title"><span id="pName">Город</span><span class="gold">💰<span id="pGold">0</span></span></div>
   <div id="tabs">
-    <button id="tabUpg" class="active">✦ Прокачка</button>
-    <button id="tabArmy">⚔ Армия</button>
+    <button id="tabUpg" class="active">✦ Upgrade</button>
+    <button id="tabArmy">⚔ Army</button>
   </div>
   <div id="upgTab"></div>
   <div id="armyTab" style="display:none">
-    <div id="info">Гарнизон 0/0</div>
+    <div id="info">Garrison 0/0</div>
     <div id="qbar"><div id="qfill"></div><div id="qtext"></div></div>
     <div id="buyRows"></div>
   </div>
@@ -77,10 +77,10 @@
   <div id="heroCard" class="panelbox gpanel">
     <button id="heroClose">✕</button>
     <div id="heroHeader">
-      <h2>Герои</h2>
+      <h2>Heroes</h2>
       <div class="heroMpCard"><span>👥</span><b id="heroMp">0</b></div>
     </div>
-    <div id="heroSub">Свободно <b id="heroFreeSlots">0</b> / <span id="heroMaxSlots">3</span></div>
+    <div id="heroSub">Free <b id="heroFreeSlots">0</b> / <span id="heroMaxSlots">3</span></div>
     <div id="heroList"></div>
   </div>
 </div>
@@ -89,28 +89,28 @@
   <div id="countryCard" class="panelbox gpanel">
     <div id="countryHead">
       <span class="countryLine"></span>
-      <h2>Выбор страны</h2>
+      <h2>Choose a country</h2>
       <span class="countryLine"></span>
     </div>
-    <div id="countrySub">Выберите игровую фракцию и начните борьбу за Европу</div>
+    <div id="countrySub">Pick your faction and begin the fight for Europe</div>
     <div id="countryList"></div>
     <div id="countryFooter">
       <div id="countryMode">
-        <b>Классическая партия</b>
-        <span>Остальные страны управляются ботами</span>
+        <b>Classic game</b>
+        <span>All other countries are run by bots</span>
       </div>
-      <button id="countryStart" type="button">Начать игру</button>
+      <button id="countryStart" type="button">Start game</button>
     </div>
   </div>
 </div>
 
-<div id="overlay"><div class="ovCard gpanel"><div class="gstars">★ <b>★</b> ★</div><h1 id="ovTitle">Победа!</h1><button id="ovBtn" class="dbtn ally">Играть снова</button></div></div>
+<div id="overlay"><div class="ovCard gpanel"><div class="gstars">★ <b>★</b> ★</div><h1 id="ovTitle">Victory!</h1><button id="ovBtn" class="dbtn ally">Play again</button></div></div>
 
 <div id="sideMenu">
-  <div class="sbtn" id="sbTech" title="Технологии (T)" aria-label="Технологии">
+  <div class="sbtn" id="sbTech" title="Technologies (T)" aria-label="Technologies">
     <div class="si"><svg viewBox="0 0 42 42" aria-hidden="true"><g data-fill fill="#caa85e" stroke="#6f5c32" stroke-width="1.35" stroke-linejoin="round"><path d="M8 11.5c5.2-.8 9.2.2 13 3.3v18.6c-3.8-3-8-4-13-3.2z"/><path d="M34 11.5c-5.2-.8-9.2.2-13 3.3v18.6c3.8-3 8-4 13-3.2z"/></g><path d="M21 14.8v18.6" stroke="#8d733d" stroke-width="1.4"/><path d="M11 17.5c2.8-.2 5 .3 7.1 1.5M11 21.2c2.8-.2 5 .3 7.1 1.5M31 17.5c-2.8-.2-5 .3-7.1 1.5M31 21.2c-2.8-.2-5 .3-7.1 1.5" stroke="#3d341f" stroke-width="1.05" opacity=".65"/></svg></div>
   </div>
-  <div class="sbtn" id="sbPol" title="Дипломатия (P)" aria-label="Дипломатия">
+  <div class="sbtn" id="sbPol" title="Diplomacy (P)" aria-label="Diplomacy">
     <div class="si"><svg viewBox="0 0 42 42" aria-hidden="true"><g data-fill fill="#caa85e" stroke="#6f5c32" stroke-width="1.35" stroke-linejoin="round" stroke-linecap="round"><path d="M6.5 18.6l7.4-6.1 6.3 5.9-7 7.3z"/><path d="M35.5 18.6l-7.4-6.1-6.3 5.9 7 7.3z"/><path d="M13.1 23.5l5.2-5.2c1.1-1.1 2.9-1.2 4.1-.2l1 .8 1.5-1.3c.9-.8 2.3-.7 3.2.2l5.2 5.4-6.4 6.8-4.5-3.7-2.4 2.2c-.9.8-2.3.8-3.2-.1l-3.7-3.4c-.4-.4-.4-1.1 0-1.5z"/></g><g fill="none" stroke="#3d341f" stroke-width="1.15" stroke-linecap="round" opacity=".72"><path d="M19.3 21.7l2.1 1.9c.6.5 1.4.5 2 .1l2.5-2.1"/><path d="M17.5 26.9l2.5 2.2"/><path d="M20.4 25.1l3.2 2.7"/><path d="M23.1 23.1l3.5 3"/></g></svg></div>
   </div>
 </div>
@@ -119,11 +119,11 @@
     <button id="polClose">✕</button>
     <div id="polHeader">
       <div class="phIcon"><svg viewBox="0 0 48 54"><polygon points="24,2 45,13.5 45,40.5 24,52 3,40.5 3,13.5" fill="#1c2620" stroke="#9aa07a" stroke-width="2.4"/><g stroke="#caa64a" stroke-width="2.4" stroke-linecap="round" fill="none"><path d="M16 16 L32 38"/><path d="M32 16 L16 38"/></g><g fill="#caa64a"><circle cx="16" cy="16" r="2.4"/><circle cx="32" cy="16" r="2.4"/></g></svg></div>
-      <div class="phTitle"><h2>Дипломатия</h2><div class="phSub">Выстраивайте отношения, заключайте союзы и защищайте интересы.</div></div>
-      <div class="phPts">🏛 <b id="polPts">0</b> очк.</div>
+      <div class="phTitle"><h2>Diplomacy</h2><div class="phSub">Build relations, form alliances and defend your interests.</div></div>
+      <div class="phPts">🏛 <b id="polPts">0</b> pts</div>
     </div>
     <div id="polColhdr">
-      <span>Фракция</span><span class="ctr">Мощь</span><span class="ctr">Города</span><span class="ctr">Армия</span><span class="ctr">Отношение</span><span class="ctr">Действия</span>
+      <span>Faction</span><span class="ctr">Power</span><span class="ctr">Cities</span><span class="ctr">Army</span><span class="ctr">Relation</span><span class="ctr">Actions</span>
     </div>
     <div id="polList"></div>
   </div>
@@ -134,10 +134,10 @@
     <div id="techHeader">
       <div class="techMark">ᚨ</div>
       <div class="techTitle">
-        <h2>Исследования</h2>
+        <h2>Research</h2>
       </div>
-      <button id="techCheatAll" title="Разблокировать все исследования">Чит: всё</button>
-      <div class="techGoldCard"><span class="coin">◉</span><b id="techGold">0</b><span>зол.</span></div>
+      <button id="techCheatAll" title="Unlock all research">Cheat: all</button>
+      <div class="techGoldCard"><span class="coin">◉</span><b id="techGold">0</b><span>gold</span></div>
     </div>
     <div id="techGrid"></div>
   </div>
@@ -147,7 +147,7 @@
 <div id="diploWin">
   <div id="diploCard" class="panelbox gpanel" style="position:relative">
     <button id="diploClose">✕</button>
-    <div id="diploName">Страна</div>
+    <div id="diploName">Country</div>
     <div id="diploInfo"></div>
     <div id="diploRel"></div>
     <div id="diploBtns"></div>
@@ -157,11 +157,11 @@
 <div id="warNotif">
   <div id="warNotifCard" class="gpanel">
     <div class="gstars">★ <b>★</b> ★</div>
-    <div class="gtitle danger"><span class="gtIcon">⚠</span>Вам объявлена война!</div>
+    <div class="gtitle danger"><span class="gtIcon">⚠</span>War has been declared on you!</div>
     <div id="warNotifBody"></div>
     <div id="warNotifBtns">
-      <button id="warNotifDiplo" class="dbtn war">🛡 К дипломатии</button>
-      <button id="warNotifOk" class="dbtn ghost">Понятно</button>
+      <button id="warNotifDiplo" class="dbtn war">🛡 To diplomacy</button>
+      <button id="warNotifOk" class="dbtn ghost">Got it</button>
     </div>
   </div>
 </div>
@@ -169,22 +169,22 @@
 <div id="peaceWin">
   <div id="peaceCard" class="gpanel">
     <div class="gstars">★ ★ ★</div>
-    <div id="peaceName">🕊 Мир</div>
+    <div id="peaceName">🕊 Peace</div>
     <div id="peaceInfo"></div>
     <div class="pterm">
-      <span class="ic">🌍</span><span class="nm">Аннексировать захваченное</span>
+      <span class="ic">🌍</span><span class="nm">Annex captured lands</span>
       <span class="v" id="ptLandV"></span>
       <button class="tgl" id="ptLandBtn" data-r="land"></button>
     </div>
     <div class="pterm">
-      <span class="ic">💰</span><span class="nm">Контрибуция</span>
+      <span class="ic">💰</span><span class="nm">Contribution</span>
       <button class="mm" data-r="money" data-d="-10">−</button>
       <span class="pct" id="ptMoneyV">0%</span>
       <button class="pp" data-r="money" data-d="10">+</button>
       <button class="mx" data-r="money" data-d="max">MAX</button>
     </div>
     <div class="pterm">
-      <span class="ic">💵</span><span class="nm">Репарации</span>
+      <span class="ic">💵</span><span class="nm">Reparations</span>
       <button class="mm" data-r="repar" data-d="-10">−</button>
       <span class="pct" id="ptReparV">0%</span>
       <button class="pp" data-r="repar" data-d="10">+</button>
@@ -192,8 +192,8 @@
     </div>
     <div id="peaceChance"></div>
     <div class="row2">
-      <button id="peacePropose" class="dbtn peace">Предложить мир</button>
-      <button id="peaceCancel" class="dbtn neutral">Отмена</button>
+      <button id="peacePropose" class="dbtn peace">Propose peace</button>
+      <button id="peaceCancel" class="dbtn neutral">Cancel</button>
     </div>
   </div>
 </div>
@@ -201,11 +201,11 @@
 <div id="peaceOffer">
   <div id="peaceOfferCard" class="gpanel">
     <div class="gstars">★ ★ ★</div>
-    <div id="peaceOfferTitle">🕊 Предложение мира</div>
+    <div id="peaceOfferTitle">🕊 Peace offer</div>
     <div id="peaceOfferBody"></div>
     <div class="row2">
-      <button id="peaceOfferYes" class="dbtn ally">Принять</button>
-      <button id="peaceOfferNo" class="dbtn war">Отклонить</button>
+      <button id="peaceOfferYes" class="dbtn ally">Accept</button>
+      <button id="peaceOfferNo" class="dbtn war">Decline</button>
     </div>
   </div>
 </div>
@@ -213,10 +213,10 @@
 <div id="peaceResult">
   <div id="peaceResultCard" class="gpanel">
     <div class="gstars">★ ★ ★</div>
-    <div id="peaceResultTitle">🕊 Мир</div>
+    <div id="peaceResultTitle">🕊 Peace</div>
     <div id="peaceResultBody"></div>
     <div class="row2">
-      <button id="peaceResultOk" class="dbtn peace">Понятно</button>
+      <button id="peaceResultOk" class="dbtn peace">Got it</button>
     </div>
   </div>
 </div>
@@ -248,6 +248,9 @@
 
   // ── DEV: бандла нет (или ?nobundle) → рантайм-склейка модулей в один инлайн-<script> ──
   const MODS = [
+    'js/i18n.js', 'js/i18n-en.js', 'js/i18n-ru.js',   // 🌍 локализация ПЕРВОЙ: t()/tName() + словари (EN база)
+    'js/i18n-en-ui.js', 'js/i18n-ru-ui.js',   // 🌍 UI-строки (меню/HUD/панели/тосты)
+    'js/i18n-en-data.js', 'js/i18n-ru-data.js',   // 🌍 дисплей-имена данных (город/страна/герой/юнит/спец)
     'js/_rules.gen.js',      // ПЕРВЫМИ: данные правил из server/sim (single-source, codegen)
     'js/_tech.gen.js',       //   константы + древо технологий — канон на сервере
     'js/_balance.gen.js',    //   POLITICS + AI дефолты (дипломатия/боты) — канон balance.js

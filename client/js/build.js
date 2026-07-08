@@ -12,14 +12,14 @@
   const BLUE_BASE = 'assets/hex-kit/buildings/blue/';
   // Внешние постройки: пока один слой строительства за пределами городов.
   const CATALOG = [
-    { key: 'tower_A', file: 'building_tower_A_green', name: 'Башня', cat: 'def', role: 'tower', cost: 85, range: 7.5, damage: 2, attackSpeed: 0.75, icon: '🛡' },
-    { key: 'shipyard', name: 'Верфь', cat: 'def', role: 'shipyard', cost: 90, icon: '⚓',
+    { key: 'tower_A', file: 'building_tower_A_green', get name() { return t('build.name_tower'); }, cat: 'def', role: 'tower', cost: 85, range: 7.5, damage: 2, attackSpeed: 0.75, icon: '🛡' },
+    { key: 'shipyard', get name() { return t('build.name_shipyard'); }, cat: 'def', role: 'shipyard', cost: 90, icon: '⚓',
       parts: [{ key: 'workshop', path: BLUE_BASE + 'building_shipyard_blue' }, { key: 'docks', path: BLUE_BASE + 'building_docks_blue' }] },
-    { key: 'airport', name: 'Аэропорт', cat: 'def', role: 'airport', cost: 110, icon: '✈',
+    { key: 'airport', get name() { return t('build.name_airport'); }, cat: 'def', role: 'airport', cost: 110, icon: '✈',
       parts: [{ key: 'workshop', path: BLUE_BASE + 'building_workshop_blue' }] },
-    { key: 'home_A', file: 'building_home_A_green', name: 'Деревня', cat: 'eco', role: 'village', cost: 45, manpowerRate: 0.35, icon: '👥' },
-    { key: 'windmill', file: 'building_windmill_green', name: 'Ферма', cat: 'eco', role: 'farm', cost: 55, goldRate: 0.45, icon: '💰' },
-    { key: 'church', file: 'building_church_green', name: 'Церковь', cat: 'state', role: 'church', cost: 70, politRate: 0.08, icon: '🏛' },
+    { key: 'home_A', file: 'building_home_A_green', get name() { return t('build.name_village'); }, cat: 'eco', role: 'village', cost: 45, manpowerRate: 0.35, icon: '👥' },
+    { key: 'windmill', file: 'building_windmill_green', get name() { return t('build.name_farm'); }, cat: 'eco', role: 'farm', cost: 55, goldRate: 0.45, icon: '💰' },
+    { key: 'church', file: 'building_church_green', get name() { return t('build.name_church'); }, cat: 'state', role: 'church', cost: 70, politRate: 0.08, icon: '🏛' },
   ];
 
   const models = {};            // key → THREE.Group (нормализованный, origin у основания)
@@ -125,12 +125,12 @@
   }
   function itemStats(item) {
     if (!item) return '';
-    if (item.role === 'tower') return `−${item.cost}💰 · радиус ${item.range} · урон ${item.damage} · ${item.attackSpeed}/с`;
-    if (item.role === 'village') return `−${item.cost}💰 · +${item.manpowerRate.toFixed(2)}👥/с`;
-    if (item.role === 'farm') return `−${item.cost}💰 · +${item.goldRate.toFixed(2)}💰/с`;
-    if (item.role === 'church') return `−${item.cost}💰 · +${item.politRate.toFixed(2)}🏛/с`;
-    if (item.role === 'shipyard') return `−${item.cost}💰 · только берег у города`;
-    if (item.role === 'airport') return `−${item.cost}💰 · рядом с городом`;
+    if (item.role === 'tower') return t('build.stats_tower', { cost: item.cost, range: item.range, damage: item.damage, speed: item.attackSpeed });
+    if (item.role === 'village') return t('build.stats_village', { cost: item.cost, rate: item.manpowerRate.toFixed(2) });
+    if (item.role === 'farm') return t('build.stats_farm', { cost: item.cost, rate: item.goldRate.toFixed(2) });
+    if (item.role === 'church') return t('build.stats_church', { cost: item.cost, rate: item.politRate.toFixed(2) });
+    if (item.role === 'shipyard') return t('build.stats_shipyard', { cost: item.cost });
+    if (item.role === 'airport') return t('build.stats_airport', { cost: item.cost });
     return item.cost ? `−${item.cost}💰` : '';
   }
   function buildingIncomeRate(fid, key) {
@@ -249,13 +249,13 @@
       + 'box-shadow:0 10px 30px rgba(0,0,0,.45);padding:10px 11px 11px;color:#dfe7f0;font:12px/1.35 system-ui,sans-serif;';
     const head = document.createElement('div');
     head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
-    head.innerHTML = '<span style="font-weight:700;letter-spacing:.2px">🏠 Строительство</span>';
+    head.innerHTML = '<span style="font-weight:700;letter-spacing:.2px">🏠 ' + t('build.panel_title') + '</span>';
     const close = document.createElement('button');
     close.textContent = '✕'; close.style.cssText = 'background:none;border:none;color:#9fb0c4;font-size:14px;cursor:pointer;line-height:1;';
     close.onclick = () => toggle(false);
     head.appendChild(close);
     panelBody = document.createElement('div');
-    const sections = [['def', 'Оборона'], ['eco', 'Экономика'], ['state', 'Власть']];
+    const sections = [['def', t('build.section_def')], ['eco', t('build.section_eco')], ['state', t('build.section_state')]];
     for (const [cat, label] of sections) {
       const items = CATALOG.filter((c) => c.cat === cat); if (!items.length) continue;
       const h = document.createElement('div'); h.textContent = label;
@@ -283,7 +283,7 @@
     const hint = document.createElement('div');
     hint.id = 'buildHint';
     hint.style.cssText = 'margin-top:9px;font-size:10.5px;color:#8aa0b8;min-height:14px;';
-    hint.textContent = 'Выбери здание';
+    hint.textContent = t('build.hint_pick');
     panelEl.appendChild(head); panelEl.appendChild(panelBody); panelEl.appendChild(hint);
     document.body.appendChild(panelEl);
   }
@@ -291,11 +291,11 @@
 
   function selectItem(item, btn) {
     if (panelBody) panelBody.querySelectorAll('button[data-key]').forEach((b) => { b.style.borderColor = '#33415a'; b.style.transform = ''; });
-    if (selected === item) { selected = null; exitPlacing(); setHint('Выбери здание'); return; }
+    if (selected === item) { selected = null; exitPlacing(); setHint(t('build.hint_pick')); return; }
     selected = item;
     if (btn) { btn.style.borderColor = '#7fb0ff'; btn.style.transform = 'scale(.94)'; }
     enterPlacing();
-    setHint(item.name + ': ' + itemStats(item));
+    setHint(t('build.hint_selected', { name: item.name, stats: itemStats(item) }));
   }
 
   // ── подсветка валидных хексов ──
@@ -430,7 +430,7 @@
       LOCALSIM.cities[parent.idx].shipyardGZ = h.gz;
     }
     if (typeof updatePanel === 'function') updatePanel();
-    if (typeof toast === 'function' && typeof CITY_NAMES !== 'undefined') toast('⚓ Построена верфь у «' + CITY_NAMES[parent.idx] + '»');
+    if (typeof toast === 'function' && typeof CITY_NAMES !== 'undefined') toast(t('build.toast_shipyard', { name: (typeof cityDisp==='function'?cityDisp(parent.idx):CITY_NAMES[parent.idx]) }));
     return parent;
   }
   function attachAirportToParent(h) {
@@ -446,7 +446,7 @@
       LOCALSIM.cities[parent.idx].airportGZ = h.gz;
     }
     if (typeof updatePanel === 'function') updatePanel();
-    if (typeof toast === 'function' && typeof CITY_NAMES !== 'undefined') toast('✈ Построен аэропорт у «' + CITY_NAMES[parent.idx] + '»');
+    if (typeof toast === 'function' && typeof CITY_NAMES !== 'undefined') toast(t('build.toast_airport', { name: (typeof cityDisp==='function'?cityDisp(parent.idx):CITY_NAMES[parent.idx]) }));
     return parent;
   }
 
@@ -549,10 +549,10 @@
 
   function place(item, h) {
     const hb = window.HEXBUILD; if (!hb || !models[item.key]) return;
-    if (isOccupiedBuildHex(h)) { setHint('На оккупированной территории строить нельзя'); return; }
+    if (isOccupiedBuildHex(h)) { setHint(t('build.hint_occupied')); return; }
     if (!isValidHexForItem(item, h)) return;
     const owner = playerId();
-    if (!spendGold(owner, item.cost || 0)) { setHint('Не хватает голды: нужно ' + (item.cost || 0)); return; }
+    if (!spendGold(owner, item.cost || 0)) { setHint(t('build.hint_nogold', { cost: (item.cost || 0) })); return; }
     const obj = models[item.key].clone(true);
     obj.traverse((o) => {
       if (!o.isMesh || !o.material) return;
@@ -603,7 +603,7 @@
     if (typeof attachDynShadowCaster === 'function') attachDynShadowCaster(obj);   // 🌗 в динамическую карту теней + её перепечь (дёшево)
     rebuildHighlight();           // убрать занятый хекс из подсветки
     if (highlightIM) highlightIM.visible = true;
-    setHint('Поставлено: ' + item.name + ' · ' + itemStats(item));
+    setHint(t('build.hint_placed', { name: item.name, stats: itemStats(item) }));
   }
 
   function syncBuildingOwner(b) {
@@ -710,7 +710,7 @@
     if (sb) sb.onclick = () => toggle();
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyB' && !/input|textarea/i.test((e.target && e.target.tagName) || '')) toggle();
-      if (e.code === 'Escape' && selected) { selected = null; exitPlacing(); setHint('Выбери здание'); if (panelBody) panelBody.querySelectorAll('button[data-key]').forEach((b) => { b.style.borderColor = '#33415a'; b.style.transform = ''; }); }
+      if (e.code === 'Escape' && selected) { selected = null; exitPlacing(); setHint(t('build.hint_pick')); if (panelBody) panelBody.querySelectorAll('button[data-key]').forEach((b) => { b.style.borderColor = '#33415a'; b.style.transform = ''; }); }
     });
     const cv = (typeof renderer !== 'undefined' && renderer && renderer.domElement) ? renderer.domElement : window;
     cv.addEventListener('pointermove', onMove, { passive: true });

@@ -34,7 +34,9 @@ class City{
     this.shipQueue=0; this.shipTimer=0;   // очередь кораблей
     this.planeQueue=0; this.planeTimer=0; // очередь самолётов
     this.units = 8+this.size*4; // стартовый гарнизон по размеру
-    this.aa=0; this.aaTimer=0;   // 🚀 зенитки (ПВО) и таймер залпа
+    const sc=(typeof START_COMP!=='undefined'&&START_COMP)||{inf:0.7,arc:0.2,cav:0.1};
+    this.comp={inf:this.units*(sc.inf||0),arc:this.units*(sc.arc||0),cav:this.units*(sc.cav||0)};
+    this.aa=0; this.aaTimer=0;   // legacy ПВО больше не показываем/не строим
     this.goldTimer=0; this.batches=[]; this.boosted=false;
     this.capital = false;
     // position on terrain
@@ -394,20 +396,20 @@ class City{
     showLab(this.lab,true);
     posLab(this.lab,(v.x*0.5+0.5)*innerWidth,(-v.y*0.5+0.5)*innerHeight);
     const q=this.queued;
-    const nm=`<span class="nm">${CITY_NAMES[this.idx]}</span>`; // имя для ВСЕХ городов
+    const nm=`<span class="nm">${cityDisp(this.idx)}</span>`; // имя для ВСЕХ городов
     // гарнизон трясётся красным когда обороняется
     const def=this.siege?'<span style="color:#ff6a4a">🛡</span>':'';
     const occm=this.occ?`<span style="color:#${(OWNER_COL[this.occFrom]||0).toString(16).padStart(6,'0')};text-shadow:0 0 2px #000">⚑</span>`:''; // занят (флаг де-юре владельца)
-    const aa=this.aa>0?`<span class="aa">🚀${this.aa}</span>`:''; // 🚀 зенитки (ПВО)
     // 👥 гарнизон по типам (⚔ пехота · 🏹 лучники · 🐎 конница); без comp — просто число
     let garr=String(Math.round(this.units));
-    if(this.comp){ const parts=[];
-      if(this.comp.inf>=0.5)parts.push('⚔'+Math.round(this.comp.inf));
-      if(this.comp.arc>=0.5)parts.push('🏹'+Math.round(this.comp.arc));
-      if(this.comp.cav>=0.5)parts.push('🐎'+Math.round(this.comp.cav));
+    const comp=this.comp||null;
+    if(comp){ const parts=[];
+      if(comp.inf>=0.5)parts.push('⚔'+Math.round(comp.inf));
+      if(comp.arc>=0.5)parts.push('🏹'+Math.round(comp.arc));
+      if(comp.cav>=0.5)parts.push('🐎'+Math.round(comp.cav));
       if(parts.length)garr=parts.join(' ');
     }
-    setLabHTML(this.lab,`${occm}${def}${garr}${aa}${q>0?`<span class="q">⏳${q}</span>`:''}${nm}`);
+    setLabHTML(this.lab,`${occm}${def}${garr}${q>0?`<span class="q">⏳${q}</span>`:''}${nm}`);
     setLabColor(this.lab,'#06121e');
   }
   // осаждающие армии видны как сферы у города, дрожат и светятся красным (как полевой бой)
@@ -440,4 +442,9 @@ class City{
   }
   _killSiegeOrb(orb){ if(!orb)return; if(orb.mesh)scene.remove(orb.mesh); orb.lab&&orb.lab.remove(); if(orb.banner)scene.remove(orb.banner); }
 }
-const CITY_NAMES = CITY_LIST.map(c => c[0]);
+const CITY_NAMES = CITY_LIST.map(c => c[0]);   // внутренние ключи (join): остаются на русском
+// дисплей-имя города: локализованное имя по внутреннему ключу (фолбэк = русский ключ)
+function cityDisp(idx){ const n=CITY_NAMES[idx]; if(typeof tName!=='function')return n;
+  const m=/^(Верфь|Аэропорт) (.+)$/.exec(n);                              // динамические верфи/аэропорты: имя-джойн-ключ RU, локализуем при показе
+  if(m)return t(m[1]==='Верфь'?'hud.yard_ship':'hud.yard_air',{city:tName('city',m[2])});
+  return tName('city',n); }

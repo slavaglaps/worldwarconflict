@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const { scanModelStamps } = require('./model-stamps');
+const { waterDataFromHexMap } = require('../../scripts/gen-water-data-from-hex-map');
 
 const root = path.resolve(__dirname, '..');
 const port = Number(process.env.PORT || process.argv[2] || 3000);
@@ -305,6 +306,21 @@ function writeSimMapData(hexMap) {
   fs.writeFileSync(tmp, JSON.stringify(next));
   fs.renameSync(tmp, out);                         // атомарно
   return { stat: fs.statSync(out), map: next };
+}
+
+function writeWaterDataForHexMap(hexMap) {
+  const data = waterDataFromHexMap(hexMap);
+  const outputs = [
+    path.resolve(root, 'sim', 'water-data.json'),
+    path.resolve(root, '..', 'server', 'sim', 'water-data.json'),
+  ];
+  for (const out of outputs) {
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    const tmp = out + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(data));
+    fs.renameSync(tmp, out);
+  }
+  return { data, outputs };
 }
 
 function choose(value, allowed, fallback) {
@@ -974,6 +990,7 @@ const server = http.createServer((req, res) => {
       fs.renameSync(tmp, out);                         // атомарно: tmp → rename, без риска битого файла
       const stat = fs.statSync(out);
       const sim = writeSimMapData(input);
+      const water = writeWaterDataForHexMap(input);
       sendJson(res, 200, {
         ok: true,
         path: path.relative(root, out),
@@ -983,6 +1000,8 @@ const server = http.createServer((req, res) => {
         simPath: path.relative(root, path.resolve(root, 'sim', 'map-data.json')),
         simCities: sim.map.cities.length,
         simEdges: sim.map.edges.length,
+        waterPath: path.relative(root, water.outputs[0]),
+        waterCount: water.data.waterCount,
       });
     }).catch(err => {
       sendJson(res, 500, { ok: false, error: err.message || String(err) });

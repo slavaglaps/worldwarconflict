@@ -13,6 +13,14 @@ function isWaterAt(x, z) {
   return !!(buf[i >> 3] & (1 << (i & 7)));
 }
 
+// «открытая вода»: блок 5×5 (радиус 2) целиком водный → реки/проливы/берег (узкие) НЕ проходят,
+// открытое море — да. Нужно, чтобы отряд садился на корабль ТОЛЬКО на морском переходе, а не на мосту через реку.
+function isOpenWater(x, z) {
+  const xi = Math.round(x), zi = Math.round(z);
+  for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) if (!isWaterAt(xi + dx, zi + dz)) return false;
+  return true;
+}
+
 // ближайшая вода к (x,z) (для спавна корабля у верфи)
 function nearestWaterPoint(x, z) {
   if (isWaterAt(x, z)) return { x, z };
@@ -141,4 +149,4 @@ function findWaterPath(sx, sz, tx, tz) {
   return pts;
 }
 
-module.exports = { isWaterAt, nearestWaterPoint, findWaterPath, waterClear, GRID: N };
+module.exports = { isWaterAt, isOpenWater, nearestWaterPoint, findWaterPath, waterClear, GRID: N };

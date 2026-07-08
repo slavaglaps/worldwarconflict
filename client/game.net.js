@@ -61,7 +61,7 @@
       else if(params.has('create')) room = await client.create('game', { faction: fid, name: roomParam || 'Игра' }); // создать новую
       else room = await client.joinOrCreate('game', { faction: fid });                               // прямая ссылка
     }
-    catch(e){ console.warn('[cs] join failed', e); alert('Не удалось подключиться к комнате: '+e.message); return; }
+    catch(e){ console.warn('[cs] join failed', e); alert(t('net.joinFailed', {msg:e.message})); return; }
     MP.on = true;
     room.onMessage('assigned', (m)=>{
       const assignedFid = Number.isInteger(m&&m.faction) ? m.faction : fid;
@@ -69,13 +69,13 @@
         PLAYER=assignedFid; OWNER.PLAYER=assignedFid; PLAYER_COUNTRY=FACTIONS[assignedFid].country;
         FACTIONS.forEach(f=>f.isPlayer=f.id===assignedFid);
         MP._synced=false; MP._sawRunning=false;
-        try{ toast(`${flagOf(PLAYER_COUNTRY)} Сервер назначил: ${PLAYER_COUNTRY}`); }catch(e){}
+        try{ toast(t('net.serverAssigned', {flag:flagOf(PLAYER_COUNTRY), country:countryDisp(PLAYER_COUNTRY)})); }catch(e){}
       }
     });
-    const DENY = { war:'⚔ Война: не хватает политочков (нужно 50🏛) или перемирие', ally:'🤝 Союз отклонён или мало политочков', break:'💔 Разрыв: мало политочков', peace:'🕊 Мир: мало политочков или кулдаун', buy:'Найм: мало голды/манпауэра/места', upg:'Прокачка недоступна (голда/тир/оккупация)', research:'🔬 Мало голды или нет пререквизитов', bship:'⚓ Нужна верфь + tech + голда/манпауэр', bplane:'✈ Нужен аэродром + tech + голда/манпауэр', yard:'🏗 Верфь — в прибрежном городе; нужна голда', aa:'🛡 Мало голды/манпауэра', send:'⏳ Нет пути, война не объявлена, или идёт мобилизация (до 60с)', hero:'🎖 Способность на перезарядке или нет цели для удара', sup:'💰 Поддержка: нужно ≥20 голды в казне' };
-    room.onMessage('denied', (m)=>{ try{ if(typeof toast==='function') toast(DENY[m&&m.cmd] || '⛔ Действие недоступно'); }catch(e){} });
+    const DENY = { war:t('net.denyWar'), ally:t('net.denyAlly'), break:t('net.denyBreak'), peace:t('net.denyPeace'), buy:t('net.denyBuy'), upg:t('net.denyUpg'), research:t('net.denyResearch'), bship:t('net.denyBship'), bplane:t('net.denyBplane'), yard:t('net.denyYard'), aa:t('net.denyAa'), send:t('net.denySend'), hero:t('net.denyHero'), sup:t('net.denySup') };
+    room.onMessage('denied', (m)=>{ try{ if(typeof toast==='function') toast(DENY[m&&m.cmd] || t('net.denyGeneric')); }catch(e){} });
     // 💰 поддержка принята сервером: показываем точную сумму и получателя (refreshDiplo подтянет новую голду из econ)
-    room.onMessage('supDone', (m)=>{ try{ if(!m)return; const f=FACTIONS[m.to]; toast(`💰 Поддержка ${m.amt|0}💰 → ${f?f.country:''}`); if(typeof refreshDiplo==='function')refreshDiplo(); if(typeof buildPolWindow==='function'&&polWinOpen)buildPolWindow(); }catch(e){} });
+    room.onMessage('supDone', (m)=>{ try{ if(!m)return; const f=FACTIONS[m.to]; toast(t('net.supDone', {amt:m.amt|0, country:(f?countryDisp(f.country):'')})); if(typeof refreshDiplo==='function')refreshDiplo(); if(typeof buildPolWindow==='function'&&polWinOpen)buildPolWindow(); }catch(e){} });
     // приватная экономика: сервер шлёт голду/манпауэр/политочки только нашей фракции и союзников (врагов не видим)
     room.onMessage('econ', (m)=>{ try{ if(m&&m.econ) for(const fid in m.econ){ const e=m.econ[fid], i=+fid; gold[i]=e[0]; manpower[i]=e[1]; politPts[i]=e[2]; }
       if(m&&m.hero){ const H=m.hero, hs=heroSlots[PLAYER]||[];
@@ -128,7 +128,7 @@
         if(K.FIGHT_RATE!=null)FIGHT_RATE=K.FIGHT_RATE; if(K.SIEGE_ATK!=null)SIEGE_ATK=K.SIEGE_ATK; if(K.SIEGE_DEF!=null)SIEGE_DEF=K.SIEGE_DEF;
       }
       // перерисовать UI, где показаны эти числа (дипломатия/политика/панель/кнопка мира)
-      try{ const pp=document.getElementById('peacePropose'); if(pp)pp.textContent=`Предложить мир (${POLIT_PEACE}🏛)`;
+      try{ const pp=document.getElementById('peacePropose'); if(pp)pp.textContent=t('net.proposePeace', {cost:POLIT_PEACE});
         if(typeof updatePanel==='function')updatePanel();
         if(typeof refreshPol==='function')refreshPol();
         if(typeof diploTarget!=='undefined'&&diploTarget!=null&&typeof refreshDiplo==='function')refreshDiplo();
@@ -150,7 +150,9 @@
         if(par&&typeof addEdgeRuntime==='function'){try{addEdgeRuntime(idx,par.idx);}catch(e){}}
       }
     });
-    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0, cc.prodTier|0, cc.defTier|0, cc.atkTier|0, null, null, null, cc.occFrom==null?255:cc.occFrom]));
+    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0, cc.prodTier|0, cc.defTier|0, cc.atkTier|0,
+      cc.compInf!=null?cc.compInf:null, cc.compArc!=null?cc.compArc:null, cc.compCav!=null?cc.compCav:null,
+      cc.occFrom==null?255:cc.occFrom]));
     const rel=[]; state.relations.forEach((v,k)=> rel.push([k, v===1?'war':'ally']));
     const ws=[]; if(state.warStart) state.warStart.forEach((v,k)=> ws.push([k, v]));   // время начала каждой войны → отсчёт мобилизации (60с)
     onMsg({ data: JSON.stringify({ t:'snap', time:+state.clock||0, over:0, c, rel, ws }) });   // экономика идёт отдельным сообщением 'econ' (приватно)
@@ -171,16 +173,22 @@
     }
     // синк динамических верфей/аэродромов на локальные города (чтобы появился UI постройки)
     if(!push._by || push._n!==cities.length){ push._by={}; for(const cc of cities)push._by[cc.idx]=cc; push._n=cities.length; }
-    state.cities.forEach((cc,key)=>{ const lc=push._by[Number(key)]; if(lc){ lc.isShipyard=!!cc.shipyard; lc.isAirport=!!cc.airport; lc.aa=cc.aa|0; } });
+    state.cities.forEach((cc,key)=>{ const lc=push._by[Number(key)]; if(lc){ lc.isShipyard=!!cc.shipyard; lc.isAirport=!!cc.airport; lc.aa=0; } });
     const e=[], DQ=1/64;   // позиции пришли как fixed-point uint16 (×64 на сервере) — делим обратно
-    state.squads.forEach((s,id)=>{ const x=s.x*DQ, z=s.z*DQ; e.push(['sq'+id, 0, s.owner, x, gy(x,z)+0.2, z, s.count, s.fighting?1:0]); });  // [7]=fighting → боевая анимация
+    state.squads.forEach((s,id)=>{ let x=s.x*DQ, z=s.z*DQ, hdg=(s.heading||0)*(2*Math.PI/256), m=s.mode|0;
+      const ea=s.edgeA!=null&&s.edgeA!==65535?s.edgeA:null, eb=s.edgeB!=null&&s.edgeB!==65535?s.edgeB:null, ef=(s.frac||0)/65535;
+      if(ea!=null&&eb!=null&&typeof hexRoadPos==='function'){ const rp=hexRoadPos(ea,eb,ef); if(rp){ x=rp.x; z=rp.z; } }
+      e.push(['sq'+id, 0, s.owner, x, gy(x,z)+0.2, z, s.count, s.fighting?1:0, ea, eb, ef,
+        s.compInf!=null?s.compInf:null, s.compArc!=null?s.compArc:null, s.compCav!=null?s.compCav:null, m, 0, hdg]);  // [8..10]=ребро; [11..13]=состав; [14]=mode; [16]=курс
+      if(m===2) e.push(['shq'+id, 1, s.owner, x, WY, z, 0, hdg]);   // 🚢 корабль над водой (kind-1, курс [7])
+    });
     state.ships .forEach((s,id)=> e.push(['sh'+id, 1, s.owner, s.x*DQ, WY, s.z*DQ, 0]));
     state.planes.forEach((s,id)=> e.push(['pl'+id, 2, s.owner, s.x*DQ, PA, s.z*DQ, 0]));
     onMsg({ data: JSON.stringify({ t:'ent', e }) });
     // плашка статуса: реальное имя комнаты + страна + число игроков (с сервера, без путающего «ГОСТЬ»)
     if(MP._pill){
-      const ctry = (typeof FACTIONS!=='undefined' && FACTIONS[PLAYER]) ? FACTIONS[PLAYER].country : '';
-      MP._pill.textContent = `🌐 ${state.roomName||'Игра'} · ${ctry} · 👥 ${state.playerCount||1}`;
+      const ctry = (typeof FACTIONS!=='undefined' && FACTIONS[PLAYER]) ? countryDisp(FACTIONS[PLAYER].country) : '';
+      MP._pill.textContent = t('net.pill', {room:(state.roomName||t('net.defaultRoom')), country:ctry, players:(state.playerCount||1)});
     }
   }
 

@@ -52,8 +52,27 @@ printf '✓ publish checks passed\n'
 rm -rf "$DIST"
 mkdir -p "$DIST/assets"
 
-cp tiny-world-builder.html "$DIST/index.html"
+if [[ -f index.html ]]; then
+  cp index.html "$DIST/index.html"
+else
+  cp game-hex.html "$DIST/index.html"
+fi
+
 cp tiny-world-builder.html "$DIST/tiny-world-builder.html"
+for f in game-hex.html game.html game.css game.net.js mp-client.html unit-viewer.html; do
+  [[ -f "$f" ]] || continue
+  cp "$f" "$DIST/$f"
+done
+
+if [[ -f ../scripts/build.js ]]; then
+  (cd "$ROOT/.." && node scripts/build.js)
+  mkdir -p "$DIST/dist"
+  for f in game.bundle.js game.bundle.js.map sim.bundle.js sim.bundle.js.map build-manifest.json; do
+    [[ -f "$DIST/$f" ]] || continue
+    cp "$DIST/$f" "$DIST/dist/$f"
+  done
+fi
+
 cp LandscapeEngine.js "$DIST/LandscapeEngine.js"
 cp world.schema.json "$DIST/world.schema.json"
 
@@ -80,6 +99,27 @@ if [[ -d engine ]]; then
     for f do
       mkdir -p "../dist/engine/$(dirname "$f")"
       cp "$f" "../dist/engine/$f"
+    done
+  ' sh {} +)
+fi
+
+# WWC game modules and browser sim data used by game.html/game-hex.html.
+if [[ -d js ]]; then
+  mkdir -p "$DIST/js"
+  (cd js && find . -type f ! -name '.DS_Store' -exec sh -c '
+    for f do
+      mkdir -p "../dist/js/$(dirname "$f")"
+      cp "$f" "../dist/js/$f"
+    done
+  ' sh {} +)
+fi
+
+if [[ -d sim ]]; then
+  mkdir -p "$DIST/sim"
+  (cd sim && find . -type f ! -name '.DS_Store' -exec sh -c '
+    for f do
+      mkdir -p "../dist/sim/$(dirname "$f")"
+      cp "$f" "../dist/sim/$f"
     done
   ' sh {} +)
 fi

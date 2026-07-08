@@ -1300,16 +1300,9 @@
       const level = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
       for (const c of comp) c.elev = level;
     }
-    for (const city of CITY_LIST) {
-      const root = nearestCityTerrainCell(city);
-      if (!root) continue;
-      const level = nearestRoadTerrainLevel(root);
-      const halo = [root].concat(neighbors(root.q, root.r).filter(Boolean));
-      for (const c of halo) {
-        if (!c || c.water || c.river) continue;
-        c.elev = level;
-      }
-    }
+    // ⛔ Выравнивание ГОРОДОВ под уровень ближайшей дороги убрано: оно «утаскивало» тайл города
+    //    и его соседей на высоту дороги (напр. Гамбург 1.25 → 0.5 при перепрокладке путей рядом).
+    //    Города сохраняют свою родную высоту; перепад «дорога→город» гасят наклонные дорожные тайлы (roadA_sloped).
   };
   normalizeRoadAndCityTerrainLevels();
   const normalizeRoadSlopeTransitions = () => {
@@ -3195,24 +3188,37 @@
     };
     // маршруты дорог по парам городов → пути юнитов в игре идут по визуальным дорогам
     const seenPair = new Set(), roads = [];
-    const roadPathOverrides = (typeof roadPathEditState !== 'undefined' && roadPathEditState.edits)
-      ? new Map([...roadPathEditState.edits.entries()].map(([k, v]) => [k, cloneRoadPath(v)]))
-      : new Map();
     const deletedRoadPaths = (typeof roadPathEditState !== 'undefined' && roadPathEditState.deleted)
       ? new Set(roadPathEditState.deleted)
       : new Set();
-    for (const rp of inferRoadPaths()) {
-      const key = Math.min(rp.a, rp.b) + '_' + Math.max(rp.a, rp.b);
-      if (deletedRoadPaths.has(key)) continue;
-      const outPath = roadPathOverrides.get(key) || rp;
-      if (seenPair.has(key) || !outPath.pts || outPath.pts.length < 2) continue; seenPair.add(key);
-      roads.push([outPath.a, outPath.b, outPath.pts.map((p) => [r3(p[0]), r3(p[1])])]);
-    }
-    for (const [key, rp] of roadPathOverrides) {
-      if (deletedRoadPaths.has(key)) continue;
-      if (seenPair.has(key) || !rp.pts || rp.pts.length < 2) continue;
-      seenPair.add(key);
-      roads.push([rp.a, rp.b, rp.pts.map((p) => [r3(p[0]), r3(p[1])])]);
+    // 🎯 Если построен НОД-ГРАФ (пути-редактор) — сохраняем РОВНО его, 1:1 с ручными правками,
+    //    БЕЗ авто-инференса (inferRoadPaths добавлял лишние дороги между парами, которые ты не рисовал).
+    const graphRoads = (typeof nodeGraph !== 'undefined' && nodeGraph.edges && nodeGraph.edges.length && typeof graphToRoadPaths === 'function')
+      ? graphToRoadPaths().paths : null;
+    if (graphRoads && graphRoads.size) {
+      for (const [key, rp] of graphRoads) {
+        if (deletedRoadPaths.has(key)) continue;
+        if (seenPair.has(key) || !rp.pts || rp.pts.length < 2) continue; seenPair.add(key);
+        roads.push([rp.a, rp.b, rp.pts.map((p) => [r3(p[0]), r3(p[1])])]);
+      }
+    } else {
+      // нет ручного графа → прежнее поведение (авто-инференс сети из дорожных тайлов + оверрайды правок)
+      const roadPathOverrides = (typeof roadPathEditState !== 'undefined' && roadPathEditState.edits)
+        ? new Map([...roadPathEditState.edits.entries()].map(([k, v]) => [k, cloneRoadPath(v)]))
+        : new Map();
+      for (const rp of inferRoadPaths()) {
+        const key = Math.min(rp.a, rp.b) + '_' + Math.max(rp.a, rp.b);
+        if (deletedRoadPaths.has(key)) continue;
+        const outPath = roadPathOverrides.get(key) || rp;
+        if (seenPair.has(key) || !outPath.pts || outPath.pts.length < 2) continue; seenPair.add(key);
+        roads.push([outPath.a, outPath.b, outPath.pts.map((p) => [r3(p[0]), r3(p[1])])]);
+      }
+      for (const [key, rp] of roadPathOverrides) {
+        if (deletedRoadPaths.has(key)) continue;
+        if (seenPair.has(key) || !rp.pts || rp.pts.length < 2) continue;
+        seenPair.add(key);
+        roads.push([rp.a, rp.b, rp.pts.map((p) => [r3(p[0]), r3(p[1])])]);
+      }
     }
     const nearestCityCountryByQR = (q, r) => {
       let bestCountry = '', bestD = Infinity;
@@ -4444,23 +4450,41 @@
     const path = []; let c = dst; while (c !== -1) { path.push(c); if (c === src) break; c = prev[c]; } path.reverse();
     return path[0] === src ? path : null;
   };
-  const graphToRoadPaths = () => {                                // Map<"a_b", {a,b,pts}> из графа для существующих дорог
-    const N = nodeGraph.nodes.length, cityNode = graphCityNodeIndex();
-    const adj = Array.from({ length: N }, () => []), isCity = new Uint8Array(N);
-    for (let i = 0; i < N; i++) if (nodeGraph.nodes[i].city != null) isCity[i] = 1;
+  // ЭКСПОРТ: дорога город↔город рождается для КАЖДОЙ пары городов, напрямую связанных в графе
+  // (путь через НЕ-города, не через третий город). Так экспортируются ВСЕ нарисованные связи, включая
+  // новые морские (Сассари↔Рим и т.п.), которые раньше (репроекция лишь исходных дорог) молча терялись.
+  const graphToRoadPaths = () => {                                // Map<"a_b", {a,b,pts}>
+    const N = nodeGraph.nodes.length;
+    const adj = Array.from({ length: N }, () => []), isCity = new Uint8Array(N), nodeCity = new Array(N);
+    for (let i = 0; i < N; i++) { const c = nodeGraph.nodes[i].city; nodeCity[i] = (c == null ? null : c); if (c != null) isCity[i] = 1; }
     for (const [a, b] of nodeGraph.edges) { if (a < 0 || b < 0 || a >= N || b >= N || a === b) continue; const na = nodeGraph.nodes[a], nb = nodeGraph.nodes[b], w = Math.hypot(na.x - nb.x, na.z - nb.z) || 0.001; adj[a].push([b, w]); adj[b].push([a, w]); }
-    const out = new Map(); let ok = 0, miss = 0;
-    const seen = new Set();
-    for (const base of roadPaths) {
-      const key = roadPathKey(base.a, base.b); if (seen.has(key)) continue; seen.add(key);
-      const src = cityNode[base.a], dst = cityNode[base.b];
-      if (src == null || dst == null) { miss++; continue; }
-      const pn = dijkstraDirect(adj, isCity, src, dst, N);
-      if (!pn || pn.length < 2) { miss++; continue; }
-      out.set(key, { a: base.a, b: base.b, pts: pn.map((ni) => [nodeGraph.nodes[ni].x, nodeGraph.nodes[ni].z]) });
-      ok++;
+    const cityNodes = []; for (let i = 0; i < N; i++) if (isCity[i]) cityNodes.push(i);
+    const out = new Map(); let ok = 0;
+    for (const src of cityNodes) {                                // Дейкстра от города через НЕ-города; города-соседи фиксируем, сквозь них не идём
+      const dist = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1);
+      dist[src] = 0; const h = [[0, src]];
+      while (h.length) {
+        const [d, u] = _hpop(h);
+        if (d > dist[u]) continue;
+        if (u !== src && isCity[u]) continue;                     // сквозь чужой город путь не продолжаем
+        const au = adj[u];
+        for (let k = 0; k < au.length; k++) { const v = au[k][0], nd = d + au[k][1]; if (nd < dist[v]) { dist[v] = nd; prev[v] = u; _hpush(h, [nd, v]); } }
+      }
+      const ca = nodeCity[src];
+      for (const dst of cityNodes) {
+        if (dst === src || dist[dst] === Infinity) continue;
+        const cb = nodeCity[dst];
+        if (ca == null || cb == null || ca === cb) continue;
+        const key = roadPathKey(ca, cb);
+        if (out.has(key)) continue;
+        const path = []; let c = dst; while (c !== -1) { path.push(c); if (c === src) break; c = prev[c]; }
+        if (path[path.length - 1] !== src || path.length < 2) continue;
+        path.reverse();
+        out.set(key, { a: ca, b: cb, pts: path.map((ni) => [nodeGraph.nodes[ni].x, nodeGraph.nodes[ni].z]) });
+        ok++;
+      }
     }
-    return { paths: out, ok, miss };
+    return { paths: out, ok, miss: 0 };
   };
   const refreshRoadPathCountrySelect = () => {
     const sel = $('pathCountry');

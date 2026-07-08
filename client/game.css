@@ -1,7 +1,26 @@
+  @font-face{font-family:'KnightsQuest';src:url('assets/fonts/KnightsQuest.ttf') format('truetype');font-display:swap;}
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{height:100%;overflow:hidden;background:#8fd0e8;font-family:-apple-system,Segoe UI,Roboto,sans-serif;}
   #app{position:fixed;inset:0;}
   canvas{display:block;}
+  #gameLoading{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    color:#efe7d2;background:
+      radial-gradient(900px 560px at 50% 42%,rgba(61,83,72,.92),rgba(18,27,25,.96) 56%,#07100f 100%),
+      linear-gradient(180deg,#22342c,#0d1714);
+    transition:opacity .32s ease,visibility .32s ease;}
+  #gameLoading.done{opacity:0;visibility:hidden;}
+  #gameLoading:before{content:"";position:absolute;inset:18px;border:1px solid rgba(197,171,104,.36);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04);pointer-events:none;}
+  #gameLoading:after{content:"";position:absolute;inset:0;background:
+    linear-gradient(90deg,transparent,rgba(222,191,115,.08),transparent),
+    radial-gradient(circle at 50% 42%,transparent 0 18%,rgba(0,0,0,.22) 64%,rgba(0,0,0,.46));pointer-events:none;}
+  #gameLoading .loadMark{position:relative;z-index:1;width:76px;height:76px;display:grid;place-items:center;
+    color:#d4b866;font-size:52px;line-height:1;text-shadow:0 0 20px rgba(211,181,90,.28);animation:loadPulse 1.5s ease-in-out infinite;}
+  #gameLoading .loadTitle{position:relative;z-index:1;font-family:'KnightsQuest',Georgia,serif;font-size:34px;font-weight:700;letter-spacing:.6px;text-shadow:0 3px 18px #000;}
+  #gameLoading .loadText{position:relative;z-index:1;color:#b9c5b3;font-size:15px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;}
+  #gameLoading .loadBar{position:relative;z-index:1;width:min(420px,62vw);height:8px;overflow:hidden;border:1px solid rgba(205,176,104,.42);background:rgba(4,8,8,.58);box-shadow:0 8px 24px rgba(0,0,0,.32);}
+  #gameLoading .loadBar i{display:block;width:44%;height:100%;background:linear-gradient(90deg,transparent,#d7bd69,#fff0b0,#d7bd69,transparent);animation:loadSweep 1.25s ease-in-out infinite;}
+  @keyframes loadPulse{0%,100%{transform:scale(.96);opacity:.72}50%{transform:scale(1.05);opacity:1}}
+  @keyframes loadSweep{0%{transform:translateX(-110%)}100%{transform:translateX(250%)}}
   .panelbox{background:rgba(8,16,26,.78);color:#eef4ff;border-radius:10px;backdrop-filter:blur(4px);user-select:none;}
   /* ── верхняя плашка ресурсов (top HUD bar) ── */
   #topbar{position:fixed;top:0;left:0;height:76px;display:flex;align-items:stretch;z-index:12;user-select:none;
@@ -56,24 +75,24 @@
   #panel:before,#panel:after{content:"";position:absolute;width:12px;height:12px;border-color:#bda782;opacity:.72;pointer-events:none;}
   #panel:before{left:8px;top:8px;border-left:2px solid;border-top:2px solid;}
   #panel:after{right:8px;bottom:8px;border-right:2px solid;border-bottom:2px solid;}
-  #panel .title{min-height:34px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:18px;font-family:Georgia,"Times New Roman",serif;}
+  #panel .title{min-height:34px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:18px;font-family:'KnightsQuest',Georgia,serif;}
   #pName{font-size:20px;font-weight:700;color:#efe4c8;text-shadow:0 2px 10px rgba(0,0,0,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #panel .gold{height:32px;display:flex;align-items:center;gap:6px;padding:0 11px;border:1px solid rgba(204,176,126,.42);border-radius:3px;background:rgba(8,12,14,.58);color:#f3c65e;font-size:15px;font-weight:800;white-space:nowrap;}
   #tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px;}
   #panel.yardPanel #tabs{grid-template-columns:1fr;}
-  #tabs button{height:34px;border:1px solid rgba(172,153,117,.38);border-radius:3px;font-family:Georgia,"Times New Roman",serif;font-size:15px;font-weight:700;cursor:pointer;background:rgba(10,15,18,.62);color:#b9ad92;box-shadow:inset 0 0 0 1px rgba(255,255,255,.025);}
+  #tabs button{height:34px;border:1px solid rgba(172,153,117,.38);border-radius:3px;font-family:'KnightsQuest',Georgia,serif;font-size:15px;font-weight:700;cursor:pointer;background:rgba(10,15,18,.62);color:#b9ad92;box-shadow:inset 0 0 0 1px rgba(255,255,255,.025);}
   #tabs button:hover{filter:brightness(1.12);}
   #tabs button.active{color:#f2dfb6;border-color:rgba(216,180,104,.68);background:linear-gradient(180deg,rgba(62,48,25,.88),rgba(20,18,14,.92));box-shadow:0 0 14px rgba(202,168,94,.16),inset 0 -2px 0 rgba(202,168,94,.38);}
   #upgTab,#buyRows{display:grid;gap:7px;}
   #armyTab{min-width:0;}
-  #panel .row{--row-accent:#caa85e;min-height:38px;display:flex;gap:12px;align-items:center;justify-content:space-between;padding:8px 11px 8px 13px;border-radius:3px;margin-top:0;font-family:Georgia,"Times New Roman",serif;font-size:14px;font-weight:700;color:#eadfc8;cursor:pointer;border:1px solid rgba(172,153,117,.28);border-left:3px solid var(--row-accent);background:linear-gradient(180deg,rgba(28,35,36,.86),rgba(10,14,16,.92)) !important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.025);}
+  #panel .row{--row-accent:#caa85e;min-height:38px;display:flex;gap:12px;align-items:center;justify-content:space-between;padding:8px 11px 8px 13px;border-radius:3px;margin-top:0;font-family:'KnightsQuest',Georgia,serif;font-size:14px;font-weight:700;color:#eadfc8;cursor:pointer;border:1px solid rgba(172,153,117,.28);border-left:3px solid var(--row-accent);background:linear-gradient(180deg,rgba(28,35,36,.86),rgba(10,14,16,.92)) !important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.025);}
   #panel .row:hover{filter:brightness(1.12);}
   #panel .row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 2px 8px rgba(0,0,0,.65);}
   #panel .row small{flex:none;font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:12px;font-weight:800;color:#f0c46a;opacity:1;white-space:nowrap;}
   #panel .row.dis{background:linear-gradient(180deg,rgba(22,25,25,.72),rgba(9,12,13,.82)) !important;color:#716b5f;border-color:rgba(110,101,84,.24);border-left-color:#59554d;cursor:default;filter:saturate(.62);}
   #panel .row.dis small{color:#7f7768;}
   #panel .row.dis:hover{filter:saturate(.62);}
-  #info{min-height:28px;display:flex;align-items:center;justify-content:center;padding:7px 10px;margin-bottom:8px;border:1px solid rgba(172,153,117,.24);border-radius:3px;background:rgba(8,12,14,.42);font-family:Georgia,"Times New Roman",serif;font-size:13px;color:#d5cab1;text-align:center;}
+  #info{min-height:28px;display:flex;align-items:center;justify-content:center;padding:7px 10px;margin-bottom:8px;border:1px solid rgba(172,153,117,.24);border-radius:3px;background:rgba(8,12,14,.42);font-family:'KnightsQuest',Georgia,serif;font-size:13px;color:#d5cab1;text-align:center;}
   #qbar{height:18px;border-radius:3px;background:rgba(2,7,10,.62);margin:0 0 9px;overflow:hidden;position:relative;border:1px solid rgba(172,153,117,.24);box-shadow:inset 0 1px 4px rgba(0,0,0,.62);}
   #qfill{height:100%;width:0;background:linear-gradient(90deg,#8f6830,#f0c46a);}
   #qtext{position:absolute;inset:0;font-size:10px;color:#f4ead2;display:flex;align-items:center;justify-content:center;font-weight:800;text-shadow:0 1px 3px #000;}
@@ -120,18 +139,18 @@
     radial-gradient(circle,#bda782 0 2px,transparent 2.5px) left center/16px 16px no-repeat,
     radial-gradient(circle,#bda782 0 2px,transparent 2.5px) right center/16px 16px no-repeat;}
   #techHeader .techMark{display:none;}
-  #techCard h2{font-family:Georgia,"Times New Roman",serif;font-size:37px;line-height:1;text-align:center;margin:0;color:#efe4c8;font-weight:500;letter-spacing:.6px;text-shadow:0 3px 14px rgba(0,0,0,.82);}
+  #techCard h2{font-family:'KnightsQuest',Georgia,serif;font-size:37px;line-height:1;text-align:center;margin:0;color:#efe4c8;font-weight:500;letter-spacing:.6px;text-shadow:0 3px 14px rgba(0,0,0,.82);}
   .techGoldCard{position:absolute;right:88px;top:17px;height:40px;display:flex;align-items:center;gap:8px;padding:0 18px;white-space:nowrap;
     color:#d9c69f;border:1px solid rgba(204,176,126,.48);border-radius:3px;background:rgba(11,16,18,.62);
-    font-family:Georgia,"Times New Roman",serif;font-size:18px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
+    font-family:'KnightsQuest',Georgia,serif;font-size:18px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
   #techCheatAll{position:absolute;left:88px;top:17px;height:40px;padding:0 16px;border:1px solid rgba(204,176,126,.46);border-radius:3px;
     background:linear-gradient(180deg,rgba(69,44,26,.82),rgba(24,17,13,.9));color:#f1d29a;cursor:pointer;
-    font-family:Georgia,"Times New Roman",serif;font-size:15px;font-weight:700;letter-spacing:.2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
+    font-family:'KnightsQuest',Georgia,serif;font-size:15px;font-weight:700;letter-spacing:.2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
   #techCheatAll:hover{border-color:rgba(242,203,130,.82);color:#ffe1a8;}
   .techGoldCard .coin{color:#d7a94d;font-size:14px;text-shadow:0 0 8px rgba(215,169,77,.42);}
   .techGoldCard b{color:#f3c65e;font-size:20px;}
   #techCard .sub{display:inline-flex;align-items:center;justify-content:center;min-width:250px;height:38px;margin:12px auto 0;padding:0 42px;
-    color:#dfd1b4;border:1px solid rgba(192,169,127,.52);font-family:Georgia,"Times New Roman",serif;font-size:16px;
+    color:#dfd1b4;border:1px solid rgba(192,169,127,.52);font-family:'KnightsQuest',Georgia,serif;font-size:16px;
     background:linear-gradient(180deg,rgba(50,58,55,.86),rgba(21,29,31,.92));
     clip-path:polygon(16px 0,calc(100% - 16px) 0,100% 50%,calc(100% - 16px) 100%,16px 100%,0 50%);
     box-shadow:0 8px 18px rgba(0,0,0,.34),inset 0 -2px 0 rgba(114,186,196,.24);}
@@ -155,14 +174,14 @@
   #techTip{position:fixed;display:none;z-index:40;max-width:286px;padding:11px 13px;border-radius:3px;pointer-events:none;
     background:linear-gradient(180deg,rgba(20,27,30,.96),rgba(9,14,17,.97));border:1px solid rgba(203,181,137,.48);
     color:#d9d1c0;font-size:12px;line-height:1.45;box-shadow:0 10px 30px rgba(0,0,0,.65),inset 0 0 0 1px rgba(255,255,255,.04);}
-  #techTip b{display:block;color:#f1e5c8;font-family:Georgia,"Times New Roman",serif;font-size:15px;margin-bottom:3px;}
+  #techTip b{display:block;color:#f1e5c8;font-family:'KnightsQuest',Georgia,serif;font-size:15px;margin-bottom:3px;}
   #techTip .te{color:#b5c3c2;margin:4px 0;}
   #techTip .tc{color:#f0c46a;font-weight:800;}
   #techTip .ts2{margin-top:4px;font-size:11px;}
   .techSlots{display:flex;align-items:center;gap:12px;width:min(980px,100%);margin:0 auto;min-height:46px;}
   .techSlotRail{flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
   .tslot{height:40px;position:relative;display:flex;align-items:center;justify-content:center;gap:8px;min-width:0;padding:0 16px;
-    border-radius:7px;font-family:Georgia,"Times New Roman",serif;font-size:14px;font-weight:700;
+    border-radius:7px;font-family:'KnightsQuest',Georgia,serif;font-size:14px;font-weight:700;
     background:rgba(10,15,18,.58);border:1px solid rgba(135,125,107,.48);color:#ddd1b9;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
   .tslot.ac{border-color:#c9954e;color:#f5deb5;box-shadow:0 0 14px rgba(197,139,68,.16);}
   .tslot.ac .tsf{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,rgba(198,135,55,.34),rgba(198,135,55,.08));}
@@ -269,13 +288,13 @@
     radial-gradient(circle,#bda782 0 2px,transparent 2.5px) left center/16px 16px no-repeat,
     radial-gradient(circle,#bda782 0 2px,transparent 2.5px) right center/16px 16px no-repeat;}
   .phIcon,.phSub{display:none;}
-  .phTitle h2{font-family:Georgia,"Times New Roman",serif;font-size:35px;line-height:1;text-align:center;margin:0;color:#efe4c8;font-weight:500;letter-spacing:.5px;text-shadow:0 3px 14px rgba(0,0,0,.82);}
+  .phTitle h2{font-family:'KnightsQuest',Georgia,serif;font-size:35px;line-height:1;text-align:center;margin:0;color:#efe4c8;font-weight:500;letter-spacing:.5px;text-shadow:0 3px 14px rgba(0,0,0,.82);}
   .phPts{position:absolute;right:88px;top:17px;height:40px;display:flex;align-items:center;gap:8px;padding:0 18px;white-space:nowrap;
     color:#d9c69f;border:1px solid rgba(204,176,126,.48);border-radius:3px;background:rgba(11,16,18,.62);
-    font-family:Georgia,"Times New Roman",serif;font-size:18px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
+    font-family:'KnightsQuest',Georgia,serif;font-size:18px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
   .phPts b{color:#f3c65e;font-size:20px;}
   #polColhdr,.pRow{display:grid;grid-template-columns:minmax(210px,1.35fr) 126px 72px 78px 144px minmax(282px,.95fr);align-items:center;}
-  #polColhdr{padding:12px 14px 13px;font-family:Georgia,"Times New Roman",serif;font-size:13px;letter-spacing:.8px;text-transform:uppercase;color:#b7aa8c;font-weight:700;
+  #polColhdr{padding:12px 14px 13px;font-family:'KnightsQuest',Georgia,serif;font-size:13px;letter-spacing:.8px;text-transform:uppercase;color:#b7aa8c;font-weight:700;
     border-top:1px solid rgba(196,172,129,.16);border-bottom:1px solid rgba(196,172,129,.22);}
   #polColhdr .ctr{text-align:center;}
   #polList{height:calc(100% - 119px);overflow:auto;padding:8px 14px 0;scrollbar-color:rgba(190,162,111,.45) rgba(0,0,0,.18);}
@@ -285,19 +304,19 @@
   .pRow:hover{background:rgba(222,197,148,.035);}
   .pRow .fcell{display:flex;align-items:center;gap:14px;padding-left:8px;min-width:0;}
   .pRow .hflag{width:46px;height:53px;flex:none;display:flex;align-items:center;justify-content:center;}
-  .pRow .nm{font-family:Georgia,"Times New Roman",serif;font-weight:700;font-size:18px;letter-spacing:.15px;color:#eadfc8;text-shadow:0 2px 10px rgba(0,0,0,.6);}
-  .pRow .rstat{font-family:Georgia,"Times New Roman",serif;font-size:12px;font-weight:700;margin-top:3px;color:#a9a087!important;}
+  .pRow .nm{font-family:'KnightsQuest',Georgia,serif;font-weight:700;font-size:18px;letter-spacing:.15px;color:#eadfc8;text-shadow:0 2px 10px rgba(0,0,0,.6);}
+  .pRow .rstat{font-family:'KnightsQuest',Georgia,serif;font-size:12px;font-weight:700;margin-top:3px;color:#a9a087!important;}
   .pRow .ctr{text-align:center;}
-  .pRow .big{font-family:Georgia,"Times New Roman",serif;font-size:20px;font-weight:600;color:#e5dcc7;}
-  .pwr .pnum{font-family:Georgia,"Times New Roman",serif;font-size:21px;font-weight:600;color:#e5dcc7;margin-bottom:6px;}
+  .pRow .big{font-family:'KnightsQuest',Georgia,serif;font-size:20px;font-weight:600;color:#e5dcc7;}
+  .pwr .pnum{font-family:'KnightsQuest',Georgia,serif;font-size:21px;font-weight:600;color:#e5dcc7;margin-bottom:6px;}
   .pwr .pbar{height:7px;border-radius:5px;background:rgba(2,7,10,.72);overflow:hidden;margin:0 14px;box-shadow:inset 0 1px 4px rgba(0,0,0,.6);}
   .pwr .pbar i{display:block;height:100%;border-radius:5px;box-shadow:0 0 8px currentColor;}
-  .relbadge{display:inline-block;font-family:Georgia,"Times New Roman",serif;font-size:14px;font-weight:700;letter-spacing:.7px;}
+  .relbadge{display:inline-block;font-family:'KnightsQuest',Georgia,serif;font-size:14px;font-weight:700;letter-spacing:.7px;}
   .relbadge.war{color:#e98d79;} .relbadge.ally{color:#9bc689;} .relbadge.neutral{color:#aeb8c5;}
-  .relsub{font-family:Georgia,"Times New Roman",serif;font-size:14px;color:#8d846f;margin-top:3px;}
+  .relsub{font-family:'KnightsQuest',Georgia,serif;font-size:14px;color:#8d846f;margin-top:3px;}
   .pRow .acts{display:flex;gap:7px;justify-content:flex-end;padding-right:6px;}
-  .ab{min-width:86px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:3px;padding:0 7px;text-align:center;
-    font-family:Georgia,"Times New Roman",serif;font-weight:700;cursor:pointer;line-height:1.18;border:1px solid rgba(196,172,129,.32);
+  .ab{appearance:none;-webkit-appearance:none;min-width:86px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:3px;padding:0 7px;text-align:center;
+    font-family:'KnightsQuest',Georgia,serif;font-weight:700;cursor:pointer;line-height:1.18;border:1px solid rgba(196,172,129,.32);
     background:rgba(14,18,19,.72);transition:filter .1s,box-shadow .1s,color .1s;}
   .ab:hover{filter:brightness(1.12);box-shadow:0 0 16px rgba(198,168,112,.12);}
   .ab .t{font-size:13px;letter-spacing:.45px;text-transform:uppercase;}
@@ -376,12 +395,12 @@
     linear-gradient(#bda782,#bda782) center/58px 1px no-repeat,
     radial-gradient(circle,#bda782 0 2px,transparent 2.5px) left center/16px 16px no-repeat,
     radial-gradient(circle,#bda782 0 2px,transparent 2.5px) right center/16px 16px no-repeat;}
-  #heroCard h2{font-family:Georgia,"Times New Roman",serif;font-size:37px;line-height:1;text-align:center;margin:0;color:#efe4c8;font-weight:500;letter-spacing:.6px;text-shadow:0 3px 14px rgba(0,0,0,.82);}
+  #heroCard h2{font-family:'KnightsQuest',Georgia,serif;font-size:37px;line-height:1;text-align:center;margin:0;color:#efe4c8;font-weight:500;letter-spacing:.6px;text-shadow:0 3px 14px rgba(0,0,0,.82);}
   .heroMpCard{position:absolute;right:88px;top:17px;height:40px;display:flex;align-items:center;gap:8px;padding:0 18px;white-space:nowrap;
     color:#d9c69f;border:1px solid rgba(204,176,126,.48);border-radius:3px;background:rgba(11,16,18,.62);
-    font-family:Georgia,"Times New Roman",serif;font-size:18px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
+    font-family:'KnightsQuest',Georgia,serif;font-size:18px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
   .heroMpCard b{color:#f3c65e;font-size:20px;}
-  #heroSub{text-align:center;font-family:Georgia,"Times New Roman",serif;font-size:14px;color:#b7aa8c;margin:-2px 0 14px;}
+  #heroSub{text-align:center;font-family:'KnightsQuest',Georgia,serif;font-size:14px;color:#b7aa8c;margin:-2px 0 14px;}
   #heroSub b{color:#f3c65e;}
   #heroClose{position:absolute;top:28px;right:30px;width:50px;height:50px;border:1px solid rgba(204,176,126,.64);border-radius:3px;
     transform:rotate(45deg);background:rgba(21,24,25,.7);color:#e7d1ae;font-size:0;cursor:pointer;z-index:2;
@@ -411,7 +430,7 @@
   .heroRarity{position:absolute;left:50%;top:9px;z-index:2;transform:translateX(-50%);height:30px;min-width:156px;padding:0 20px;
     display:flex;align-items:center;justify-content:center;border:1px solid color-mix(in srgb,var(--rarity-col) 72%,#1a1510);
     background:linear-gradient(180deg,color-mix(in srgb,var(--rarity-col) 24%,rgba(18,22,23,.95)),rgba(10,14,16,.92));
-    color:#eadfc8;font-family:Georgia,"Times New Roman",serif;font-size:18px;font-weight:600;line-height:1;
+    color:#eadfc8;font-family:'KnightsQuest',Georgia,serif;font-size:18px;font-weight:600;line-height:1;
     text-shadow:0 2px 8px rgba(0,0,0,.85);box-shadow:0 0 18px color-mix(in srgb,var(--rarity-col) 20%,transparent),inset 0 0 0 1px rgba(255,255,255,.04);}
   .heroRarity:before,.heroRarity:after{content:"";position:absolute;top:-1px;width:22px;height:30px;border:inherit;background:inherit;}
   .heroRarity:before{left:-12px;transform:skewX(-28deg);}
@@ -421,8 +440,8 @@
   .hpick.hasPortrait .heroFace{display:none;}
   .heroGlow{position:absolute;left:18%;right:18%;bottom:-22px;height:52px;background:radial-gradient(ellipse,color-mix(in srgb,var(--hero-col) 45%,transparent),transparent 70%);}
   .hpick .body{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;min-width:0;padding:0 18px 0;flex:1;margin-top:-4px;}
-  .hpick .nm{font-family:Georgia,"Times New Roman",serif;font-weight:600;font-size:25px;line-height:1.08;text-align:center;color:#f0e7d2;text-shadow:0 3px 12px rgba(0,0,0,.9);}
-  .heroRole{margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px;color:#d2c5aa;font-family:Georgia,"Times New Roman",serif;font-size:15px;min-height:22px;text-shadow:0 2px 8px rgba(0,0,0,.86);}
+  .hpick .nm{font-family:'KnightsQuest',Georgia,serif;font-weight:600;font-size:25px;line-height:1.08;text-align:center;color:#f0e7d2;text-shadow:0 3px 12px rgba(0,0,0,.9);}
+  .heroRole{margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px;color:#d2c5aa;font-family:'KnightsQuest',Georgia,serif;font-size:15px;min-height:22px;text-shadow:0 2px 8px rgba(0,0,0,.86);}
   .hpick .abs{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:17px;}
   .heroPickAb{width:54px;height:54px;display:flex;align-items:center;justify-content:center;border-radius:3px;cursor:help;
     border:1px solid color-mix(in srgb,var(--hero-col) 58%,#0a0d0e);background:linear-gradient(180deg,rgba(26,33,35,.92),rgba(8,12,14,.96));
@@ -432,7 +451,7 @@
   .heroPickAb:hover{filter:brightness(1.24);transform:translateY(-1px);box-shadow:0 0 18px color-mix(in srgb,var(--hero-col) 32%,transparent),inset 0 0 0 1px rgba(255,255,255,.06);}
   .hpick .summon{height:48px;margin:16px 20px 18px;border-radius:3px;border:1px solid rgba(191,151,73,.58);cursor:pointer;
     background:linear-gradient(180deg,rgba(35,58,39,.78),rgba(15,28,20,.9));color:#eadfc8;
-    font-family:Georgia,"Times New Roman",serif;font-size:20px;font-weight:600;letter-spacing:.2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
+    font-family:'KnightsQuest',Georgia,serif;font-size:20px;font-weight:600;letter-spacing:.2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
   .hpick .summon:hover{filter:brightness(1.14);box-shadow:0 0 18px rgba(198,168,112,.16),inset 0 0 0 1px rgba(255,255,255,.05);}
   .hpick .summon.dis{background:rgba(15,19,20,.72);color:#807867;border-color:rgba(135,125,107,.38);cursor:not-allowed;filter:none;}
   @media (max-width:1000px){
@@ -465,7 +484,7 @@
   #countryCard:before{content:"";position:absolute;inset:10px;pointer-events:none;border:1px solid rgba(197,166,103,.18);}
   #countryHead{height:58px;display:flex;align-items:center;justify-content:center;gap:24px;color:#d9c093;position:relative;z-index:1;}
   #countryHead h2{margin:0;padding:0 44px;height:54px;display:flex;align-items:center;justify-content:center;
-    font-family:Georgia,'Times New Roman',serif;font-size:38px;font-weight:600;letter-spacing:2px;text-transform:uppercase;
+    font-family:'KnightsQuest',Georgia,serif;font-size:38px;font-weight:600;letter-spacing:2px;text-transform:uppercase;
     color:#d8c098;text-shadow:0 2px 9px rgba(0,0,0,.75);border:1px solid rgba(178,142,82,.45);
     background:linear-gradient(180deg,rgba(24,35,42,.9),rgba(9,18,23,.9));clip-path:polygon(8% 0,92% 0,100% 50%,92% 100%,8% 100%,0 50%);}
   .countryLine{width:min(280px,18vw);height:1px;background:linear-gradient(90deg,transparent,rgba(190,154,91,.72),transparent);position:relative;}
@@ -485,21 +504,21 @@
   .cpick.sel:before{border-color:rgba(246,225,144,.78);box-shadow:inset 0 0 18px rgba(240,218,112,.18);}
   .cpick .cflag{position:absolute;top:17px;left:50%;transform:translateX(-50%);width:60px;height:66px;filter:drop-shadow(0 3px 8px #000);}
   .cpick .cbody{position:relative;z-index:1;width:100%;padding:0 16px 14px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.6));}
-  .cpick .cnm{min-height:45px;display:flex;align-items:flex-end;justify-content:center;font-family:Georgia,'Times New Roman',serif;
+  .cpick .cnm{min-height:45px;display:flex;align-items:flex-end;justify-content:center;font-family:'KnightsQuest',Georgia,serif;
     font-size:clamp(16px,1.2vw,21px);font-weight:700;line-height:1.02;letter-spacing:.7px;text-transform:uppercase;color:#d4bd88;
     text-shadow:0 2px 9px rgba(0,0,0,.95);}
   .cpick.long .cnm{font-size:16px;letter-spacing:.35px;}
   .cpick .cmeta{margin-top:5px;font-size:12px;color:#b7ab93;}
-  .countryStats{display:flex;justify-content:center;gap:13px;margin-top:8px;font-family:Georgia,'Times New Roman',serif;color:#c8ad72;font-weight:700;font-size:14px;}
+  .countryStats{display:flex;justify-content:center;gap:13px;margin-top:8px;font-family:'KnightsQuest',Georgia,serif;color:#c8ad72;font-weight:700;font-size:14px;}
   .countryStats span{display:inline-flex;align-items:center;gap:4px;text-shadow:0 2px 6px #000;}
   #countryFooter{position:relative;z-index:1;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;margin-top:18px;color:#d6c09b;}
-  #countryMode{grid-column:2;display:flex;flex-direction:column;gap:2px;font-family:Georgia,'Times New Roman',serif;}
+  #countryMode{grid-column:2;display:flex;flex-direction:column;gap:2px;font-family:'KnightsQuest',Georgia,serif;}
   #countryMode b{font-size:24px;font-weight:500;}
   #countryMode span{font-size:14px;color:#9d937f;}
   #countryStart{grid-column:3;justify-self:end;height:50px;min-width:210px;padding:0 28px;border:1px solid rgba(207,171,101,.72);
     clip-path:polygon(8% 0,92% 0,100% 50%,92% 100%,8% 100%,0 50%);cursor:pointer;
     background:linear-gradient(180deg,rgba(29,49,44,.94),rgba(10,30,25,.98));color:#e8d4a0;
-    font-family:Georgia,'Times New Roman',serif;font-size:24px;text-shadow:0 2px 6px #000;box-shadow:0 10px 26px rgba(0,0,0,.38);}
+    font-family:'KnightsQuest',Georgia,serif;font-size:24px;text-shadow:0 2px 6px #000;box-shadow:0 10px 26px rgba(0,0,0,.38);}
   #countryStart:hover{border-color:#f0d480;box-shadow:0 0 20px rgba(232,199,104,.3),0 12px 28px rgba(0,0,0,.44);}
   @media(max-width:860px){
     #countryCard{height:95vh;padding:18px 18px 20px;}

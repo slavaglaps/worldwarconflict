@@ -5,29 +5,29 @@ tabArmyBtn.onclick=()=>{panelTab='army';updatePanel();};
 document.getElementById('ovBtn').onclick=openCountryPick;  // «Играть снова» → выбор страны
 
 // постоянные строки кнопок (не пересоздаются на каждом тике → клики не теряются)
-let panelCity=null, shipBuildRow=null, planeBuildRow=null, airRecallRow=null, aaUpgRow=null, yardShipRow=null, yardAirRow=null;
+let panelCity=null, shipBuildRow=null, planeBuildRow=null, airRecallRow=null, yardShipRow=null, yardAirRow=null;
 const upgRows={}, buyRows={};
 function panelRowAccent(row,color){ row.style.setProperty('--row-accent',color); row.style.background=''; }
 function buildShip(yard,actor){
   if(MP.guest){ MP.cmd({cmd:'bship',c:yard.idx}); return; }   // гость → команда хосту
   const a=actor==null?PLAYER:actor, P=a===PLAYER;
   if(yard.owner!==a)return;
-  if(yard.occ){if(P)toast('🏴 Оккупированный город — нельзя строить корабли (аннексируйте через мир)');return;}
-  if(!yard.isShipyard&&!hasYardNear(yard,true)){if(P)toast('⚓ Нужна построенная верфь рядом с городом');return;}
-  if(!techFlag(a,'ships')){if(P)toast('🔒 Сначала исследуйте «Верфь» (🔬)');return;}
-  if(gold[a]<SHIP_COST){if(P)toast('Не хватает голды на корабль');return;}
-  if((manpower[a]||0)<SHIP_MP){if(P)toast(`👥 Не хватает манпауэра (нужно ${SHIP_MP})`);return;}
+  if(yard.occ){if(P)toast(t('hud.occ_no_ships'));return;}
+  if(!yard.isShipyard&&!hasYardNear(yard,true)){if(P)toast(t('hud.need_shipyard_near'));return;}
+  if(!techFlag(a,'ships')){if(P)toast(t('hud.research_shipyard_first'));return;}
+  if(gold[a]<SHIP_COST){if(P)toast(t('hud.not_enough_gold_ship'));return;}
+  if((manpower[a]||0)<SHIP_MP){if(P)toast(t('hud.not_enough_mp_need',{n:SHIP_MP}));return;}
   gold[a]-=SHIP_COST; manpower[a]-=SHIP_MP; yard.shipQueue++; if(P)updatePanel();
 }
 function buildPlane(port,actor){
   if(MP.guest){ MP.cmd({cmd:'bplane',c:port.idx}); return; }
   const a=actor==null?PLAYER:actor, P=a===PLAYER;
   if(port.owner!==a)return;
-  if(port.occ){if(P)toast('🏴 Оккупированный город — нельзя строить дирижабли (аннексируйте через мир)');return;}
-  if(!port.isAirport&&!hasYardNear(port,false)){if(P)toast('✈ Нужен построенный аэропорт рядом с городом');return;}
-  if(!techFlag(a,'planes')){if(P)toast('🔒 Сначала исследуйте «Аэродром» (🔬)');return;}
-  if(gold[a]<PLANE_COST){if(P)toast('Не хватает голды на дирижабль');return;}
-  if((manpower[a]||0)<PLANE_MP){if(P)toast(`👥 Не хватает манпауэра (нужно ${PLANE_MP})`);return;}
+  if(port.occ){if(P)toast(t('hud.occ_no_planes'));return;}
+  if(!port.isAirport&&!hasYardNear(port,false)){if(P)toast(t('hud.need_airport_near'));return;}
+  if(!techFlag(a,'planes')){if(P)toast(t('hud.research_airfield_first'));return;}
+  if(gold[a]<PLANE_COST){if(P)toast(t('hud.not_enough_gold_plane'));return;}
+  if((manpower[a]||0)<PLANE_MP){if(P)toast(t('hud.not_enough_mp_need',{n:PLANE_MP}));return;}
   gold[a]-=PLANE_COST; manpower[a]-=PLANE_MP; port.planeQueue++; if(P)updatePanel();
 }
 /* ── постройка верфи/аэродрома как отдельного под-города рядом с городом ── */
@@ -81,28 +81,28 @@ function buildYard(parent,kind,actor){
   if(MP.guest){ MP.cmd({cmd:'yard',c:parent.idx,kind}); return; }   // гость → команда хосту
   const a=actor==null?PLAYER:actor, P=a===PLAYER;
   if(!parent||parent.owner!==a)return;
-  if(parent.occ){if(P)toast('🏴 Оккупированный город — нельзя строить');return;}
+  if(parent.occ){if(P)toast(t('hud.occ_no_build'));return;}
   const ship=kind==='ship';
-  if(ship&&!techFlag(a,'ships')){if(P)toast('🔒 Исследуйте «Верфь» в дереве 🔬');return;}
-  if(!ship&&!techFlag(a,'planes')){if(P)toast('🔒 Исследуйте «Аэродром» в дереве 🔬');return;}
-  if(hasYardNear(parent,ship)){if(P)toast(ship?'⚓ Верфь рядом уже есть':'✈ Аэродром рядом уже есть');return;}
-  if(ship&&!isCoastal(parent)){if(P)toast('⚓ Верфь можно строить только в прибрежном городе');return;}
+  if(ship&&!techFlag(a,'ships')){if(P)toast(t('hud.research_shipyard_tree'));return;}
+  if(!ship&&!techFlag(a,'planes')){if(P)toast(t('hud.research_airfield_tree'));return;}
+  if(hasYardNear(parent,ship)){if(P)toast(ship?t('hud.shipyard_already_near'):t('hud.airport_already_near'));return;}
+  if(ship&&!isCoastal(parent)){if(P)toast(t('hud.shipyard_coastal_only'));return;}
   const cost=ship?SHIPYARD_BUILD_COST:AIRPORT_BUILD_COST;   // только голда — как на сервере (cmdBuildYard манпауэр НЕ берёт)
-  if(gold[a]<cost){if(P)toast(`Не хватает голды (нужно ${cost})`);return;}
+  if(gold[a]<cost){if(P)toast(t('hud.not_enough_gold_need',{n:cost}));return;}
   if(ship){
     gold[a]-=cost;
     parent.hasShipyard=true;
     if(P)updatePanel();
-    if(P)toast(`⚓ Верфь доступна в меню армии города «${CITY_NAMES[parent.idx]}»`);
+    if(P)toast(t('hud.shipyard_available_in_army',{name:cityDisp(parent.idx)}));
     return;
   }
   gold[a]-=cost;
   parent.hasAirport=true;
   if(P)updatePanel();
-  if(P)toast(`✈ Аэропорт доступен в меню армии города «${CITY_NAMES[parent.idx]}»`);
+  if(P)toast(t('hud.airport_available_in_army',{name:cityDisp(parent.idx)}));
   return;
   const spot=findYardSpot(parent,kind);
-  if(!spot){if(P)toast(ship?'⚓ Нет свободного места у воды':'✈ Нет свободного места рядом');return;}
+  if(!spot){if(P)toast(ship?t('hud.no_space_by_water'):t('hud.no_space_near'));return;}
   gold[a]-=cost;
   const idx=cities.length, name=(ship?'Верфь ':'Аэропорт ')+CITY_NAMES[parent.idx];
   CITY_NAMES[idx]=name; (ship?SHIPYARD_NAMES:AIRPORT_NAMES).add(name);
@@ -112,7 +112,7 @@ function buildYard(parent,kind,actor){
   dynamicRoadMeshes.push(drawYardRoad(e));
   if(ship)parent.hasShipyard=true; else parent.hasAirport=true;
   markRegions(); scene.updateMatrixWorld(true); if(P)updatePanel();
-  if(P)toast(ship?`⚓ Построена «${name}»`:`✈ Построен «${name}»`);
+  if(P)toast(t(ship?'hud.ship_built':'hud.air_built',{name:cityDisp(idx)}));
   if(MP.on&&MP.host)MP.send({t:'newcity',idx,gx:spot.x,gz:spot.z,country:parent.country,owner:parent.owner,kind,name,parentIdx:parent.idx}); // реплицировать гостям
 }
 function buildPanelRows(){
@@ -121,26 +121,21 @@ function buildPanelRows(){
   if(panelCity.isShipyard||panelCity.isAirport){ // верфь/аэропорт — одна кнопка постройки
     const air=panelCity.isAirport;
     const row=document.createElement('div'); row.className='row'; panelRowAccent(row,air?'#7a6fd0':'#4a8fd0');
-    row.innerHTML=`<span>${air?'✈ Построить дирижабль':'⚓ Построить корабль'}</span><small></small>`;
+    row.innerHTML=`<span>${air?t('hud.build_airship'):t('hud.build_ship')}</span><small></small>`;
     row.addEventListener('click',()=>{ if(!row.classList.contains('dis')&&panelCity){air?buildPlane(panelCity):buildShip(panelCity);} });
     bb0.appendChild(row); shipBuildRow=row;
-    planeBuildRow=null; airRecallRow=null; aaUpgRow=null; yardShipRow=null; yardAirRow=null;
+    planeBuildRow=null; airRecallRow=null; yardShipRow=null; yardAirRow=null;
     return;
   }
   shipBuildRow=null; planeBuildRow=null; airRecallRow=null;
-  for(const tr of ['prod','def','atk']){
+  for(const tr of CITY_UPGRADE_TRACKS){
     const s=SPEC[tr];
     const row=document.createElement('div'); row.className='row'; panelRowAccent(row,s.color);
-    row.innerHTML=`<span>${s.icon} ${s.name}</span><small></small>`;
+    row.innerHTML=`<span>${s.icon} ${(typeof tName==='function')?tName('spec',s.name):s.name}</span><small></small>`;
     // обработчик стабилен; читает panelCity на момент клика, проверяет .dis сам
     row.addEventListener('click',()=>{ if(!row.classList.contains('dis')&&panelCity){upgradeCity(panelCity,tr);updatePanel();} });
     ub.appendChild(row); upgRows[tr]=row;
   }
-  // 🚀 зенитка (ПВО) — отдельная строка постройки
-  { const aaRow=document.createElement('div'); aaRow.className='row'; panelRowAccent(aaRow,'#2f9e8f');
-    aaRow.innerHTML=`<span>🚀 Зенитка (ПВО)</span><small></small>`;
-    aaRow.addEventListener('click',()=>{ if(!aaRow.classList.contains('dis')&&panelCity){buildAA(panelCity);updatePanel();} });
-    ub.appendChild(aaRow); aaUpgRow=aaRow; }
   // ⚓ верфь и ✈ аэропорт теперь ставятся из общего меню строительства на соседних хексах.
   yardShipRow=null; yardAirRow=null;
   const bb=document.getElementById('buyRows'); bb.innerHTML='';
@@ -148,7 +143,7 @@ function buildPanelRows(){
   { const sel=document.createElement('div'); sel.className='row'; sel.style.gap='6px'; sel.style.cursor='default';
     hireTypeBtns={};
     for(const [t,ic,nm] of [['inf','⚔','Пехота'],['arc','🏹','Лучники'],['cav','🐎','Конница']]){
-      const b=document.createElement('button'); b.textContent=`${ic} ${nm}`;
+      const b=document.createElement('button'); b.textContent=`${ic} ${(typeof tName==='function')?tName('unit',nm):nm}`;
       b.style.cssText='flex:1;padding:4px 6px;border-radius:6px;border:1px solid #33415a;background:#141b28;color:#cfd8ea;cursor:pointer;font:inherit;font-size:12px';
       b.addEventListener('click',()=>{ hireType=t; updateHireTypeBtns(); updatePanel(); });
       sel.appendChild(b); hireTypeBtns[t]=b;
@@ -156,18 +151,18 @@ function buildPanelRows(){
     bb.appendChild(sel); updateHireTypeBtns();
   }
   { const r=document.createElement('div'); r.className='row'; panelRowAccent(r,'#4a8fd0');
-    r.innerHTML=`<span>⚓ Построить корабль</span><small></small>`;
+    r.innerHTML=`<span>${t('hud.build_ship')}</span><small></small>`;
     r.addEventListener('click',()=>{ if(!r.classList.contains('dis')&&panelCity)buildShip(panelCity); });
     bb.appendChild(r); shipBuildRow=r;
   }
   { const r=document.createElement('div'); r.className='row'; panelRowAccent(r,'#7a6fd0');
-    r.innerHTML=`<span>✈ Построить дирижабль</span><small></small>`;
+    r.innerHTML=`<span>${t('hud.build_airship')}</span><small></small>`;
     r.addEventListener('click',()=>{ if(!r.classList.contains('dis')&&panelCity)buildPlane(panelCity); });
     bb.appendChild(r); planeBuildRow=r;
   }
   for(const spec of ['5','20','max']){
     const row=document.createElement('div'); row.className='row'; panelRowAccent(row,'#ff9a4a');
-    row.innerHTML=`<span>⚔ Купить ${spec==='max'?'максимум':'+'+spec}</span><small></small>`;
+    row.innerHTML=`<span>⚔ ${spec==='max'?t('hud.buy_max'):t('hud.buy_amount',{n:'+'+spec})}</span><small></small>`;
     row.addEventListener('click',()=>{ if(!row.classList.contains('dis')&&panelCity){buySoldiers(panelCity,spec,hireType);updatePanel();} });
     bb.appendChild(row); buyRows[spec]=row;
   }
@@ -193,8 +188,8 @@ function updatePanel(){
   const airportSeen=!yard&&hasYardNear(c,false);
   p.classList.toggle('yardPanel',yard);
   if(c!==panelCity||c._panelShipyardSeen!==shipyardSeen||c._panelAirportSeen!==airportSeen){ panelCity=c; c._panelShipyardSeen=shipyardSeen; c._panelAirportSeen=airportSeen; if(yard)panelTab='army'; buildPanelRows(); }   // пересборка при смене города/появлении верфи/аэропорта
-  const tiers=['prod','def','atk'].filter(tr=>c.branchTier(tr)>0).map(tr=>`${SPEC[tr].icon}${c.branchTier(tr)}`).join(' ');
-  document.getElementById('pName').textContent=tiers?`${CITY_NAMES[c.idx]} · ${tiers}`:CITY_NAMES[c.idx];
+  const tiers=CITY_UPGRADE_TRACKS.filter(tr=>c.branchTier(tr)>0).map(tr=>`${SPEC[tr].icon}${c.branchTier(tr)}`).join(' ');
+  document.getElementById('pName').textContent=tiers?`${cityDisp(c.idx)} · ${tiers}`:cityDisp(c.idx);
   document.getElementById('pGold').textContent=gold[PLAYER]|0;
   // верфь/аэропорт: скрываем вкладку прокачки, только армия
   tabUpgBtn.style.display=yard?'none':'';
@@ -210,89 +205,83 @@ function updatePanel(){
     const Q=air?c.planeQueue:c.shipQueue, TM=air?c.planeTimer:c.shipTimer;
     const MPC=air?PLANE_MP:SHIP_MP;
     document.getElementById('info').textContent=air
-      ? `✈ Аэропорт · ${COST}💰+${MPC}👥/дирижабль · 👥 ${Math.floor(manpower[PLAYER]||0)}`
-      : `⚓ Верфь · ${COST}💰+${MPC}👥/корабль · 👥 ${Math.floor(manpower[PLAYER]||0)}`;
+      ? t('hud.airport_info',{cost:COST,mpc:MPC,mp:Math.floor(manpower[PLAYER]||0)})
+      : t('hud.shipyard_info',{cost:COST,mpc:MPC,mp:Math.floor(manpower[PLAYER]||0)});
     const fill=document.getElementById('qfill'), qt=document.getElementById('qtext');
     if(Q>0){fill.style.width=Math.min(100,TM/BT*100)+'%';
-      qt.textContent=`⏳ в очереди: ${Q} · ~${Math.ceil(Q*BT-TM)}с`;}
-    else{fill.style.width='0';qt.textContent='очередь пуста';}
+      qt.textContent=t('hud.queue_wait',{n:Q,sec:Math.ceil(Q*BT-TM)});}
+    else{fill.style.width='0';qt.textContent=t('hud.queue_empty');}
     const unlocked=techFlag(PLAYER,air?'planes':'ships');
     if(shipBuildRow){const ok=!occ&&unlocked&&gold[PLAYER]>=COST&&(manpower[PLAYER]||0)>=MPC;shipBuildRow.classList.toggle('dis',!ok);
-      shipBuildRow.querySelector('small').textContent=occ?'🏴 оккупация':!unlocked?'🔒 исследуйте':(manpower[PLAYER]||0)<MPC?`−${MPC}👥 мало`:`−${COST}💰 −${MPC}👥`;}
+      shipBuildRow.querySelector('small').textContent=occ?t('hud.small_occ'):!unlocked?t('hud.small_research'):(manpower[PLAYER]||0)<MPC?t('hud.small_mp_low',{n:MPC}):t('hud.small_cost_mp',{cost:COST,mp:MPC});}
     if(occ)document.getElementById('info').textContent=air
-      ? '🏴 Оккупированный аэропорт — стройка только после аннексии (мир)'
-      : '🏴 Оккупированная верфь — стройка только после аннексии (мир)';
+      ? t('hud.occ_airport_info')
+      : t('hud.occ_shipyard_info');
     else if(!unlocked)document.getElementById('info').textContent=air
-      ? '🔒 Исследуйте «Аэродром» в дереве 🔬, чтобы строить дирижабли'
-      : '🔒 Исследуйте «Верфь» в дереве 🔬, чтобы строить корабли';
+      ? t('hud.research_airfield_info')
+      : t('hud.research_shipyard_info');
     return;
   }
 
   // прокачка — обновляем только текст/состояние постоянных строк
-  for(const tr of ['prod','def','atk']){
+  for(const tr of CITY_UPGRADE_TRACKS){
     const row=upgRows[tr]; let enabled,right;
     const tier=c.branchTier(tr);
     if(tier>=MAX_TIER){enabled=false;right=`${tier} · MAX`;}
     else{const cost=upgradeCost(tier);enabled=gold[PLAYER]>=cost;right=`${tier} → ${tier+1} · −${cost}💰`;}
-    if(occ){enabled=false;right='🏴 оккупация';}
+    if(occ){enabled=false;right=t('hud.small_occ');}
     row.classList.toggle('dis',!enabled);
     row.querySelector('small').textContent=right;
-  }
-  // 🚀 зенитка (ПВО)
-  if(aaUpgRow){ const max=(c.aa||0)>=AA_MAX, cost=aaCost(c);
-    const enabled=!occ&&!max&&gold[PLAYER]>=cost&&(manpower[PLAYER]||0)>=AA_MP;
-    aaUpgRow.classList.toggle('dis',!enabled);
-    aaUpgRow.querySelector('small').textContent = occ?'🏴 оккупация' : max?`🚀${c.aa} MAX` : `🚀${c.aa||0} · −${cost}💰 −${AA_MP}👥`;
   }
   // ⚓ верфь
   if(yardShipRow){ const has=hasYardNear(c,true), tech=techFlag(PLAYER,'ships');
     const enabled=!occ&&!has&&tech&&gold[PLAYER]>=SHIPYARD_BUILD_COST;
     yardShipRow.classList.toggle('dis',!enabled);
-    yardShipRow.querySelector('small').textContent = occ?'🏴 оккупация' : has?'✓ есть' : !tech?'🔒 исследуйте' : `−${SHIPYARD_BUILD_COST}💰`;
+    yardShipRow.querySelector('small').textContent = occ?t('hud.small_occ') : has?t('hud.small_have') : !tech?t('hud.small_research') : t('hud.small_cost_gold',{cost:SHIPYARD_BUILD_COST});
   }
   // ✈ аэродром
   if(yardAirRow){ const has=hasYardNear(c,false), tech=techFlag(PLAYER,'planes');
     const enabled=!occ&&!has&&tech&&gold[PLAYER]>=AIRPORT_BUILD_COST;
     yardAirRow.classList.toggle('dis',!enabled);
-    yardAirRow.querySelector('small').textContent = occ?'🏴 оккупация' : has?'✓ есть' : !tech?'🔒 исследуйте' : `−${AIRPORT_BUILD_COST}💰`;
+    yardAirRow.querySelector('small').textContent = occ?t('hud.small_occ') : has?t('hud.small_have') : !tech?t('hud.small_research') : t('hud.small_cost_gold',{cost:AIRPORT_BUILD_COST});
   }
   // армия (👥 состав гарнизона по типам: пехота/лучники/конница)
   const compStr=c.comp?` · ⚔${Math.round(c.comp.inf)} 🏹${Math.round(c.comp.arc)} 🐎${Math.round(c.comp.cav)}`:'';
   document.getElementById('info').textContent=occ
-    ? `🏴 Оккупирован · гарнизон ${c.units|0}/${c.capacity|0}${compStr} · набор армии после аннексии (мир)`
-    : `Гарнизон ${c.units|0}/${c.capacity|0}${compStr}${shipyardSeen?' · ⚓ верфь':''} · ${SOLDIER_PRICE}💰+1👥/солдат · 👥 ${Math.floor(manpower[PLAYER]||0)}`;
+    ? t('hud.garrison_occ',{cur:c.units|0,cap:c.capacity|0,comp:compStr})
+    : t('hud.garrison_info',{cur:c.units|0,cap:c.capacity|0,comp:compStr,yard:shipyardSeen?t('hud.garrison_yard_suffix'):'',price:SOLDIER_PRICE,mp:Math.floor(manpower[PLAYER]||0)});
   const fill=document.getElementById('qfill'), qt=document.getElementById('qtext');
   if(c.shipQueue>0){
     fill.style.width=Math.min(100,c.shipTimer/SHIP_BUILD_TIME*100)+'%';
-    qt.textContent=`⚓ корабли: ${c.shipQueue} · ~${Math.ceil(c.shipQueue*SHIP_BUILD_TIME-c.shipTimer)}с`;
+    qt.textContent=t('hud.queue_ships',{n:c.shipQueue,sec:Math.ceil(c.shipQueue*SHIP_BUILD_TIME-c.shipTimer)});
   } else if(c.planeQueue>0){
     fill.style.width=Math.min(100,c.planeTimer/PLANE_BUILD_TIME*100)+'%';
-    qt.textContent=`✈ дирижабли: ${c.planeQueue} · ~${Math.ceil(c.planeQueue*PLANE_BUILD_TIME-c.planeTimer)}с`;
+    qt.textContent=t('hud.queue_planes',{n:c.planeQueue,sec:Math.ceil(c.planeQueue*PLANE_BUILD_TIME-c.planeTimer)});
   } else if(c.queued>0){const b=c.batches[0];fill.style.width=Math.min(100,b.elapsed/b.time*100)+'%';
-    const eta=c.batches.reduce((s,x)=>s+x.time,0)-b.elapsed; qt.textContent=`⏳ готовится ${c.queued} · ~${eta.toFixed(0)}с`;}
-  else{fill.style.width='0';qt.textContent='очередь пуста';}
+    const eta=c.batches.reduce((s,x)=>s+x.time,0)-b.elapsed; qt.textContent=t('hud.queue_soldiers',{n:c.queued,sec:eta.toFixed(0)});}
+  else{fill.style.width='0';qt.textContent=t('hud.queue_empty');}
   if(shipBuildRow){
     const tech=techFlag(PLAYER,'ships');
     const enabled=!occ&&shipyardSeen&&tech&&gold[PLAYER]>=SHIP_COST&&(manpower[PLAYER]||0)>=SHIP_MP;
     shipBuildRow.style.display=shipyardSeen?'':'none';
     shipBuildRow.classList.toggle('dis',!enabled);
-    shipBuildRow.querySelector('small').textContent=occ?'🏴 оккупация':!shipyardSeen?'нет верфи':!tech?'🔒 исследуйте':(manpower[PLAYER]||0)<SHIP_MP?`−${SHIP_MP}👥 мало`:`−${SHIP_COST}💰 −${SHIP_MP}👥`;
+    shipBuildRow.querySelector('small').textContent=occ?t('hud.small_occ'):!shipyardSeen?t('hud.small_no_shipyard'):!tech?t('hud.small_research'):(manpower[PLAYER]||0)<SHIP_MP?t('hud.small_mp_low',{n:SHIP_MP}):t('hud.small_cost_mp',{cost:SHIP_COST,mp:SHIP_MP});
   }
   if(planeBuildRow){
     const tech=techFlag(PLAYER,'planes');
     const enabled=!occ&&airportSeen&&tech&&gold[PLAYER]>=PLANE_COST&&(manpower[PLAYER]||0)>=PLANE_MP;
     planeBuildRow.style.display=airportSeen?'':'none';
     planeBuildRow.classList.toggle('dis',!enabled);
-    planeBuildRow.querySelector('small').textContent=occ?'🏴 оккупация':!airportSeen?'нет аэропорта':!tech?'🔒 исследуйте':(manpower[PLAYER]||0)<PLANE_MP?`−${PLANE_MP}👥 мало`:`−${PLANE_COST}💰 −${PLANE_MP}👥`;
+    planeBuildRow.querySelector('small').textContent=occ?t('hud.small_occ'):!airportSeen?t('hud.small_no_airport'):!tech?t('hud.small_research'):(manpower[PLAYER]||0)<PLANE_MP?t('hud.small_mp_low',{n:PLANE_MP}):t('hud.small_cost_mp',{cost:PLANE_COST,mp:PLANE_MP});
   }
   for(const spec of ['5','20','max']){
     const row=buyRows[spec]; const amt=buyAmount(c,spec), cost=amt*SOLDIER_PRICE;
-    row.querySelector('span').textContent=`${HIRE_ICON[hireType]||'⚔'} Купить ${spec==='max'?'максимум':'+'+spec}`;   // 👥 иконка выбранного типа
+    row.querySelector('span').textContent=`${HIRE_ICON[hireType]||'⚔'} ${spec==='max'?t('hud.buy_max'):t('hud.buy_amount',{n:'+'+spec})}`;   // 👥 иконка выбранного типа
     row.classList.toggle('dis',occ||amt<=0);
-    let reason='нет места';
+    let reason=t('hud.small_no_space');
     if(amt<=0){ const space=Math.floor(c.capacity-c.units-c.queued);
-      reason = space<=0?'нет места' : (Math.floor(manpower[PLAYER]||0)<1?'нет манпауэра':'нет голды'); }
-    row.querySelector('small').textContent=occ?'🏴 оккупация':(amt>0?`+${amt} · −${cost}💰 −${amt}👥`:reason);
+      reason = space<=0?t('hud.small_no_space') : (Math.floor(manpower[PLAYER]||0)<1?t('hud.small_no_mp'):t('hud.small_no_gold')); }
+    row.querySelector('small').textContent=occ?t('hud.small_occ'):(amt>0?t('hud.small_buy_cost',{n:amt,cost:cost}):reason);
   }
 }
 
@@ -368,15 +357,15 @@ function updateHUD(){
   const sorted=[...counts].sort((a,b)=>b-a);
   const rank=sorted.indexOf(counts[PLAYER])+1;
   const colHex='#'+OWNER_COL[PLAYER].toString(16).padStart(6,'0');
-  document.getElementById('hFaction').textContent=PLAYER_COUNTRY;
+  document.getElementById('hFaction').textContent=(typeof countryDisp==='function'?countryDisp(PLAYER_COUNTRY):PLAYER_COUNTRY);
   document.getElementById('fBar').style.background=colHex;
   if(_lastEmblem!==PLAYER_COUNTRY){_lastEmblem=PLAYER_COUNTRY;buildEmblem(PLAYER_COUNTRY);}
   document.getElementById('hGold').textContent=gold[PLAYER]|0;
   const bGold=window.mapBuildingIncomeRate?window.mapBuildingIncomeRate(PLAYER,'gold'):0;
   const bPol=window.mapBuildingIncomeRate?window.mapBuildingIncomeRate(PLAYER,'polit'):0;
-  document.getElementById('hGoldRate').textContent='+'+(cities.filter(c=>c.owner===PLAYER).reduce((s,c)=>s+c.goldRate,0)+bGold).toFixed(1)+'/с';
+  document.getElementById('hGoldRate').textContent='+'+(cities.filter(c=>c.owner===PLAYER).reduce((s,c)=>s+c.goldRate,0)+bGold).toFixed(1)+t('hud.per_sec');
   document.getElementById('hPol').textContent=Math.floor(politPts[PLAYER]||0);
-  document.getElementById('hPolRate').textContent='+'+(politRate(PLAYER)+bPol).toFixed(2)+'/с';
+  document.getElementById('hPolRate').textContent='+'+(politRate(PLAYER)+bPol).toFixed(2)+t('hud.per_sec');
   {const mp=Math.floor(manpower[PLAYER]||0), mpcap=Math.round(manpowerCap(PLAYER));
    const hmp=document.getElementById('hMp'); hmp.textContent=mp; hmp.style.color=mp<mpcap*0.12?'#ff7a6a':'';
    document.getElementById('hMpCap').textContent=mpcap;}

@@ -1,60 +1,18 @@
 {
   "version": 2,
-  "updatedAt": "2026-07-03T12:10:04.948Z",
+  "updatedAt": "2026-07-07T18:38:13.499Z",
   "edits": [
     {
-      "q": 107,
-      "r": 145,
-      "asset": "treesB",
-      "rot": 222.20449210763582,
-      "scale": 1.2,
-      "height": -0.1,
-      "offsetX": 0,
-      "offsetZ": 0
-    },
-    {
-      "q": 106,
-      "r": 143,
-      "asset": "treesB",
-      "rot": 52.58606643710698,
-      "scale": 0.9,
-      "height": -0.1,
-      "offsetX": 0,
-      "offsetZ": 0
-    },
-    {
-      "q": 92,
-      "r": 150,
-      "asset": "mtnB",
-      "rot": 0,
-      "scale": 0.9,
-      "height": 0,
-      "offsetX": 0,
-      "offsetZ": 0
-    },
-    {
-      "q": 91,
-      "r": 151,
-      "asset": "mtnB",
-      "rot": 0,
-      "scale": 0.9,
-      "height": 0,
-      "offsetX": 0,
-      "offsetZ": 0
-    },
-    {
-      "q": 92,
-      "r": 152,
-      "asset": "mtnB",
-      "rot": 0,
-      "scale": 0.9,
-      "height": 0,
+      "q": 57,
+      "r": 93,
+      "asset": "bridgeA",
+      "rot": 300.000701530499,
+      "scale": 1.1,
+      "height": 1,
       "offsetX": 0,
       "offsetZ": 0
     }
   ],
-  "removedGenerated": [
-    "107,144"
-  ],
-  "savedAt": "2026-07-03T12:10:05.851Z"
+  "removedGenerated": [],
+  "savedAt": "2026-07-07T18:38:14.401Z"
 }
