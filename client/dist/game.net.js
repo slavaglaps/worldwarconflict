@@ -47,6 +47,28 @@
     const fid = (typeof FACT_BY_COUNTRY!=='undefined' && FACT_BY_COUNTRY[c]!=null) ? FACT_BY_COUNTRY[c] : (typeof PLAYER!=='undefined'?PLAYER:0);
     joinColyseus(fid);
   };
+
+  // 🔒 занятые страны на экране выбора: опрашиваем метаданные комнаты (metadata.taken), пока экран открыт и мы ещё не вошли
+  window.MP_TAKEN = window.MP_TAKEN || new Set();
+  let _takenSig = '';
+  async function pollTaken(){
+    try{
+      if(typeof Colyseus === 'undefined') return;
+      if(!client) client = new Colyseus.Client(ENDPOINT);
+      const rooms = await client.getAvailableRooms('game');
+      const rid = params.get('rid');
+      const r0 = rid ? rooms.find(r=>r.roomId===rid) : (rooms[0] || null);
+      const takenFids = (r0 && r0.metadata && Array.isArray(r0.metadata.taken)) ? r0.metadata.taken : [];
+      const names = takenFids.map(fid=>(FACTIONS[fid] && FACTIONS[fid].country)).filter(Boolean);
+      const sig = names.slice().sort().join('|');
+      if(sig !== _takenSig){
+        _takenSig = sig; window.MP_TAKEN = new Set(names);
+        const win = document.getElementById('countryWin');
+        if(win && win.style.display==='flex' && typeof buildCountryPick==='function') buildCountryPick();
+      }
+    }catch(e){}
+  }
+  setInterval(()=>{ const win=document.getElementById('countryWin'); if(win && !room && win.style.display==='flex') pollTaken(); }, 1500);
   if(typeof window.researchNode==='function'){ const _rn=window.researchNode;
     window.researchNode=function(id){ if(room){ try{room.send('research',{node:id});}catch(e){} return; } _rn(id); }; }
 

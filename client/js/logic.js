@@ -454,7 +454,9 @@ function refreshPeaceDialog(){
   if(peaceTarget==null)return;
   const f=FACTIONS[peaceTarget], T=peaceTermsObj();
   if(!T.occ&&peaceLand){peaceLand=false; T.land=false;}
-  const nm=document.getElementById('peaceName'); nm.textContent=t('polit.peaceTitle',{name:countryDisp(f.country)}); nm.style.color=hex6(f.color);
+  const nm=document.getElementById('peaceName');
+  const country=countryDisp(f.country);
+  nm.innerHTML=`<span class="peaceCountry">${country}</span><span class="peaceAction">${String(t('html.peace.title')||'Peace').replace(/[🕊:]/g,'').trim()}</span>`;
   document.getElementById('peaceInfo').innerHTML=
     t('polit.peaceInfo',{their:Math.round(factionStrength(peaceTarget)),your:Math.round(factionStrength(PLAYER)),gold:gold[peaceTarget]|0});
   document.getElementById('ptLandV').textContent = T.occ?t('polit.ptLandCities',{n:T.occ}) : t('polit.ptLandNone');
@@ -613,11 +615,17 @@ function refreshDiplo(){
   if(diploTarget==null)return;
   const target=diploTarget, f=FACTIONS[target];
   const nm=document.getElementById('diploName');
-  nm.textContent=countryDisp(f.country); nm.style.color='#'+f.color.toString(16).padStart(6,'0');
+  const rel=relation(PLAYER,target), country=countryDisp(f.country);
+  const card=document.getElementById('diploCard');
+  if(card)card.className='panelbox gpanel '+rel;
+  const relLabel=String(REL_RU[rel]||rel).replace(/[⚔🤝]/g,'').trim();
+  nm.className='diploTitle '+rel;
+  nm.innerHTML=`<span class="diploCountry">${country}</span><span class="diploState">${relLabel}</span>`;
   const nc=cities.filter(c=>c.owner===target).length;
   const army=Math.round(cities.filter(c=>c.owner===target).reduce((s,c)=>s+c.units,0));
-  document.getElementById('diploInfo').textContent=t('polit.diploInfo',{cities:nc,army});
-  const wl=warList(target), al=allyList(target), rel=relation(PLAYER,target);
+  document.getElementById('diploInfo').innerHTML=
+    `<div class="wStats"><span>`+t('polit.wCities',{n:nc})+`</span><span class="sep"></span><span>`+t('polit.wArmy',{n:army})+`</span></div>`;
+  const wl=warList(target), al=allyList(target);
   // полоса мобилизации при войне с игроком
   let prep='';
   if(rel==='war'){
@@ -627,9 +635,9 @@ function refreshDiplo(){
       : `<div style="color:#5fd06a;font-weight:800">`+t('polit.readyToAttack')+`</div>`;
   }
   document.getElementById('diploRel').innerHTML=
-    `<div class="you">`+t('polit.withYou',{rel:REL_RU[rel]})+`</div>`+prep+
-    `<div>`+t('polit.atWarWith',{list:wl.length?wl.join(', '):'—'})+`</div>`+
-    `<div>`+t('polit.alliancesList',{list:al.length?al.join(', '):'—'})+`</div>`;
+    prep+
+    `<div class="relLine">`+t('polit.atWarWith',{list:wl.length?wl.join(', '):'—'})+`</div>`+
+    `<div class="relLine">`+t('polit.alliancesList',{list:al.length?al.join(', '):'—'})+`</div>`;
   const box=document.getElementById('diploBtns');
   const btnSig=`${target}|${rel}`;
   if(btnSig===diploBtnSig)return;
@@ -673,12 +681,14 @@ function showNextWarNotif(){
   const via=warNotifReason[warNotifFrom]; delete warNotifReason[warNotifFrom];
   const nc=cities.filter(c=>c.owner===warNotifFrom).length;
   const army=Math.round(cities.filter(c=>c.owner===warNotifFrom).reduce((s,c)=>s+c.units,0));
-  const col=`#${f.color.toString(16).padStart(6,'0')}`;
-  const head=via
-    ? t('polit.warNotifViaAlly',{col,name:countryDisp(f.country),ally:countryDisp(via)})
-    : t('polit.warNotifDirect',{col,name:countryDisp(f.country)});
+  const country=countryDisp(f.country);
+  const ally=via?countryDisp(via):'';
+  const title=document.getElementById('warNotifTitle');
+  if(title){
+    title.innerHTML=`<span class="dangerName">${country}</span><span class="dangerAction">${t('polit.warNotifTitlePost')}</span>`;
+  }
   document.getElementById('warNotifBody').innerHTML=
-    `<div class="wHead">${head}</div>`+
+    (via?`<div class="wHead">`+t('polit.warNotifAllyNote',{ally})+`</div>`:'')+
     `<div class="wStats"><span>`+t('polit.wCities',{n:nc})+`</span><span class="sep"></span><span>`+t('polit.wArmy',{n:army})+`</span></div>`+
     `<div class="wMob">`+t('polit.wMob',{prep:WAR_PREP})+`</div>`;
   document.getElementById('warNotif').style.display='flex';

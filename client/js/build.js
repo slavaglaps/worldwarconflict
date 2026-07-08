@@ -263,7 +263,7 @@
     panelEl = document.createElement('div');
     panelEl.id = 'buildPanel';
     const head = document.createElement('div'); head.className = 'bpHead';
-    head.innerHTML = '<span class="bpTitle">🏠 ' + t('build.panel_title') + '</span>';
+    head.innerHTML = '<span class="bpTitle">' + t('build.panel_title') + '</span>';
     const close = document.createElement('button'); close.className = 'bpClose'; close.textContent = '✕';
     close.onclick = () => toggle(false); head.appendChild(close);
     panelBody = document.createElement('div');

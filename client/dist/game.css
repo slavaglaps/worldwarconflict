@@ -34,7 +34,7 @@
   #topbar .lbl{font-family:'KnightsQuest',Georgia,serif;font-size:9px;letter-spacing:.3px;color:#8b98a6;font-weight:700;text-transform:uppercase;line-height:1;margin-bottom:3px;}
   #topbar .val{font-family:'KnightsQuest',Georgia,serif;font-size:15px;font-weight:800;color:#f3f7fb;line-height:1;letter-spacing:.3px;white-space:nowrap;}
   #topbar .val .den{color:#7e8c9a;font-size:11px;font-weight:700;}
-  #topbar .rate{font-family:'KnightsQuest',Georgia,serif;font-size:8px;font-weight:700;color:#6ecf64;margin-top:3px;white-space:nowrap;}
+  #topbar .rate{font-size:11px;font-weight:700;color:#6ecf64;margin-top:3px;white-space:nowrap;}
   #topbar .rate .d{color:#566370;margin-right:3px;}
   #topbar .fcell{padding-left:10px;padding-right:15px;gap:9px;}
   #topbar .emblem{width:31px;height:35px;flex:none;}
@@ -211,21 +211,28 @@
   }
   /* diplomacy popup */
   #diploWin{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:26;
-    background:rgba(6,12,20,.55);}
-  #diploCard{width:min(380px,92vw);padding:18px 20px 20px;border-radius:15px;
-    background:linear-gradient(180deg,#1a2733,#121c26);box-shadow:0 18px 60px rgba(0,0,0,.5);}
-  #diploClose{position:absolute;top:14px;right:16px;width:30px;height:30px;border:none;border-radius:8px;
-    background:#e0533f;color:#fff;font-size:15px;font-weight:800;cursor:pointer;}
-  #diploName{font-size:22px;font-weight:800;margin-bottom:6px;}
-  #diploInfo{font-size:12px;color:#9fb2c4;margin-bottom:10px;}
-  #diploRel{font-size:12px;line-height:1.7;color:#cfe0f0;background:rgba(255,255,255,.05);
-    border-radius:9px;padding:8px 11px;margin-bottom:12px;}
-  #diploRel .you{font-weight:800;}
-  #diploBtns{display:flex;flex-direction:column;gap:7px;}
+    background:rgba(7,13,11,.58);backdrop-filter:blur(2px);}
+  #diploCard{width:min(620px,94vw);padding:24px 30px 28px;border-radius:3px;
+    background:linear-gradient(180deg,#27302a,#161d17);box-shadow:0 22px 70px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.05);}
+  #diploClose{position:absolute;top:20px;right:22px;width:52px;height:52px;border:1px solid rgba(204,176,126,.64);border-radius:3px;
+    background:#e0533f;color:#fff;font-size:0;font-weight:800;cursor:pointer;box-shadow:0 10px 22px rgba(0,0,0,.34);}
+  #diploClose:before,#diploClose:after{content:"";position:absolute;left:14px;right:14px;top:24px;height:3px;background:#fff;border-radius:2px;}
+  #diploClose:before{transform:rotate(45deg);} #diploClose:after{transform:rotate(-45deg);}
+  #diploName{padding:7px 72px 10px 0;margin-bottom:12px;font-family:'KnightsQuest',Georgia,serif;text-transform:uppercase;text-shadow:0 3px 14px rgba(0,0,0,.82);}
+  #diploName .diploCountry{display:block;font-size:39px;line-height:1.02;color:#88b9ee;}
+  #diploName.war .diploCountry{color:#ff5a3c;text-shadow:0 0 14px rgba(224,83,63,.5),0 3px 14px rgba(0,0,0,.82);}
+  #diploName.ally .diploCountry{color:#91d49b;}
+  #diploName .diploState{display:block;margin-top:8px;font-size:23px;line-height:1;color:#f4efe4;}
+  #diploInfo{margin:0 0 14px;color:#c8d4d8;}
+  #diploInfo .wStats{margin-bottom:0;}
+  #diploRel{font-family:'KnightsQuest',Georgia,serif;font-size:18px;line-height:1.7;color:#d7e0df;background:rgba(255,255,255,.055);
+    border:1px solid rgba(150,160,120,.16);border-radius:10px;padding:16px 20px;margin-bottom:18px;text-align:left;}
+  #diploRel .relLine+.relLine{margin-top:6px;}
+  #diploBtns{display:flex;flex-direction:column;gap:10px;}
   .dbtn{border:1px solid rgba(0,0,0,.28);border-radius:9px;padding:12px 16px;font-weight:800;font-size:13px;letter-spacing:.4px;
     text-transform:uppercase;cursor:pointer;color:#06121e;position:relative;transition:filter .1s;user-select:none;touch-action:manipulation;}
   .dbtn:hover{filter:brightness(1.13);}
-  #diploBtns .dbtn{transition:background-color .08s,border-color .08s,box-shadow .08s,opacity .08s;filter:none!important;transform:none!important;pointer-events:auto;}
+  #diploBtns .dbtn{min-height:58px;font-family:'KnightsQuest',Georgia,serif;font-size:23px;font-weight:700;letter-spacing:.35px;transition:background-color .08s,border-color .08s,box-shadow .08s,opacity .08s;filter:none!important;transform:none!important;pointer-events:auto;}
   #diploBtns .dbtn:hover{filter:none!important;box-shadow:0 0 0 2px rgba(255,255,255,.08),0 0 18px rgba(198,168,112,.14);}
   #diploBtns .dbtn:active{filter:none!important;box-shadow:inset 0 2px 8px rgba(0,0,0,.28);}
   .dbtn.war{background:#d24a32;color:#fff;border-color:#a8412f;} .dbtn.ally{background:#3fae62;color:#06210f;border-color:#2f7a45;}
@@ -245,9 +252,11 @@
     linear-gradient(#b8a060,#b8a060) right bottom/15px 2px no-repeat,linear-gradient(#b8a060,#b8a060) right bottom/2px 15px no-repeat;}
   .gstars{text-align:center;color:#caa64a;font-size:13px;letter-spacing:7px;margin-bottom:9px;}
   .gstars b{color:#e0533f;}
-  .gtitle{position:relative;text-align:center;font-size:25px;font-weight:900;letter-spacing:1px;text-transform:uppercase;
-    padding:11px 14px;margin-bottom:15px;background:rgba(0,0,0,.32);border-radius:8px;border-left:4px solid #6c7884;color:#eef2e8;}
-  .gtitle.danger{border-left-color:#e0533f;color:#ff5a3c;text-shadow:0 0 14px rgba(224,83,63,.5);}
+  .gtitle{position:relative;text-align:center;font-family:'KnightsQuest',Georgia,serif;font-size:30px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+    padding:16px 18px;margin-bottom:15px;background:rgba(0,0,0,.32);border-radius:3px;border-left:4px solid #6c7884;color:#eef2e8;text-shadow:0 3px 12px rgba(0,0,0,.85);}
+  .gtitle.danger{border-left-color:#e0533f;color:#f4efe4;}
+  .gtitle .dangerName{display:block;color:#ff5a3c;font-size:34px;line-height:1.02;text-shadow:0 0 14px rgba(224,83,63,.52),0 3px 12px rgba(0,0,0,.85);}
+  .gtitle .dangerAction{display:block;margin-top:4px;color:#f4efe4;font-size:30px;line-height:1.05;}
   .gtitle .gtIcon{margin-right:10px;}
   .wHead{font-size:15px;color:#e7eee0;margin-bottom:14px;} .wHead b{color:#fff;}
   .wStats{display:flex;align-items:center;justify-content:center;gap:22px;font-size:14px;font-weight:800;letter-spacing:.5px;
@@ -257,12 +266,50 @@
   /* war declaration notification */
   #warNotif{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:28;pointer-events:auto;
     background:rgba(20,4,2,.45);}
-  #warNotifCard{width:min(470px,93vw);padding:22px 26px 24px;text-align:center;animation:modalFade .14s ease;pointer-events:auto;}
+  #warNotifCard{width:min(620px,93vw);padding:22px 28px 26px;text-align:center;animation:modalFade .14s ease;pointer-events:auto;}
   @keyframes warpop{from{transform:scale(.82);opacity:0;}to{transform:scale(1);opacity:1;}}
   @keyframes modalFade{from{opacity:0;}to{opacity:1;}}
-  #warNotifBtns{display:flex;gap:12px;margin-top:2px;}
-  #warNotifBtns .dbtn{flex:1;padding:14px;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;}
+  #warNotifBtns{display:flex;gap:16px;margin-top:4px;}
+  #warNotifBtns .dbtn{flex:1;min-height:58px;padding:14px 18px;font-family:'KnightsQuest',Georgia,serif;font-size:23px;font-weight:700;letter-spacing:.35px;display:flex;align-items:center;justify-content:center;gap:8px;}
   /* politics window */
+
+  /* ── меню строительства (низ-право, под боковым меню) ── */
+  #buildPanel{position:fixed;right:64px;bottom:16px;z-index:24;width:296px;max-height:calc(100vh - 90px);display:none;overflow-y:auto;
+    background:linear-gradient(180deg,rgba(26,34,46,.98),rgba(15,21,30,.98));border:1px solid #34425a;border-radius:14px;
+    box-shadow:0 14px 38px rgba(0,0,0,.6);padding:13px 14px 14px;color:#dfe7f0;font:12px/1.35 system-ui,sans-serif;}
+  #buildPanel::-webkit-scrollbar{width:8px;}
+  #buildPanel::-webkit-scrollbar-thumb{background:#33415a;border-radius:4px;}
+  #buildPanel .bpHead{position:relative;display:flex;justify-content:center;align-items:center;margin-bottom:9px;padding:1px 28px 2px;}
+  #buildPanel .bpTitle{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;font-family:'KnightsQuest',Georgia,serif;font-size:21px;font-weight:700;color:#eadfc4;letter-spacing:.5px;text-align:center;text-transform:uppercase;}
+  #buildPanel .bpTitle:before,#buildPanel .bpTitle:after{content:'';flex:1;height:1px;max-width:48px;background:linear-gradient(90deg,transparent,rgba(189,167,130,.78),transparent);}
+  #buildPanel .bpClose{position:absolute;right:0;top:50%;transform:translateY(-50%);background:none;border:none;color:#9fb0c4;font-size:18px;cursor:pointer;line-height:1;padding:2px 5px;border-radius:6px;}
+  #buildPanel .bpClose:hover{color:#fff;background:rgba(255,255,255,.08);}
+  #buildPanel .bpSect{display:flex;align-items:center;gap:7px;font-family:'KnightsQuest',Georgia,serif;font-size:15px;letter-spacing:.5px;
+    color:#9db3cc;text-transform:uppercase;margin:13px 0 8px;}
+  #buildPanel .bpSect:first-of-type{margin-top:4px;}
+  #buildPanel .bpSect span{font-size:13px;opacity:.9;}
+  #buildPanel .bpSect::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(120,150,180,.4),transparent);}
+  #buildPanel .bpGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;}
+  #buildPanel .bpTile{aspect-ratio:1;border:1px solid #33415a;border-radius:9px;background:#1b2431 center/80% no-repeat;cursor:pointer;
+    padding:0;position:relative;overflow:hidden;transition:border-color .12s,transform .08s,box-shadow .12s;}
+  #buildPanel .bpTile:hover{border-color:#5b86c8;box-shadow:0 0 0 1px rgba(91,134,200,.4);}
+  #buildPanel .bpTile.sel{border-color:#7fb0ff;transform:scale(.93);box-shadow:0 0 0 2px rgba(127,176,255,.5);}
+  #buildPanel .bpTile .bpIco{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;opacity:.5;}
+  #buildPanel .bpTile .bpCost{position:absolute;left:0;right:0;bottom:0;font-size:9.5px;font-weight:800;color:#ffdf87;text-shadow:0 1px 2px #000;
+    background:linear-gradient(0deg,rgba(0,0,0,.78),transparent);padding:7px 3px 2px;text-align:center;letter-spacing:.2px;}
+  #buildPanel .bpTile.locked{cursor:not-allowed;filter:grayscale(1) brightness(.6);border-color:#2a3341;}
+  #buildPanel .bpTile.locked:hover{border-color:#3a4658;box-shadow:none;}
+  #buildPanel .bpTile .bpLock{position:absolute;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;
+    font-size:17px;filter:none;background:rgba(6,10,15,.32);text-shadow:0 1px 3px #000;}
+  #buildTip{position:fixed;display:none;z-index:30;max-width:236px;pointer-events:none;
+    background:linear-gradient(180deg,rgba(28,36,49,.98),rgba(15,21,30,.98));border:1px solid #3a4a60;border-radius:10px;
+    box-shadow:0 10px 26px rgba(0,0,0,.6);padding:9px 11px;color:#e6edf5;font:12px/1.4 system-ui,sans-serif;}
+  #buildTip b{font-family:'KnightsQuest',Georgia,serif;font-size:16px;color:#f0e6cc;letter-spacing:.3px;}
+  #buildTip .btDesc{margin-top:4px;color:#b8c6d6;font-size:11.5px;}
+  #buildTip .btStat{margin-top:6px;color:#8fd6a0;font-size:11px;font-weight:700;}
+  #buildTip .btLock{margin-top:6px;color:#e0a24a;font-size:11px;font-weight:700;}
+  #buildPanel .bpHint{margin-top:12px;font-size:10.5px;color:#8aa0b8;min-height:14px;line-height:1.3;}
+
   /* (кнопки бокового меню — стили .sbtn / #sideMenu выше) */
   #polWin{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:25;
     padding:18px;background:
@@ -329,19 +376,22 @@
   .ab.dis{opacity:.4;cursor:default;filter:none;}
   /* peace negotiation (player offers) */
   #peaceWin,#peaceOffer,#peaceResult{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:29;pointer-events:auto;
-    background:rgba(6,12,20,.6);}
-  #peaceCard,#peaceOfferCard,#peaceResultCard{width:min(390px,92vw);padding:20px 22px;text-align:center;position:relative;animation:modalFade .14s ease;pointer-events:auto;}
-  #peaceName{font-size:22px;font-weight:900;margin-bottom:8px;}
-  #peaceInfo,#peaceChance{font-size:13px;color:#cfe0f0;margin-bottom:8px;}
-  .pterm{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border-radius:11px;padding:9px 12px;margin-bottom:8px;}
-  .pterm .ic{font-size:18px;line-height:1;}
-  .pterm .nm{flex:1;font-size:13px;font-weight:700;color:#dbe6ef;}
-  .pterm .v{font-size:12px;color:#9fb0c0;}
-  .pterm .pct{font-size:15px;font-weight:800;color:#ffd23f;min-width:44px;text-align:center;}
-  .pterm button{border:none;border-radius:7px;height:28px;font-weight:800;cursor:pointer;font-size:14px;color:#fff;}
-  .pterm .mm{background:#e0533f;width:30px;} .pterm .pp{background:#4caf50;width:30px;}
-  .pterm .mx{background:#3a86d0;padding:0 9px;font-size:11px;height:28px;}
-  .pterm .tgl{background:#33414d;color:#7e8c9a;width:36px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.08);}
+    background:rgba(7,13,11,.58);backdrop-filter:blur(2px);}
+  #peaceCard,#peaceOfferCard,#peaceResultCard{width:min(620px,94vw);padding:24px 30px 28px;text-align:center;position:relative;animation:modalFade .14s ease;pointer-events:auto;border-radius:3px;}
+  #peaceName,#peaceOfferTitle,#peaceResultTitle{font-family:'KnightsQuest',Georgia,serif;text-transform:uppercase;text-shadow:0 3px 14px rgba(0,0,0,.82);}
+  #peaceName{padding:7px 0 10px;margin-bottom:12px;}
+  #peaceName .peaceCountry{display:block;font-size:39px;line-height:1.02;color:#88b9ee;}
+  #peaceName .peaceAction{display:block;margin-top:8px;font-size:23px;line-height:1;color:#f4efe4;}
+  #peaceInfo,#peaceChance{font-size:18px;color:#d7e0df;margin-bottom:16px;font-family:'KnightsQuest',Georgia,serif;}
+  .pterm{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.055);border:1px solid rgba(150,160,120,.16);border-radius:10px;padding:13px 16px;margin-bottom:10px;}
+  .pterm .ic{font-size:21px;line-height:1;}
+  .pterm .nm{flex:1;font-family:'KnightsQuest',Georgia,serif;font-size:21px;font-weight:700;color:#e5ece6;text-align:left;}
+  .pterm .v{font-family:'KnightsQuest',Georgia,serif;font-size:18px;color:#c8d4d8;white-space:nowrap;}
+  .pterm .pct{font-family:'KnightsQuest',Georgia,serif;font-size:22px;font-weight:800;color:#ffd23f;min-width:54px;text-align:center;}
+  .pterm button{border:none;border-radius:8px;height:40px;font-weight:800;cursor:pointer;font-size:18px;color:#fff;}
+  .pterm .mm{background:#e0533f;width:42px;} .pterm .pp{background:#4caf50;width:42px;}
+  .pterm .mx{background:#3a86d0;padding:0 14px;font-size:16px;height:40px;}
+  .pterm .tgl{background:#33414d;color:#7e8c9a;width:52px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.08);}
   .pterm .tgl.on{background:#1f7a3a;color:#aaf0c4;box-shadow:0 0 0 2px rgba(125,255,166,.16),inset 0 0 0 2px rgba(255,255,255,.12);}
   .pterm .tgl:disabled{opacity:.42;cursor:default;filter:none;}
   #peaceTribute{background:rgba(255,255,255,.06);border-radius:10px;padding:10px;margin:6px 0 12px;}
@@ -349,14 +399,15 @@
   #peaceTribute .ctl{display:flex;align-items:center;justify-content:center;gap:6px;}
   #peaceTribute .ctl button{border:none;border-radius:7px;width:34px;height:30px;font-weight:800;cursor:pointer;background:#2f4150;color:#eef4ff;}
   #peaceTribute .amt{font-size:18px;font-weight:800;color:#ffd23f;min-width:84px;}
-  #peaceWin .row2,#peaceOffer .row2,#peaceResult .row2{display:flex;gap:8px;}
+  #peaceWin .row2,#peaceOffer .row2,#peaceResult .row2{display:flex;gap:16px;margin-top:4px;}
   #peaceWin .row2 .dbtn,#peaceOffer .row2 .dbtn,#peaceResult .row2 .dbtn{flex:1;}
+  #peaceWin .dbtn,#peaceOffer .dbtn,#peaceResult .dbtn{min-height:58px;font-family:'KnightsQuest',Georgia,serif;font-size:23px;font-weight:700;letter-spacing:.35px;}
   #warNotif .dbtn,#peaceWin .dbtn,#peaceOffer .dbtn,#peaceResult .dbtn{transition:background-color .08s,border-color .08s,box-shadow .08s,opacity .08s;transform:none!important;filter:none!important;}
   #warNotif .dbtn:hover,#peaceWin .dbtn:hover,#peaceOffer .dbtn:hover,#peaceResult .dbtn:hover{filter:none!important;box-shadow:0 0 0 2px rgba(255,255,255,.08),0 0 18px rgba(198,168,112,.14);}
   #warNotif .dbtn:active,#peaceWin .dbtn:active,#peaceOffer .dbtn:active,#peaceResult .dbtn:active{filter:none!important;box-shadow:inset 0 2px 8px rgba(0,0,0,.28);}
-  #peaceOfferTitle{font-size:22px;font-weight:900;color:#9fe0ff;margin-bottom:10px;}
+  #peaceOfferTitle{font-size:31px;font-weight:700;color:#88b9ee;margin-bottom:14px;}
   #peaceOfferBody{font-size:14px;color:#e6f2ff;line-height:1.6;margin-bottom:16px;}
-  #peaceResultTitle{font-size:22px;font-weight:900;margin-bottom:10px;color:#9fe0ff;}
+  #peaceResultTitle{font-size:31px;font-weight:700;margin-bottom:14px;color:#88b9ee;}
   #peaceResultBody{font-size:14px;color:#e6f2ff;line-height:1.55;margin-bottom:16px;}
   .offerTerms{margin-top:11px;padding:10px 12px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);
     text-align:left;color:#dce8f2;font-size:13px;line-height:1.55;}

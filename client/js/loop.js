@@ -1319,7 +1319,12 @@ function focusStartCameraOnCountry(country){
 function buildCountryPick(){
   const list=document.getElementById('countryList'); if(!list)return; list.innerHTML='';
   const playable=Array.isArray(PLAYABLE_COUNTRIES)&&PLAYABLE_COUNTRIES.length?PLAYABLE_COUNTRIES:FACTIONS.map(f=>f.country);
-  countryPickChoice=playable.includes(PLAYER_COUNTRY)?PLAYER_COUNTRY:playable[0];
+  const taken=(window.MP_TAKEN instanceof Set)?window.MP_TAKEN:new Set();   // 🔒 занятые другими игроками страны (MP)
+  const isTaken=(c)=>taken.has(c)&&c!==PLAYER_COUNTRY;
+  const free=playable.filter(c=>!isTaken(c));
+  // сохранить текущий выбор, если он ещё валиден и свободен; иначе — своя страна / первая свободная
+  if(!countryPickChoice||!free.includes(countryPickChoice))
+    countryPickChoice=(playable.includes(PLAYER_COUNTRY)&&!isTaken(PLAYER_COUNTRY))?PLAYER_COUNTRY:(free[0]||playable[0]);
   const start=document.getElementById('countryStart');
   const render=()=>{
     list.innerHTML='';
@@ -1327,22 +1332,27 @@ function buildCountryPick(){
       const cityCount=countryCityCount(c);
       const col='#'+(FACTION_COLOR[c]||0x9aa6b2).toString(16).padStart(6,'0');
       const art=(COUNTRY_CARD_ART&&COUNTRY_CARD_ART[c])||'';
+      const tk=isTaken(c);
       const el=document.createElement('button');
       el.type='button';
       const cDisp=countryDisp(c);
-      el.className='cpick'+(c===countryPickChoice?' sel':'')+(cDisp.length>12?' long':'');
+      el.className='cpick'+(c===countryPickChoice?' sel':'')+(cDisp.length>12?' long':'')+(tk?' taken':'');
       el.dataset.country=c;
+      el.disabled=tk;
       el.style.setProperty('--ccol',col);
       el.style.setProperty('--art',art?`url("${art}")`:'linear-gradient(180deg,#1a2733,#101a24)');
       el.setAttribute('aria-pressed',c===countryPickChoice?'true':'false');
+      if(tk)el.setAttribute('aria-disabled','true');
       const flag=typeof flagHexSVG==='function'?flagHexSVG(c,60):`<span>${flagOf(c)}</span>`;
       el.innerHTML=`<div class="cflag">${flag}</div>`+
-        `<div class="cbody"><div class="cnm">${cDisp}</div><div class="cmeta">${cityCount} ${cityWord(cityCount)}</div></div>`;
-      el.addEventListener('click',()=>{countryPickChoice=c;render();});
+        `<div class="cbody"><div class="cnm">${cDisp}</div><div class="cmeta">${tk?t('net.countryTaken'):cityCount+' '+cityWord(cityCount)}</div></div>`+
+        (tk?`<div class="cLock">🔒</div>`:'');
+      if(!tk)el.addEventListener('click',()=>{countryPickChoice=c;render();});
       list.appendChild(el);
     });
+    if(start)start.disabled=isTaken(countryPickChoice);
   };
-  if(start)start.onclick=()=>selectCountry(countryPickChoice||playable[0]);
+  if(start)start.onclick=()=>{ if(isTaken(countryPickChoice))return; selectCountry(countryPickChoice||free[0]||playable[0]); };
   render();
 }
 function openCountryPick(){

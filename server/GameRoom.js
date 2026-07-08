@@ -46,7 +46,7 @@ class GameRoom extends Room {
     this.assigned = {};                              // sessionId -> faction
     this.identities = {};                            // sessionId -> {id, username, guest}
     this.cmdBuckets = {};                            // sessionId -> token bucket анти-спама команд
-    this.setMetadata({ name: (options && options.name) || 'Партия', region: (options && options.region) || 'eu', players: 0, maxPlayers: this.sim.factions, over: false });
+    this.setMetadata({ name: (options && options.name) || 'Партия', region: (options && options.region) || 'eu', players: 0, maxPlayers: this.sim.factions, over: false, taken: [] });
     this.setState(new GameState());
     this.state.roomName = (options && options.name) || 'Партия';
 
@@ -199,7 +199,7 @@ class GameRoom extends Room {
     this.sim.humanFactions = new Set(Object.values(this.assigned));   // ИИ не управляет занятыми людьми
     const n = Object.keys(this.assigned).length;
     if (this.state) this.state.playerCount = n;
-    this.setMetadata({ ...this.metadata, players: n });
+    this.setMetadata({ ...this.metadata, players: n, taken: Object.values(this.assigned) });
   }
 
   // итоги матча: ОДИН транзакционный рекорд в конце партии со ВСЕМИ участниками-регистрантами (idempotent).
