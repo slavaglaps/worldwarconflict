@@ -51,7 +51,7 @@
     window.researchNode=function(id){ if(room){ try{room.send('research',{node:id});}catch(e){} return; } _rn(id); }; }
 
   async function joinColyseus(fid){
-    let t=0; while(typeof Colyseus==='undefined' && t++<120) await new Promise(r=>setTimeout(r,50));
+    let tries=0; while(typeof Colyseus==='undefined' && tries++<120) await new Promise(r=>setTimeout(r,50));   // ⚠ НЕ 't': затеняло бы i18n-функцию t() ниже (DENY/toast) → краш join → онлайн не синкался
     if(typeof Colyseus==='undefined'){ console.warn('[cs] colyseus.js не готов'); return; }
     if(!client) client = new Colyseus.Client(ENDPOINT);
     if(room){ try{ await room.leave(); }catch(e){} room=null; }
@@ -61,7 +61,7 @@
       else if(params.has('create')) room = await client.create('game', { faction: fid, name: roomParam || 'Игра' }); // создать новую
       else room = await client.joinOrCreate('game', { faction: fid });                               // прямая ссылка
     }
-    catch(e){ console.warn('[cs] join failed', e); alert('Не удалось подключиться к комнате: '+e.message); return; }
+    catch(e){ console.warn('[cs] join failed', e); alert(t('net.joinFailed', {msg:e.message})); return; }
     MP.on = true;
     room.onMessage('assigned', (m)=>{
       const assignedFid = Number.isInteger(m&&m.faction) ? m.faction : fid;
@@ -69,13 +69,13 @@
         PLAYER=assignedFid; OWNER.PLAYER=assignedFid; PLAYER_COUNTRY=FACTIONS[assignedFid].country;
         FACTIONS.forEach(f=>f.isPlayer=f.id===assignedFid);
         MP._synced=false; MP._sawRunning=false;
-        try{ toast(`${flagOf(PLAYER_COUNTRY)} Сервер назначил: ${PLAYER_COUNTRY}`); }catch(e){}
+        try{ toast(t('net.serverAssigned', {flag:flagOf(PLAYER_COUNTRY), country:countryDisp(PLAYER_COUNTRY)})); }catch(e){}
       }
     });
-    const DENY = { war:'⚔ Война: не хватает политочков (нужно 50🏛) или перемирие', ally:'🤝 Союз отклонён или мало политочков', break:'💔 Разрыв: мало политочков', peace:'🕊 Мир: мало политочков или кулдаун', buy:'Найм: мало голды/манпауэра/места', upg:'Прокачка недоступна (голда/тир/оккупация)', research:'🔬 Мало голды или нет пререквизитов', bship:'⚓ Нужна верфь + tech + голда/манпауэр', bplane:'✈ Нужен аэродром + tech + голда/манпауэр', yard:'🏗 Верфь — в прибрежном городе; нужна голда', aa:'🛡 Мало голды/манпауэра', send:'⏳ Нет пути, война не объявлена, или идёт мобилизация (до 60с)', hero:'🎖 Способность на перезарядке или нет цели для удара', sup:'💰 Поддержка: нужно ≥20 голды в казне' };
-    room.onMessage('denied', (m)=>{ try{ if(typeof toast==='function') toast(DENY[m&&m.cmd] || '⛔ Действие недоступно'); }catch(e){} });
+    const DENY = { war:t('net.denyWar'), ally:t('net.denyAlly'), break:t('net.denyBreak'), peace:t('net.denyPeace'), buy:t('net.denyBuy'), upg:t('net.denyUpg'), research:t('net.denyResearch'), bship:t('net.denyBship'), bplane:t('net.denyBplane'), yard:t('net.denyYard'), aa:t('net.denyAa'), send:t('net.denySend'), hero:t('net.denyHero'), sup:t('net.denySup') };
+    room.onMessage('denied', (m)=>{ try{ if(typeof toast==='function') toast(DENY[m&&m.cmd] || t('net.denyGeneric')); }catch(e){} });
     // 💰 поддержка принята сервером: показываем точную сумму и получателя (refreshDiplo подтянет новую голду из econ)
-    room.onMessage('supDone', (m)=>{ try{ if(!m)return; const f=FACTIONS[m.to]; toast(`💰 Поддержка ${m.amt|0}💰 → ${f?f.country:''}`); if(typeof refreshDiplo==='function')refreshDiplo(); if(typeof buildPolWindow==='function'&&polWinOpen)buildPolWindow(); }catch(e){} });
+    room.onMessage('supDone', (m)=>{ try{ if(!m)return; const f=FACTIONS[m.to]; toast(t('net.supDone', {amt:m.amt|0, country:(f?countryDisp(f.country):'')})); if(typeof refreshDiplo==='function')refreshDiplo(); if(typeof buildPolWindow==='function'&&polWinOpen)buildPolWindow(); }catch(e){} });
     // приватная экономика: сервер шлёт голду/манпауэр/политочки только нашей фракции и союзников (врагов не видим)
     room.onMessage('econ', (m)=>{ try{ if(m&&m.econ) for(const fid in m.econ){ const e=m.econ[fid], i=+fid; gold[i]=e[0]; manpower[i]=e[1]; politPts[i]=e[2]; }
       if(m&&m.hero){ const H=m.hero, hs=heroSlots[PLAYER]||[];
@@ -128,7 +128,7 @@
         if(K.FIGHT_RATE!=null)FIGHT_RATE=K.FIGHT_RATE; if(K.SIEGE_ATK!=null)SIEGE_ATK=K.SIEGE_ATK; if(K.SIEGE_DEF!=null)SIEGE_DEF=K.SIEGE_DEF;
       }
       // перерисовать UI, где показаны эти числа (дипломатия/политика/панель/кнопка мира)
-      try{ const pp=document.getElementById('peacePropose'); if(pp)pp.textContent=`Предложить мир (${POLIT_PEACE}🏛)`;
+      try{ const pp=document.getElementById('peacePropose'); if(pp)pp.textContent=t('net.proposePeace', {cost:POLIT_PEACE});
         if(typeof updatePanel==='function')updatePanel();
         if(typeof refreshPol==='function')refreshPol();
         if(typeof diploTarget!=='undefined'&&diploTarget!=null&&typeof refreshDiplo==='function')refreshDiplo();
@@ -187,8 +187,8 @@
     onMsg({ data: JSON.stringify({ t:'ent', e }) });
     // плашка статуса: реальное имя комнаты + страна + число игроков (с сервера, без путающего «ГОСТЬ»)
     if(MP._pill){
-      const ctry = (typeof FACTIONS!=='undefined' && FACTIONS[PLAYER]) ? FACTIONS[PLAYER].country : '';
-      MP._pill.textContent = `🌐 ${state.roomName||'Игра'} · ${ctry} · 👥 ${state.playerCount||1}`;
+      const ctry = (typeof FACTIONS!=='undefined' && FACTIONS[PLAYER]) ? countryDisp(FACTIONS[PLAYER].country) : '';
+      MP._pill.textContent = t('net.pill', {room:(state.roomName||t('net.defaultRoom')), country:ctry, players:(state.playerCount||1)});
     }
   }
 

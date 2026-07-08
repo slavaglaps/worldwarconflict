@@ -1285,16 +1285,6 @@ let countryPickChoice=null;
 function countryCityCount(country){
   return CITY_LIST.reduce((n,c)=>n+((typeof canonicalCountry==='function'?canonicalCountry(c[5]):c[5])===country?1:0),0);
 }
-function countryStatLine(country, cityCount){
-  const base=Math.max(4,Math.min(9,Math.round(cityCount/2.5)));
-  const color=FACTION_COLOR[country]||0x9aa6b2;
-  const weight=((color>>16)&255)+((color>>8)&255)+(color&255);
-  return {
-    sword:Math.max(5,Math.min(9,base+(weight%3)-1)),
-    tower:Math.max(3,Math.min(7,Math.round(cityCount/4)+1)),
-    people:Math.max(4,Math.min(7,Math.round(cityCount/5)+3)),
-  };
-}
 function cityWord(n){return n===1?t('polit.cityWordOne'):t('polit.cityWordMany');}
 function focusStartCameraOnCountry(country){
   const cname=typeof canonicalCountry==='function'?canonicalCountry(country):country;
@@ -1337,7 +1327,6 @@ function buildCountryPick(){
       const cityCount=countryCityCount(c);
       const col='#'+(FACTION_COLOR[c]||0x9aa6b2).toString(16).padStart(6,'0');
       const art=(COUNTRY_CARD_ART&&COUNTRY_CARD_ART[c])||'';
-      const s=countryStatLine(c,cityCount);
       const el=document.createElement('button');
       el.type='button';
       const cDisp=countryDisp(c);
@@ -1348,8 +1337,7 @@ function buildCountryPick(){
       el.setAttribute('aria-pressed',c===countryPickChoice?'true':'false');
       const flag=typeof flagHexSVG==='function'?flagHexSVG(c,60):`<span>${flagOf(c)}</span>`;
       el.innerHTML=`<div class="cflag">${flag}</div>`+
-        `<div class="cbody"><div class="cnm">${cDisp}</div><div class="cmeta">${cityCount} ${cityWord(cityCount)}</div>`+
-        `<div class="countryStats"><span>⚔ ${s.sword}</span><span>♜ ${s.tower}</span><span>👥 ${s.people}</span></div></div>`;
+        `<div class="cbody"><div class="cnm">${cDisp}</div><div class="cmeta">${cityCount} ${cityWord(cityCount)}</div></div>`;
       el.addEventListener('click',()=>{countryPickChoice=c;render();});
       list.appendChild(el);
     });

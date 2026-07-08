@@ -40,7 +40,7 @@ const DEFAULTS = {
   // Каждый герой: passive[]/active абилки. Сервер применяет авторитетно: пассивки → бонус к бою,
   // активки → команда с кулдауном (buff/garrison/gold/manpower/airstrike). См. Sim.heroAdd/cmdHeroAbility.
   heroes: {
-    perFaction: 2,                          // сколько героев у фракции по умолчанию (авто-ротация из пула по fid)
+    perFaction: 0,                          // авто-героев у фракции на старте (0 = никто не начинает с героями, все призывают сами; тюн: hero_per_faction / heroes.perFaction)
     maxSlots: 3,                            // максимум слотов героев на фракцию
     pool: {
       sterling: { name: 'Маршал Стерлинг', face: '🪖', col: '#3c6e3c', abilities: [

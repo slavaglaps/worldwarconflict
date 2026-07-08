@@ -12,14 +12,32 @@
   const BLUE_BASE = 'assets/hex-kit/buildings/blue/';
   // Внешние постройки: пока один слой строительства за пределами городов.
   const CATALOG = [
-    { key: 'tower_A', file: 'building_tower_A_green', get name() { return t('build.name_tower'); }, cat: 'def', role: 'tower', cost: 85, range: 7.5, damage: 2, attackSpeed: 0.75, icon: '🛡' },
-    { key: 'shipyard', get name() { return t('build.name_shipyard'); }, cat: 'def', role: 'shipyard', cost: 90, icon: '⚓',
+    // ── Standard (доступно) ──
+    { key: 'home_A', file: 'building_home_A_green', get name() { return t('build.name_village'); }, cat: 'eco', sect: 'standard', role: 'village', cost: 45, manpowerRate: 0.35, icon: '👥' },
+    { key: 'windmill', file: 'building_windmill_green', get name() { return t('build.name_farm'); }, cat: 'eco', sect: 'standard', role: 'farm', cost: 55, goldRate: 0.45, icon: '💰' },
+    { key: 'church', file: 'building_church_green', get name() { return t('build.name_church'); }, cat: 'state', sect: 'standard', role: 'church', cost: 70, politRate: 0.08, icon: '🏛' },
+    // ── Standard (заблокировано, скоро) ──
+    { key: 'home_B', file: 'building_home_B_green', get name() { return t('build.name_house2'); }, sect: 'standard', locked: true, icon: '🏠' },
+    { key: 'well', file: 'building_well_green', get name() { return t('build.name_well'); }, sect: 'standard', locked: true, icon: '⛲' },
+    { key: 'market', file: 'building_market_green', get name() { return t('build.name_market'); }, sect: 'standard', locked: true, icon: '🏪' },
+    { key: 'tavern', file: 'building_tavern_green', get name() { return t('build.name_tavern'); }, sect: 'standard', locked: true, icon: '🍺' },
+    { key: 'watermill', file: 'building_watermill_green', get name() { return t('build.name_watermill'); }, sect: 'standard', locked: true, icon: '🌊' },
+    { key: 'lumbermill', file: 'building_lumbermill_green', get name() { return t('build.name_lumbermill'); }, sect: 'standard', locked: true, icon: '🪵' },
+    { key: 'mine', file: 'building_mine_green', get name() { return t('build.name_mine'); }, sect: 'standard', locked: true, icon: '⛏' },
+    // ── Military (доступно) ──
+    { key: 'tower_A', file: 'building_tower_A_green', get name() { return t('build.name_tower'); }, cat: 'def', sect: 'military', role: 'tower', cost: 85, range: 7.5, damage: 2, attackSpeed: 0.75, icon: '🛡' },
+    { key: 'shipyard', get name() { return t('build.name_shipyard'); }, cat: 'def', sect: 'military', role: 'shipyard', cost: 90, icon: '⚓',
       parts: [{ key: 'workshop', path: BLUE_BASE + 'building_shipyard_blue' }, { key: 'docks', path: BLUE_BASE + 'building_docks_blue' }] },
-    { key: 'airport', get name() { return t('build.name_airport'); }, cat: 'def', role: 'airport', cost: 110, icon: '✈',
+    { key: 'airport', get name() { return t('build.name_airport'); }, cat: 'def', sect: 'military', role: 'airport', cost: 110, icon: '✈',
       parts: [{ key: 'workshop', path: BLUE_BASE + 'building_workshop_blue' }] },
-    { key: 'home_A', file: 'building_home_A_green', get name() { return t('build.name_village'); }, cat: 'eco', role: 'village', cost: 45, manpowerRate: 0.35, icon: '👥' },
-    { key: 'windmill', file: 'building_windmill_green', get name() { return t('build.name_farm'); }, cat: 'eco', role: 'farm', cost: 55, goldRate: 0.45, icon: '💰' },
-    { key: 'church', file: 'building_church_green', get name() { return t('build.name_church'); }, cat: 'state', role: 'church', cost: 70, politRate: 0.08, icon: '🏛' },
+    // ── Military (заблокировано) ──
+    { key: 'barracks', file: 'building_barracks_green', get name() { return t('build.name_barracks'); }, sect: 'military', locked: true, icon: '⚔' },
+    { key: 'archeryrange', file: 'building_archeryrange_green', get name() { return t('build.name_archery'); }, sect: 'military', locked: true, icon: '🏹' },
+    { key: 'tower_B', file: 'building_tower_B_green', get name() { return t('build.name_towerB'); }, sect: 'military', locked: true, icon: '🗼' },
+    { key: 'catapult', file: 'building_tower_catapult_green', get name() { return t('build.name_catapult'); }, sect: 'military', locked: true, icon: '🎯' },
+    // ── Advanced (заблокировано) ──
+    { key: 'castle', file: 'building_castle_green', get name() { return t('build.name_castle'); }, sect: 'advanced', locked: true, icon: '🏰' },
+    { key: 'blacksmith', file: 'building_blacksmith_green', get name() { return t('build.name_blacksmith'); }, sect: 'advanced', locked: true, icon: '🔨' },
   ];
 
   const models = {};            // key → THREE.Group (нормализованный, origin у основания)
@@ -29,7 +47,7 @@
   const placedBuildings = [];    // {item,obj,key,owner,gx,gz,y,cd}
   let highlightIM = null, hoverMesh = null, ghost = null;
   let hoverHex = null;          // {gx,gz,top,key} под курсором
-  let panelEl = null, panelBody = null;
+  let panelEl = null, panelBody = null, buildTipEl = null;
   window.MAP_BUILDINGS = placedBuildings;
 
   // ── цвет страны игрока: перекрашиваем зелёные (фракционные) пиксели KayKit-атласа в OWNER_COL ──
@@ -234,7 +252,7 @@
       // подставим миниатюры в уже отрисованное меню
       if (panelBody) panelBody.querySelectorAll('button[data-key]').forEach((b) => {
         const it = CATALOG.find((c) => c.key === b.dataset.key);
-        if (it && it.thumb) { b.style.backgroundImage = 'url(' + it.thumb + ')'; b.querySelector('.bIcoFallback') && b.querySelector('.bIcoFallback').remove(); }
+        if (it && it.thumb) { b.style.backgroundImage = 'url(' + it.thumb + ')'; const f = b.querySelector('.bpIco'); if (f) f.remove(); }
       });
     } catch (e) { console.warn('[build] thumbs failed', e); }
   }
@@ -244,56 +262,66 @@
     if (panelEl) return;
     panelEl = document.createElement('div');
     panelEl.id = 'buildPanel';
-    panelEl.style.cssText = 'position:fixed;left:64px;top:120px;z-index:24;width:236px;display:none;'
-      + 'background:linear-gradient(180deg,rgba(26,34,46,.97),rgba(18,24,33,.97));border:1px solid #34425a;border-radius:12px;'
-      + 'box-shadow:0 10px 30px rgba(0,0,0,.45);padding:10px 11px 11px;color:#dfe7f0;font:12px/1.35 system-ui,sans-serif;';
-    const head = document.createElement('div');
-    head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
-    head.innerHTML = '<span style="font-weight:700;letter-spacing:.2px">🏠 ' + t('build.panel_title') + '</span>';
-    const close = document.createElement('button');
-    close.textContent = '✕'; close.style.cssText = 'background:none;border:none;color:#9fb0c4;font-size:14px;cursor:pointer;line-height:1;';
-    close.onclick = () => toggle(false);
-    head.appendChild(close);
+    const head = document.createElement('div'); head.className = 'bpHead';
+    head.innerHTML = '<span class="bpTitle">🏠 ' + t('build.panel_title') + '</span>';
+    const close = document.createElement('button'); close.className = 'bpClose'; close.textContent = '✕';
+    close.onclick = () => toggle(false); head.appendChild(close);
     panelBody = document.createElement('div');
-    const sections = [['def', t('build.section_def')], ['eco', t('build.section_eco')], ['state', t('build.section_state')]];
-    for (const [cat, label] of sections) {
-      const items = CATALOG.filter((c) => c.cat === cat); if (!items.length) continue;
-      const h = document.createElement('div'); h.textContent = label;
-      h.style.cssText = 'font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#7d8ea3;margin:6px 0 5px;';
+    const sections = [['standard', t('build.sect_standard')], ['military', t('build.sect_military')], ['advanced', t('build.sect_advanced')]];
+    for (const [sect, label] of sections) {
+      const items = CATALOG.filter((c) => c.sect === sect); if (!items.length) continue;
+      const h = document.createElement('div'); h.className = 'bpSect'; h.innerHTML = '<span>🏠</span>' + label;
       panelBody.appendChild(h);
-      const grid = document.createElement('div');
-      grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:7px;';
+      const grid = document.createElement('div'); grid.className = 'bpGrid';
       for (const item of items) {
         const b = document.createElement('button');
-        b.dataset.key = item.key; b.title = item.name + ' · ' + itemStats(item);
-        b.style.cssText = 'aspect-ratio:1.15;border:1px solid #33415a;border-radius:8px;background:#1c2533 center/72% no-repeat;cursor:pointer;padding:0;position:relative;transition:border-color .12s,transform .08s;';
+        b.className = 'bpTile' + (item.locked ? ' locked' : '');
+        b.dataset.key = item.key;
+        b.title = item.locked ? (item.name + ' — ' + t('build.locked')) : (item.name + ' · ' + itemStats(item));
         if (item.thumb) b.style.backgroundImage = 'url(' + item.thumb + ')';
-        else { const f = document.createElement('span'); f.className = 'bIcoFallback'; f.textContent = item.icon || '🏚'; f.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:.5'; b.appendChild(f); }
-        const cap = document.createElement('span');
-        cap.textContent = item.name;
-        cap.style.cssText = 'position:absolute;left:3px;right:3px;bottom:2px;font-size:9px;font-weight:700;color:#dfe7f0;text-shadow:0 1px 2px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-        b.appendChild(cap);
-        b.onmouseenter = () => { if (selected !== item) b.style.borderColor = '#5b86c8'; };
-        b.onmouseleave = () => { if (selected !== item) b.style.borderColor = '#33415a'; };
-        b.onclick = () => selectItem(item, b);
+        else { const f = document.createElement('span'); f.className = 'bpIco'; f.textContent = item.icon || '🏚'; b.appendChild(f); }
+        if (item.locked) { const lk = document.createElement('span'); lk.className = 'bpLock'; lk.textContent = '🔒'; b.appendChild(lk); }
+        else { const c = document.createElement('span'); c.className = 'bpCost'; c.textContent = item.cost + '💰'; b.appendChild(c); }
+        b.onmouseenter = (ev) => { setHint(item.locked ? ('🔒 ' + item.name + ' — ' + t('build.locked')) : (item.name + ' · ' + itemStats(item))); showBuildTip(ev, item); };
+        b.onmousemove = (ev) => moveBuildTip(ev);
+        b.onmouseleave = () => { if (!selected) setHint(t('build.hint_pick')); hideBuildTip(); };
+        b.onclick = () => { if (item.locked) { setHint('🔒 ' + item.name + ' — ' + t('build.locked')); return; } selectItem(item, b); };
         grid.appendChild(b);
       }
       panelBody.appendChild(grid);
     }
-    const hint = document.createElement('div');
-    hint.id = 'buildHint';
-    hint.style.cssText = 'margin-top:9px;font-size:10.5px;color:#8aa0b8;min-height:14px;';
+    const hint = document.createElement('div'); hint.id = 'buildHint'; hint.className = 'bpHint';
     hint.textContent = t('build.hint_pick');
     panelEl.appendChild(head); panelEl.appendChild(panelBody); panelEl.appendChild(hint);
     document.body.appendChild(panelEl);
   }
   function setHint(t) { const h = document.getElementById('buildHint'); if (h) h.textContent = t; }
+  function clearSel() { if (panelBody) panelBody.querySelectorAll('button[data-key]').forEach((b) => b.classList.remove('sel')); }
+  function itemDesc(item) { const k = 'build.desc_' + item.key, v = t(k); return v === k ? '' : v; }
+  // ── плашка-описание при наведении на здание ──
+  function showBuildTip(ev, item) {
+    if (!buildTipEl) { buildTipEl = document.createElement('div'); buildTipEl.id = 'buildTip'; document.body.appendChild(buildTipEl); }
+    const foot = item.locked ? ('<div class="btLock">🔒 ' + t('build.locked') + '</div>') : ('<div class="btStat">' + itemStats(item) + '</div>');
+    buildTipEl.innerHTML = '<b>' + item.name + '</b><div class="btDesc">' + itemDesc(item) + '</div>' + foot;
+    buildTipEl.style.display = 'block'; moveBuildTip(ev);
+  }
+  function moveBuildTip(ev) {
+    if (!buildTipEl || buildTipEl.style.display === 'none') return;
+    const w = buildTipEl.offsetWidth || 220, h = buildTipEl.offsetHeight || 70;
+    let x = ev.clientX - w - 16, y = ev.clientY - h - 8;      // слева от курсора — панель прижата к правому краю
+    if (x < 8) x = ev.clientX + 16;
+    if (y < 8) y = ev.clientY + 16;
+    buildTipEl.style.left = Math.max(8, x) + 'px';
+    buildTipEl.style.top = Math.max(8, Math.min(innerHeight - h - 8, y)) + 'px';
+  }
+  function hideBuildTip() { if (buildTipEl) buildTipEl.style.display = 'none'; }
 
   function selectItem(item, btn) {
-    if (panelBody) panelBody.querySelectorAll('button[data-key]').forEach((b) => { b.style.borderColor = '#33415a'; b.style.transform = ''; });
+    if (item.locked) return;
+    clearSel();
     if (selected === item) { selected = null; exitPlacing(); setHint(t('build.hint_pick')); return; }
     selected = item;
-    if (btn) { btn.style.borderColor = '#7fb0ff'; btn.style.transform = 'scale(.94)'; }
+    if (btn) btn.classList.add('sel');
     enterPlacing();
     setHint(t('build.hint_selected', { name: item.name, stats: itemStats(item) }));
   }
@@ -701,7 +729,7 @@
     panelEl.style.display = show ? 'block' : 'none';
     const sb = document.getElementById('sbBuild'); if (sb) sb.classList.toggle('active', show);
     if (show) { ensureModels(); }
-    else { selected = null; exitPlacing(); if (panelBody) panelBody.querySelectorAll('button[data-key]').forEach((b) => { b.style.borderColor = '#33415a'; b.style.transform = ''; }); }
+    else { selected = null; exitPlacing(); clearSel(); hideBuildTip(); }
   }
 
   // ── wiring ──
@@ -710,7 +738,7 @@
     if (sb) sb.onclick = () => toggle();
     addEventListener('keydown', (e) => {
       if (e.code === 'KeyB' && !/input|textarea/i.test((e.target && e.target.tagName) || '')) toggle();
-      if (e.code === 'Escape' && selected) { selected = null; exitPlacing(); setHint(t('build.hint_pick')); if (panelBody) panelBody.querySelectorAll('button[data-key]').forEach((b) => { b.style.borderColor = '#33415a'; b.style.transform = ''; }); }
+      if (e.code === 'Escape' && selected) { selected = null; exitPlacing(); setHint(t('build.hint_pick')); clearSel(); }
     });
     const cv = (typeof renderer !== 'undefined' && renderer && renderer.domElement) ? renderer.domElement : window;
     cv.addEventListener('pointermove', onMove, { passive: true });

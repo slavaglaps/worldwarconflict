@@ -3,7 +3,7 @@
 // Фаза 1a: экономика + производство + манпауэр + осада/захват/оккупация.
 // Пункт 1 (1b): дипломатия (война/мир/союз/поддержка), политочки, древо технологий.
 // Фаза 1b далее: реальная карта-граф, движение отрядов, флот/авиация + spatial-grid.
-const { City, syncComp, takeComp, addComp } = require('./City');
+const { City, syncComp, takeComp, addComp, counterMul } = require('./City');
 const { Squad } = require('./Squad');
 const { Ship } = require('./Ship');
 const { Plane } = require('./Plane');
@@ -132,16 +132,24 @@ class Sim {
   findPath(fromIdx, toIdx, owner, allowEnemy = false) {
     if (fromIdx === toIdx || !this.adj.size) return null;
     const dist = new Map([[fromIdx, 0]]), prev = new Map(), seen = new Set();
-    const pq = [[0, fromIdx]];
-    while (pq.length) {
-      let bi = 0; for (let i = 1; i < pq.length; i++) if (pq[i][0] < pq[bi][0]) bi = i;
-      const [d, u] = pq.splice(bi, 1)[0];
+    // бинарная min-куча по dist: O(E log V) вместо O(V²) (линейный extract-min + splice тормозил AI-таргетинг и cmdSend).
+    //   Ленивое удаление: устаревшие записи отбрасываются через seen. Явные swap'ы без деструктуризации — без аллокаций в куче.
+    const hd = [0], hn = [fromIdx];   // параллельные массивы: hd[i]=дистанция, hn[i]=узел
+    const swap = (i, j) => { const a = hd[i]; hd[i] = hd[j]; hd[j] = a; const b = hn[i]; hn[i] = hn[j]; hn[j] = b; };
+    const push = (d, n) => { hd.push(d); hn.push(n); let i = hd.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (hd[p] <= hd[i]) break; swap(p, i); i = p; } };
+    const pop = () => {
+      const d = hd[0], n = hn[0], ld = hd.pop(), ln = hn.pop();
+      if (hd.length) { hd[0] = ld; hn[0] = ln; let i = 0; const L = hd.length; for (;;) { let m = i, l = 2 * i + 1, r = 2 * i + 2; if (l < L && hd[l] < hd[m]) m = l; if (r < L && hd[r] < hd[m]) m = r; if (m === i) break; swap(m, i); i = m; } }
+      return [d, n];
+    };
+    while (hd.length) {
+      const [d, u] = pop();
       if (seen.has(u)) continue; seen.add(u);
       if (u === toIdx) break;
       for (const { to, edge } of (this.adj.get(u) || [])) {
         if (!allowEnemy && to !== toIdx && !this.canPass(owner, this.cities[to].owner)) continue;
         const nd = d + edge.len / (this.K.SQUAD_SPEED * edge.mult);
-        if (nd < (dist.get(to) ?? Infinity)) { dist.set(to, nd); prev.set(to, u); pq.push([nd, to]); }
+        if (nd < (dist.get(to) ?? Infinity)) { dist.set(to, nd); prev.set(to, u); push(nd, to); }
       }
     }
     if (!prev.has(toIdx)) return null;
@@ -209,7 +217,8 @@ class Sim {
       });
       if (best) { s.foe = best; if (!best.foe) best.foe = s; }
     }
-    for (const s of this.squads) if (s.foe && s.foe.fcount >= 0.5 && s.fcount >= 0.5) s.foe.fcount -= s.fcount * s.atkMult * this.K.FIGHT_RATE * dt;
+    const cb = this.K.UNIT_COUNTER_BONUS || 0;                        // ⚔ бонус треугольника типов (0 = типы не различаются, урон как раньше)
+    for (const s of this.squads) if (s.foe && s.foe.fcount >= 0.5 && s.fcount >= 0.5) s.foe.fcount -= s.fcount * counterMul(s.comp, s.foe.comp, cb) * s.atkMult * this.K.FIGHT_RATE * dt;
   }
 
   // ── флот / авиация ──
@@ -323,10 +332,12 @@ class Sim {
           }
         }
         if (!fired) {
+          // grid-поиск ближайшего врага вместо линейного скана всех сущностей: squadGrid/navalGrid/airGrid уже
+          //   построены боевыми фазами В ЭТОМ ЖЕ тике (fieldBattles/naval/airBattles идут до cityTowers).
           let best = null, bd = range * range, kind = null;
-          for (const s of this.squads) { if (s.fcount < this.K.UNIT_MIN || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 's'; } }
-          for (const s of this.ships) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } }
-          for (const s of this.planes) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } }
+          this.squadGrid.queryWithin(c.gx, c.gz, range, (s) => { if (s.fcount < this.K.UNIT_MIN || !this.atWar(c.owner, s.owner)) return; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 's'; } });
+          this.navalGrid.queryWithin(c.gx, c.gz, range, (s) => { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) return; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } });
+          this.airGrid.queryWithin(c.gx, c.gz, range, (s) => { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) return; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } });
           // _clientTowerDmg (соло): сим только выбирает цель и сбрасывает таймер — урон по юниту наносит клиент В МОМЕНТ ПОПАДАНИЯ трассера.
           if (best) { c.fireTimer = 0; if (!this._clientTowerDmg) { if (kind === 's') best.fcount -= c.fireDmg; else best.hp -= c.fireDmg; } }
         }
@@ -339,21 +350,31 @@ class Sim {
     for (const c of this.cities) {
       if ((c.aa | 0) <= 0) continue;
       c.aaTimer += dt; if (c.aaTimer < this.K.AA_CD) continue;
-      let best = null, bd = this.K.AA_RANGE * this.K.AA_RANGE;
-      for (const s of this.planes) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; } }
+      const R = this.K.AA_RANGE; let best = null, bd = R * R;
+      this.airGrid.queryWithin(c.gx, c.gz, R, (s) => { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) return; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; } });
       if (!best) continue;
       c.aaTimer = 0; best.hp -= this.K.AA_DMG * c.aa;
     }
   }
+  // статичный grid городов (позиции неизменны; владелец/война проверяются в колбэке живьём).
+  //   Перестраивается только при изменении числа городов (постройка верфи-подгорода) — обычно один раз.
+  _ensureCityGrid() {
+    if (this._cityGrid && this._cityGridN === this.cities.length) return this._cityGrid;
+    const g = this._cityGrid = new SpatialGrid(8);
+    for (const c of this.cities) g.insert(c, c.gx, c.gz);
+    this._cityGridN = this.cities.length;
+    return g;
+  }
   // 🚀 обстрел берега: корабль с tech shipMissile бьёт ближайший вражеский город/отряд в радиусе
   shipBombard(dt) {
+    const cityGrid = this._ensureCityGrid();   // grid городов + squadGrid (построен fieldBattles в этом тике) → без O(ships×(cities+squads))
     for (const s of this.ships) {
       if (s.hp <= 0 || !this.techFlag(s.owner, 'shipMissile')) continue;
       s.fireTimer += dt; if (s.fireTimer < this.K.SHIP_FIRE_CD) continue;
       const R = this.K.SHIP_ATTACK_RANGE * this.techVal(s.owner, 'sr'), R2 = R * R;
       let best = null, bd = R2, city = false;
-      for (const c of this.cities) { if (c.owner === s.owner || !this.atWar(s.owner, c.owner)) continue; const dx = s.x - c.gx, dz = s.z - c.gz, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = c; city = true; } }
-      for (const q of this.squads) { if (!this.atWar(s.owner, q.owner)) continue; const dx = s.x - q.x, dz = s.z - q.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = q; city = false; } }
+      cityGrid.queryWithin(s.x, s.z, R, (c) => { if (c.owner === s.owner || !this.atWar(s.owner, c.owner)) return; const dx = s.x - c.gx, dz = s.z - c.gz, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = c; city = true; } });
+      this.squadGrid.queryWithin(s.x, s.z, R, (q) => { if (q.fcount < this.K.UNIT_MIN || !this.atWar(s.owner, q.owner)) return; const dx = s.x - q.x, dz = s.z - q.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = q; city = false; } });
       if (!best) continue;
       s.fireTimer = 0;
       if (city) {
@@ -489,8 +510,15 @@ class Sim {
     }
     if (src.units < A.minArmy) return;
     const cand = new Map();
-    for (const t of this.cities) {
-      if (t.owner === fid) continue;
+    // кандидаты — только ближайшие N чужих городов по евклиду от src, а не findPath до КАЖДОГО города (было ~230
+    //   Дейкстр за один think). Эффективная цель всё равно берётся из фронтира пути, а ближайшие города — самые
+    //   вероятные фронтиры. Лимит тюнится через balance (A.candLimit).
+    const enemies = [];
+    for (const t of this.cities) { if (t.owner !== fid) enemies.push(t); }
+    enemies.sort((a, b) => ((a.gx - src.gx) ** 2 + (a.gz - src.gz) ** 2) - ((b.gx - src.gx) ** 2 + (b.gz - src.gz) ** 2));
+    const candLimit = A.candLimit || 14;
+    for (let ei = 0; ei < enemies.length && ei < candLimit; ei++) {
+      const t = enemies[ei];
       const path = this.findPath(src.idx, t.idx, fid); if (!path) continue;
       let effIdx = path[path.length - 1];
       for (let i = 1; i < path.length; i++) if (this.cities[path[i]].owner !== fid) { effIdx = path[i]; break; }
@@ -694,8 +722,15 @@ class Sim {
   }
   // поддержка союзника/соседа: перевод голды min(supportMax, своя голда), не ниже supportMin.
   // Возвращает {ok, amt, to} — GameRoom шлёт точный ack призвавшему (сумма + получатель), при нехватке — denied.
+  // граница по общему ребру: у fid есть город, смежный (в графе дорог) с городом t. O(cities×adj), но зовётся редко.
+  _shareBorder(a, b) {
+    for (const c of this.cities) { if (c.owner !== a) continue; for (const n of (this.adj.get(c.idx) || [])) if (this.cities[n.to].owner === b) return true; }
+    return false;
+  }
   cmdSupport(fid, t) {
     if (!this.validFaction(fid) || !this.validFaction(t) || fid === t) return { ok: false };
+    // только союзнику ИЛИ соседу (как заявлено в контракте) — иначе перевод голды был читом/сговором между любыми фракциями.
+    if (!this.allied(fid, t) && !this._shareBorder(fid, t)) return { ok: false };
     const amt = Math.min(this.B.politics.supportMax, this.gold[fid] | 0); if (amt < this.B.politics.supportMin) return { ok: false };
     this.gold[fid] -= amt; this.gold[t] = (this.gold[t] || 0) + amt; return { ok: true, amt, to: t };
   }

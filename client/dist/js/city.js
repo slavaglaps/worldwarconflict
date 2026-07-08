@@ -396,7 +396,7 @@ class City{
     showLab(this.lab,true);
     posLab(this.lab,(v.x*0.5+0.5)*innerWidth,(-v.y*0.5+0.5)*innerHeight);
     const q=this.queued;
-    const nm=`<span class="nm">${CITY_NAMES[this.idx]}</span>`; // имя для ВСЕХ городов
+    const nm=`<span class="nm">${cityDisp(this.idx)}</span>`; // имя для ВСЕХ городов
     // гарнизон трясётся красным когда обороняется
     const def=this.siege?'<span style="color:#ff6a4a">🛡</span>':'';
     const occm=this.occ?`<span style="color:#${(OWNER_COL[this.occFrom]||0).toString(16).padStart(6,'0')};text-shadow:0 0 2px #000">⚑</span>`:''; // занят (флаг де-юре владельца)
@@ -442,4 +442,9 @@ class City{
   }
   _killSiegeOrb(orb){ if(!orb)return; if(orb.mesh)scene.remove(orb.mesh); orb.lab&&orb.lab.remove(); if(orb.banner)scene.remove(orb.banner); }
 }
-const CITY_NAMES = CITY_LIST.map(c => c[0]);
+const CITY_NAMES = CITY_LIST.map(c => c[0]);   // внутренние ключи (join): остаются на русском
+// дисплей-имя города: локализованное имя по внутреннему ключу (фолбэк = русский ключ)
+function cityDisp(idx){ const n=CITY_NAMES[idx]; if(typeof tName!=='function')return n;
+  const m=/^(Верфь|Аэропорт) (.+)$/.exec(n);                              // динамические верфи/аэропорты: имя-джойн-ключ RU, локализуем при показе
+  if(m)return t(m[1]==='Верфь'?'hud.yard_ship':'hud.yard_air',{city:tName('city',m[2])});
+  return tName('city',n); }

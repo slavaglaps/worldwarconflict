@@ -101,10 +101,15 @@ document.getElementById('polWin').addEventListener('click',e=>{if(e.target.id===
 
 /* ── 🎖 ГЕРОИ: панель слотов + окно призыва ─────────────────── */
 // тултип по способности (переиспользуем #techTip)
+let heroTipEl=null;
 function showHeroTip(ev,ab){ const tip=document.getElementById('techTip'); if(!tip)return;   // ⚠ НЕ называть локаль `t` — затеняет i18n t()
+  const src=ev&&ev.currentTarget;
+  if(src&&((src.classList&&src.classList.contains('cooling'))||(typeof src._heroTipBlocked==='function'&&src._heroTipBlocked()))){hideHeroTip();return;}
+  heroTipEl=src||null;
   tip.innerHTML=`<b>${ab.icon} ${tName('heroab',ab.name)}</b><div class="te">${tName('heroab_desc',ab.desc)}</div><div class="ts2">${ab.kind==='active'?t('panel.ability_active',{cd:ab.cd}):t('panel.ability_passive')}</div>`;
   tip.style.display='block'; moveHeroTip(ev); }
 function moveHeroTip(ev){ const t=document.getElementById('techTip'); if(!t||t.style.display==='none')return;
+  if(heroTipEl&&typeof heroTipEl._heroTipBlocked==='function'&&heroTipEl._heroTipBlocked()){hideHeroTip();return;}
   const r=ev?.currentTarget?.getBoundingClientRect?.();
   const cx=Number.isFinite(ev?.clientX)?ev.clientX:(r?r.left+r.width/2:innerWidth/2);
   const cy=Number.isFinite(ev?.clientY)?ev.clientY:(r?r.top+r.height/2:innerHeight/2);
@@ -113,7 +118,7 @@ function moveHeroTip(ev){ const t=document.getElementById('techTip'); if(!t||t.s
   if(x+w>innerWidth-8)x=cx-w-16;
   if(y<8)y=cy+16;
   t.style.left=Math.max(8,x)+'px'; t.style.top=Math.max(8,Math.min(innerHeight-h-8,y))+'px'; }
-function hideHeroTip(){ const t=document.getElementById('techTip'); if(t)t.style.display='none'; }
+function hideHeroTip(){ const t=document.getElementById('techTip'); if(t)t.style.display='none'; heroTipEl=null; }
 const HERO_RARITY={
   sterling:{label:t('panel.rarity_legendary'),marks:'◆◆◆',col:'#d4a64d'},
   hans:{label:t('panel.rarity_rare'),marks:'◆◆',col:'#5d9cc7'},
@@ -122,11 +127,13 @@ const HERO_RARITY={
   volk:{label:t('panel.rarity_epic'),marks:'◆◆◆',col:'#8a62c9'},
   storm:{label:t('panel.rarity_mythic'),marks:'◆◆◆',col:'#d56e42'},
 };
-function bindHeroAbilityTip(el,ab){
+function bindHeroAbilityTip(el,ab,isBlocked){
   el.title=`${tName('heroab',ab.name)} — ${tName('heroab_desc',ab.desc)}`;
+  el._heroTipBlocked=typeof isBlocked==='function'?isBlocked:null;
   el.tabIndex=0;
   for(const e of ['mouseenter','pointerenter','focus'])el.addEventListener(e,ev=>showHeroTip(ev,ab));
   for(const e of ['mousemove','pointermove'])el.addEventListener(e,moveHeroTip);
+  el.addEventListener('pointerdown',hideHeroTip);
   for(const e of ['mouseleave','pointerleave','blur'])el.addEventListener(e,hideHeroTip);
 }
 // полная пересборка панели (только при смене состава героев / рестарте — не в тике!)
@@ -136,29 +143,32 @@ function buildHeroBar(){
   for(const h of hs){
     const d=heroDef(h.id); if(!d)continue;
     const slot=document.createElement('div'); slot.className='heroSlot';
+    const av=document.createElement('div'); av.className='av'; av.title=tName('hero',d.name);
+    if(d.portrait){ av.style.backgroundImage=`url("${d.portrait}")`; } else { av.style.background=d.col; av.textContent=d.face; }
     const abrow=document.createElement('div'); abrow.className='abrow';
     const actives=d.abilities.filter(a=>a.kind==='active');
     h._abEls={};
     for(const ab of d.abilities){
       const el=document.createElement('div'); el.className='ab'+(ab.kind==='passive'?' passive':''); el.textContent=ab.icon;
-      bindHeroAbilityTip(el,ab);
       if(ab.kind==='active'){
         const ai=actives.indexOf(ab);
+        bindHeroAbilityTip(el,ab,()=>((h.cd&&h.cd[ai])||0)>0);
+        const badge=document.createElement('div'); badge.className='cdbadge'; badge.textContent=ab.cd; el.appendChild(badge);   // кулдаун (сек) вместо маны
         const cdov=document.createElement('div'); cdov.className='cd'; cdov.style.display='none'; el.appendChild(cdov);
-        el.addEventListener('click',()=>{hideHeroTip();activateHeroAbility(PLAYER,h,d.abilities.indexOf(ab));});
+        el.addEventListener('click',()=>{hideHeroTip();activateHeroAbility(PLAYER,h,d.abilities.indexOf(ab));if(((h.cd&&h.cd[ai])||0)>0)el.classList.add('cooling');el.blur();setTimeout(()=>{if(el.classList.contains('cooling'))hideHeroTip();},0);});
         h._abEls[ai]=el;
+      }else{
+        bindHeroAbilityTip(el,ab);
       }
       abrow.appendChild(el);
     }
-    const av=document.createElement('div'); av.className='av'; av.style.background=d.col; av.textContent=d.face; av.title=tName('hero',d.name);
-    slot.appendChild(abrow); slot.appendChild(av); bar.appendChild(slot);
+    slot.appendChild(av); slot.appendChild(abrow); bar.appendChild(slot);
   }
   if(hs.length<HERO_SLOTS_MAX){                // есть свободный слот → кнопка призыва (и в онлайне тоже)
-    const slot=document.createElement('div'); slot.className='heroSlot';
-    const sp=document.createElement('div'); sp.className='abrow';
+    const slot=document.createElement('div'); slot.className='heroSlot addSlot';
     const av=document.createElement('div'); av.className='av add'; av.textContent='+'; av.title=t('panel.summon_hero_title');
     av.addEventListener('click',openHeroPick);
-    slot.appendChild(sp); slot.appendChild(av); bar.appendChild(slot);
+    slot.appendChild(av); bar.appendChild(slot);
   }
   refreshHeroBar();
 }
@@ -169,7 +179,10 @@ function refreshHeroBar(){
     const actives=d.abilities.filter(a=>a.kind==='active');
     for(let ai=0;ai<actives.length;ai++){ const el=h._abEls[ai]; if(!el)continue;
       const cd=(h.cd&&h.cd[ai])||0; const ov=el.querySelector('.cd'); if(!ov)continue;
-      if(cd>0){ov.style.display='flex';ov.textContent=Math.ceil(cd);}else ov.style.display='none'; } }
+      if(cd>0){
+        ov.style.display='flex';ov.textContent=Math.ceil(cd);el.classList.add('cooling');
+        if(heroTipEl===el||el.matches(':hover,:focus'))hideHeroTip();
+      }else{ ov.style.display='none'; el.classList.remove('cooling'); } } }
 }
 function buildHeroPick(){
   const list=document.getElementById('heroList'); if(!list)return; list.innerHTML='';

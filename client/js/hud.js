@@ -368,7 +368,9 @@ function updateHUD(){
   document.getElementById('hPolRate').textContent='+'+(politRate(PLAYER)+bPol).toFixed(2)+t('hud.per_sec');
   {const mp=Math.floor(manpower[PLAYER]||0), mpcap=Math.round(manpowerCap(PLAYER));
    const hmp=document.getElementById('hMp'); hmp.textContent=mp; hmp.style.color=mp<mpcap*0.12?'#ff7a6a':'';
-   document.getElementById('hMpCap').textContent=mpcap;}
+   document.getElementById('hMpCap').textContent=mpcap;
+   const bMp=window.mapBuildingIncomeRate?window.mapBuildingIncomeRate(PLAYER,'manpower'):0;
+   const mpr=document.getElementById('hMpRate'); if(mpr)mpr.textContent='+'+((typeof manpowerRate==='function'?manpowerRate(PLAYER):0)+bMp).toFixed(1)+t('hud.per_sec');}
   // Cities / Rank / Factions-alive / Army убраны из топбара
   document.getElementById('sbTech').classList.toggle('active',!!techWinOpen);
   document.getElementById('sbPol').classList.toggle('active',!!polWinOpen);

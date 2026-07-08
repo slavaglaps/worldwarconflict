@@ -33,6 +33,7 @@
   // который initLocalSim зовёт ДО buildWorld). До постройки карты _visualTopByCell/_brTops пусты → высота
   // деградирует к рельефу тайлов, а точные samples перепекутся при buildWorld (он безусловно перезаписывает HEXROADS).
   let _visualTopByCell = new Map(), _brTops = [], _roadTopByCell = new Map();
+  const _cellKey = (a, b) => a * 100003 + b;   // числовой ключ клетки (a,b — целые индексы 0..GRID): без аллокации строки на юнит/кадр в hexGroundY/roadPtY
   const ROAD_SAMPLE_STEP = 0.12;
   // БИЛИНЕЙНАЯ высота рельефа: гладкая рампа между клетками (без ступенек nearest-cell). На подъёме
   // наклонный road-тайл идёт от elev низкой клетки к elev высокой — билинейка даёт ту же рампу,
@@ -41,7 +42,7 @@
     if (typeof tiles === 'undefined' || !tiles) return null;
     const x0 = Math.floor(x), z0 = Math.floor(z), fx = x - x0, fz = z - z0;
     // на дорожных клетках предпочитаем ВЕРХ ПОДНЯТОГО road-тайла (насыпь/рампа), иначе — рельеф клетки
-    const at = (px, pz) => { const rt = _roadTopByCell.get(px + ',' + pz); if (rt != null) return rt; const c = tiles[px]; const t = c && c[pz]; return (t && t.topY != null && !t.isWater) ? t.topY : null; };
+    const at = (px, pz) => { const rt = _roadTopByCell.get(_cellKey(px, pz)); if (rt != null) return rt; const c = tiles[px]; const t = c && c[pz]; return (t && t.topY != null && !t.isWater) ? t.topY : null; };
     let h00 = at(x0, z0), h10 = at(x0 + 1, z0), h01 = at(x0, z0 + 1), h11 = at(x0 + 1, z0 + 1);
     const valid = [h00, h10, h01, h11].filter((v) => v != null);
     if (!valid.length) return null;
@@ -53,7 +54,7 @@
   const roadPtY = (x, z) => {
     let h = _bilinearTopY(x, z);
     if (h == null) h = (typeof getTerrainHeight === 'function') ? getTerrainHeight(x, z) : -Infinity;
-    const vt = _visualTopByCell.get(Math.round(x) + ',' + Math.round(z));   // sloped/override-полотно своей клетки
+    const vt = _visualTopByCell.get(_cellKey(Math.round(x), Math.round(z)));   // sloped/override-полотно своей клетки
     if (vt != null) h = Math.max(h, vt);
     if (!Number.isFinite(h)) h = 0;
     for (const br of _brTops) { const d2 = (br.gx - x) * (br.gx - x) + (br.gz - z) * (br.gz - z); if (d2 < 0.9 * 0.9 && br.top > h) h = br.top; }
@@ -66,7 +67,7 @@
   window.hexGroundY = (x, z) => {
     let h = _bilinearTopY(x, z);
     if (h == null) h = (typeof getTerrainHeight === 'function') ? getTerrainHeight(x, z) : -Infinity;
-    const vt = _visualTopByCell.get(Math.round(x) + ',' + Math.round(z));
+    const vt = _visualTopByCell.get(_cellKey(Math.round(x), Math.round(z)));
     if (vt != null && vt > h) h = vt;
     return Number.isFinite(h) ? h : -Infinity;
   };
@@ -649,7 +650,7 @@
         const textureKey = biomeTextureKey(biome), tileBucket = tk + ':' + textureKey;
         const isSloped = isSlopedTileAsset(tk);
         const visualTop = (elev + (isSloped ? yOffset : 0)) * kY;
-        visualTopByCell.set(Math.round(gx) + ',' + Math.round(gz), visualTop);
+        visualTopByCell.set(_cellKey(Math.round(gx), Math.round(gz)), visualTop);
         (tileByKey[tileBucket] || (tileByKey[tileBucket] = { modelKey: tk, textureKey, list: [] })).list.push({ gx, gz, top: visualTop, scaleTop: elev * kY, ry: try_, biome, col: String(tk).startsWith('coast') ? WHITE : tileInstanceColor(biome) });
       } else if (rk) {                            // речной тайл — только модель реки
         (rivByKey[rk] || (rivByKey[rk] = [])).push({ gx, gz, top: elev * kY, ry: rry, q, r });
@@ -665,7 +666,7 @@
         //   Иначе roadPtY брал рельеф и юнит проваливался под насыпь/рампу. Заполняем МАКСИМУМОМ (только вверх).
         const rxi = Math.round(gx), rzi = Math.round(gz);
         for (let aa = -1; aa <= 1; aa++) for (let bb = -1; bb <= 1; bb++) {
-          const rk2 = (rxi + aa) + ',' + (rzi + bb), cur = _roadTopByCell.get(rk2);
+          const rk2 = _cellKey(rxi + aa, rzi + bb), cur = _roadTopByCell.get(rk2);
           if (cur == null || roadTop > cur) _roadTopByCell.set(rk2, roadTop);
         }
         (roadByKey[roadBucket] || (roadByKey[roadBucket] = { modelKey: dk, textureKey, list: [] })).list.push({ gx, gz, top: roadTop, scaleTop: elev * kY, ry: dry, q, r, biome, col: landInstanceColor(biome, colHex) });
