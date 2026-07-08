@@ -7,7 +7,7 @@ const { Squad } = require('./Squad');
 const { Ship } = require('./Ship');
 const { Plane } = require('./Plane');
 const { SpatialGrid } = require('./SpatialGrid');
-const { nearestWaterPoint, isWaterAt } = require('./water');
+const { nearestWaterPoint, isWaterAt, isOpenWater } = require('./water');
 const { recomputeTech, nodeReady } = require('./tech');
 const { makeBalance, makeConstants, factionBal } = require('./balance');
 
@@ -104,8 +104,12 @@ class Sim {
   _ek(a, b) { return a < b ? a + '_' + b : b + '_' + a; }
   edgeBetween(a, b) { return this.edgeKey.get(this._ek(a, b)); }
   _buildGraph(edges) {
+    const MIN = (this.K && this.K.SEA_MIN_OPEN) || 1.5;
     for (const e of edges) {
-      const edge = { a: e.a, b: e.b, type: e.type, len: e.len, mult: e.mult, pts: Array.isArray(e.pts) ? e.pts : null };
+      const pts = Array.isArray(e.pts) ? e.pts : null;
+      // МОРСКОЕ ребро вычисляем ОДИН РАЗ по длине ОТКРЫТОЙ воды (5×5) вдоль полилинии — надёжно, не зависит от
+      //   того, откуда отряд входит в воду (островной город-исток сам на «водной» клетке → скан входа не срабатывал).
+      const edge = { a: e.a, b: e.b, type: e.type, len: e.len, mult: e.mult, pts, sea: this._edgeSea(pts, MIN) };
       this.edgeKey.set(this._ek(e.a, e.b), edge);
       if (!this.adj.has(e.a)) this.adj.set(e.a, []);
       if (!this.adj.has(e.b)) this.adj.set(e.b, []);
@@ -113,21 +117,38 @@ class Sim {
       this.adj.get(e.b).push({ to: e.a, edge });
     }
   }
+  _edgeSea(pts, MIN) {
+    if (!pts || pts.length < 2) return false;
+    let open = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 1], p1 = pts[i], seg = Math.hypot(p1.x - p0.x, p1.z - p0.z), n = Math.max(1, Math.ceil(seg / 0.4));
+      for (let s = 0; s < n; s++) { const t = s / n, x = p0.x + (p1.x - p0.x) * t, z = p0.z + (p1.z - p0.z) * t; if (isWaterAt(x, z) && isOpenWater(x, z)) open += seg / n; }
+    }
+    return open >= MIN;
+  }
   // Дейкстра: путь от from к to для владельца owner. Пройти через узел можно если он свой/союзный
   // (canPass); цель — исключение (по ней бьём). null если недостижимо.
   findPath(fromIdx, toIdx, owner, allowEnemy = false) {
     if (fromIdx === toIdx || !this.adj.size) return null;
     const dist = new Map([[fromIdx, 0]]), prev = new Map(), seen = new Set();
-    const pq = [[0, fromIdx]];
-    while (pq.length) {
-      let bi = 0; for (let i = 1; i < pq.length; i++) if (pq[i][0] < pq[bi][0]) bi = i;
-      const [d, u] = pq.splice(bi, 1)[0];
+    // бинарная min-куча по dist: O(E log V) вместо O(V²) (линейный extract-min + splice тормозил AI-таргетинг и cmdSend).
+    //   Ленивое удаление: устаревшие записи отбрасываются через seen. Явные swap'ы без деструктуризации — без аллокаций в куче.
+    const hd = [0], hn = [fromIdx];   // параллельные массивы: hd[i]=дистанция, hn[i]=узел
+    const swap = (i, j) => { const a = hd[i]; hd[i] = hd[j]; hd[j] = a; const b = hn[i]; hn[i] = hn[j]; hn[j] = b; };
+    const push = (d, n) => { hd.push(d); hn.push(n); let i = hd.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (hd[p] <= hd[i]) break; swap(p, i); i = p; } };
+    const pop = () => {
+      const d = hd[0], n = hn[0], ld = hd.pop(), ln = hn.pop();
+      if (hd.length) { hd[0] = ld; hn[0] = ln; let i = 0; const L = hd.length; for (;;) { let m = i, l = 2 * i + 1, r = 2 * i + 2; if (l < L && hd[l] < hd[m]) m = l; if (r < L && hd[r] < hd[m]) m = r; if (m === i) break; swap(m, i); i = m; } }
+      return [d, n];
+    };
+    while (hd.length) {
+      const [d, u] = pop();
       if (seen.has(u)) continue; seen.add(u);
       if (u === toIdx) break;
       for (const { to, edge } of (this.adj.get(u) || [])) {
         if (!allowEnemy && to !== toIdx && !this.canPass(owner, this.cities[to].owner)) continue;
         const nd = d + edge.len / (this.K.SQUAD_SPEED * edge.mult);
-        if (nd < (dist.get(to) ?? Infinity)) { dist.set(to, nd); prev.set(to, u); pq.push([nd, to]); }
+        if (nd < (dist.get(to) ?? Infinity)) { dist.set(to, nd); prev.set(to, u); push(nd, to); }
       }
     }
     if (!prev.has(toIdx)) return null;
@@ -285,10 +306,7 @@ class Sim {
     this.airOrder[fid] = null; return true;                               // отзыв
   }
   cmdBuildAA(fid, idx) {
-    const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ || (c.aa | 0) >= this.K.AA_MAX) return false;
-    const cost = (this.K.AA_COST_BASE + (c.aa | 0) * this.K.AA_COST_STEP);
-    if (this.gold[fid] < cost || (this.manpower[fid] || 0) < this.K.AA_MP) return false;
-    this.gold[fid] -= cost; this.manpower[fid] -= this.K.AA_MP; c.aa = (c.aa | 0) + 1; return true;
+    return false;
   }
 
   // ⚔ башни atk-городов: (A) точечная оборона — осаждающие/ближайший мобильный враг;
@@ -312,10 +330,12 @@ class Sim {
           }
         }
         if (!fired) {
+          // grid-поиск ближайшего врага вместо линейного скана всех сущностей: squadGrid/navalGrid/airGrid уже
+          //   построены боевыми фазами В ЭТОМ ЖЕ тике (fieldBattles/naval/airBattles идут до cityTowers).
           let best = null, bd = range * range, kind = null;
-          for (const s of this.squads) { if (s.fcount < this.K.UNIT_MIN || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 's'; } }
-          for (const s of this.ships) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } }
-          for (const s of this.planes) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } }
+          this.squadGrid.queryWithin(c.gx, c.gz, range, (s) => { if (s.fcount < this.K.UNIT_MIN || !this.atWar(c.owner, s.owner)) return; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 's'; } });
+          this.navalGrid.queryWithin(c.gx, c.gz, range, (s) => { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) return; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } });
+          this.airGrid.queryWithin(c.gx, c.gz, range, (s) => { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) return; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; kind = 'h'; } });
           // _clientTowerDmg (соло): сим только выбирает цель и сбрасывает таймер — урон по юниту наносит клиент В МОМЕНТ ПОПАДАНИЯ трассера.
           if (best) { c.fireTimer = 0; if (!this._clientTowerDmg) { if (kind === 's') best.fcount -= c.fireDmg; else best.hp -= c.fireDmg; } }
         }
@@ -328,21 +348,31 @@ class Sim {
     for (const c of this.cities) {
       if ((c.aa | 0) <= 0) continue;
       c.aaTimer += dt; if (c.aaTimer < this.K.AA_CD) continue;
-      let best = null, bd = this.K.AA_RANGE * this.K.AA_RANGE;
-      for (const s of this.planes) { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) continue; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; } }
+      const R = this.K.AA_RANGE; let best = null, bd = R * R;
+      this.airGrid.queryWithin(c.gx, c.gz, R, (s) => { if (s.hp <= 0 || !this.atWar(c.owner, s.owner)) return; const dx = c.gx - s.x, dz = c.gz - s.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = s; } });
       if (!best) continue;
       c.aaTimer = 0; best.hp -= this.K.AA_DMG * c.aa;
     }
   }
+  // статичный grid городов (позиции неизменны; владелец/война проверяются в колбэке живьём).
+  //   Перестраивается только при изменении числа городов (постройка верфи-подгорода) — обычно один раз.
+  _ensureCityGrid() {
+    if (this._cityGrid && this._cityGridN === this.cities.length) return this._cityGrid;
+    const g = this._cityGrid = new SpatialGrid(8);
+    for (const c of this.cities) g.insert(c, c.gx, c.gz);
+    this._cityGridN = this.cities.length;
+    return g;
+  }
   // 🚀 обстрел берега: корабль с tech shipMissile бьёт ближайший вражеский город/отряд в радиусе
   shipBombard(dt) {
+    const cityGrid = this._ensureCityGrid();   // grid городов + squadGrid (построен fieldBattles в этом тике) → без O(ships×(cities+squads))
     for (const s of this.ships) {
       if (s.hp <= 0 || !this.techFlag(s.owner, 'shipMissile')) continue;
       s.fireTimer += dt; if (s.fireTimer < this.K.SHIP_FIRE_CD) continue;
       const R = this.K.SHIP_ATTACK_RANGE * this.techVal(s.owner, 'sr'), R2 = R * R;
       let best = null, bd = R2, city = false;
-      for (const c of this.cities) { if (c.owner === s.owner || !this.atWar(s.owner, c.owner)) continue; const dx = s.x - c.gx, dz = s.z - c.gz, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = c; city = true; } }
-      for (const q of this.squads) { if (!this.atWar(s.owner, q.owner)) continue; const dx = s.x - q.x, dz = s.z - q.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = q; city = false; } }
+      cityGrid.queryWithin(s.x, s.z, R, (c) => { if (c.owner === s.owner || !this.atWar(s.owner, c.owner)) return; const dx = s.x - c.gx, dz = s.z - c.gz, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = c; city = true; } });
+      this.squadGrid.queryWithin(s.x, s.z, R, (q) => { if (q.fcount < this.K.UNIT_MIN || !this.atWar(s.owner, q.owner)) return; const dx = s.x - q.x, dz = s.z - q.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = q; city = false; } });
       if (!best) continue;
       s.fireTimer = 0;
       if (city) {
@@ -462,11 +492,6 @@ class Sim {
         if (rng() < A.researchEarlyExit) return;
       }
     }
-    // ПВО: если воюет — иногда ставит зенитку (контра вражеской авиации)
-    if (rng() < A.aaProb && this.warList(fid).length > 0) {
-      const aac = mine.filter(c => (c.aa | 0) < this.K.AA_MAX && this.gold[fid] >= (this.K.AA_COST_BASE + (c.aa | 0) * this.K.AA_COST_STEP) + A.aaGoldBuffer);
-      if (aac.length) this.cmdBuildAA(fid, aac[(rng() * aac.length) | 0].idx);
-    }
     // армия: набор, прокачка, отправка на лучшую цель
     if (this.squads.filter(s => s.owner === fid).length > A.squadCap) return;
     const buildable = mine.filter(c => !c.occ); if (!buildable.length) return;
@@ -483,8 +508,15 @@ class Sim {
     }
     if (src.units < A.minArmy) return;
     const cand = new Map();
-    for (const t of this.cities) {
-      if (t.owner === fid) continue;
+    // кандидаты — только ближайшие N чужих городов по евклиду от src, а не findPath до КАЖДОГО города (было ~230
+    //   Дейкстр за один think). Эффективная цель всё равно берётся из фронтира пути, а ближайшие города — самые
+    //   вероятные фронтиры. Лимит тюнится через balance (A.candLimit).
+    const enemies = [];
+    for (const t of this.cities) { if (t.owner !== fid) enemies.push(t); }
+    enemies.sort((a, b) => ((a.gx - src.gx) ** 2 + (a.gz - src.gz) ** 2) - ((b.gx - src.gx) ** 2 + (b.gz - src.gz) ** 2));
+    const candLimit = A.candLimit || 14;
+    for (let ei = 0; ei < enemies.length && ei < candLimit; ei++) {
+      const t = enemies[ei];
       const path = this.findPath(src.idx, t.idx, fid); if (!path) continue;
       let effIdx = path[path.length - 1];
       for (let i = 1; i < path.length; i++) if (this.cities[path[i]].owner !== fid) { effIdx = path[i]; break; }
@@ -688,8 +720,15 @@ class Sim {
   }
   // поддержка союзника/соседа: перевод голды min(supportMax, своя голда), не ниже supportMin.
   // Возвращает {ok, amt, to} — GameRoom шлёт точный ack призвавшему (сумма + получатель), при нехватке — denied.
+  // граница по общему ребру: у fid есть город, смежный (в графе дорог) с городом t. O(cities×adj), но зовётся редко.
+  _shareBorder(a, b) {
+    for (const c of this.cities) { if (c.owner !== a) continue; for (const n of (this.adj.get(c.idx) || [])) if (this.cities[n.to].owner === b) return true; }
+    return false;
+  }
   cmdSupport(fid, t) {
     if (!this.validFaction(fid) || !this.validFaction(t) || fid === t) return { ok: false };
+    // только союзнику ИЛИ соседу (как заявлено в контракте) — иначе перевод голды был читом/сговором между любыми фракциями.
+    if (!this.allied(fid, t) && !this._shareBorder(fid, t)) return { ok: false };
     const amt = Math.min(this.B.politics.supportMax, this.gold[fid] | 0); if (amt < this.B.politics.supportMin) return { ok: false };
     this.gold[fid] -= amt; this.gold[t] = (this.gold[t] || 0) + amt; return { ok: true, amt, to: t };
   }
@@ -770,7 +809,7 @@ class Sim {
   }
   cmdUpgrade(fid, idx, track) {
     const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ) return false;
-    if (!['prod', 'def', 'atk'].includes(track)) return false;
+    if (!['prod', 'def'].includes(track)) return false;
     c.migrateTiers();
     const tier = c.branchTier(track);
     if (tier >= this.K.MAX_TIER) return false;

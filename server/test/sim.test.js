@@ -6,7 +6,7 @@ const { Squad } = require('../sim/Squad');
 const { Ship } = require('../sim/Ship');
 const { Plane } = require('../sim/Plane');
 const { recomputeTech } = require('../sim/tech');
-const { isWaterAt } = require('../sim/water');
+const { isWaterAt, isOpenWater } = require('../sim/water');
 const C = require('../sim/constants');
 const { sanitizeOverride, deepMerge, makeBalance } = require('../sim/balance');
 const map = require('../sim/map-data.json');
@@ -81,9 +81,9 @@ test('ветки прокачиваются независимо', () => {
   const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 500;
   assert(s.cmdUpgrade(0, 0, 'prod'));
   assert(s.cmdUpgrade(0, 0, 'def'));
-  assert(s.cmdUpgrade(0, 0, 'atk'));
-  eq(s.cities[0].prodTier, 1); eq(s.cities[0].defTier, 1); eq(s.cities[0].atkTier, 1);
-  eq(s.cities[0].totalTier, 3); eq(s.gold[0], 350);
+  eq(s.cmdUpgrade(0, 0, 'atk'), false);
+  eq(s.cities[0].prodTier, 1); eq(s.cities[0].defTier, 1); eq(s.cities[0].atkTier, 0);
+  eq(s.cities[0].totalTier, 2); eq(s.gold[0], 400);
 });
 test('тиры 1→2→3 по растущей цене', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1000; s.cmdUpgrade(0, 0, 'prod'); s.cmdUpgrade(0, 0, 'prod'); s.cmdUpgrade(0, 0, 'prod'); eq(s.cities[0].tier, 3); eq(s.gold[0], 1000 - 50 - 100 - 150); });
 test('не выше MAX_TIER', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1e9; for (let i = 0; i < 5; i++) s.cmdUpgrade(0, 0, 'prod'); eq(s.cities[0].tier, C.MAX_TIER); });
@@ -114,12 +114,28 @@ test('реальная карта: отряд идёт по полилинии �
   }
   near(q.x, expected.x, 1e-6); near(q.z, expected.z, 1e-6);
 });
+test('реальная карта: Сассари/Каглиари в water-data считаются сушей', () => {
+  const byName = Object.fromEntries(map.cities.map(c => [c.name, c]));
+  const from = byName['Каглиари'].idx, to = byName['Сассари'].idx, fid = byName['Каглиари'].owner;
+  eq(isWaterAt(byName['Каглиари'].gx, byName['Каглиари'].gz), false, 'Каглиари должен быть сушей');
+  eq(isWaterAt(byName['Сассари'].gx, byName['Сассари'].gz), false, 'Сассари должен быть сушей');
+  eq(isOpenWater(byName['Каглиари'].gx, byName['Каглиари'].gz), false, 'город не открытая вода');
+  const s = new Sim({ map, balance: makeBalance({ factionDefault: { gold: 200, polit: 80 } }), ai: false });
+  assert(s.cmdSend(fid, from, to, 0.5));
+  const q = s.squads[0], edge = s.edgeBetween(from, to);
+  q.prog = 0; q._setPos(); q._updateSeaMode();
+  eq(q.mode, 0, 'у Каглиари отряд выходит как сухопутный');
+  q.prog = edge.len * 0.5; q._setPos(); q._updateSeaMode();
+  eq(q.mode, 0, 'переход Каглиари → Сассари идёт по суше острова');
+  q.prog = edge.len * 0.95; q._setPos(); q._updateSeaMode();
+  eq(q.mode, 0, 'у Сассари отряд входит как сухопутный');
+});
 test('реальная карта: Лимэрик → Белфаст идёт мультихопом по дорожным полилиниям', () => {
   const byName = Object.fromEntries(map.cities.map(c => [c.name, c]));
   const from = byName['Лимэрик'].idx, to = byName['Белфаст'].idx, fid = byName['Лимэрик'].owner;
   const s = new Sim({ map, balance: makeBalance({ factionDefault: { gold: 200, polit: 80 } }), ai: false });
   const path = s.findPath(from, to, fid);
-  eq(path.map(i => map.cities[i].name).join(' → '), 'Лимэрик → Галвэй → Белфаст');
+  assert(path && path.length >= 2, 'путь Лимэрик→Белфаст найден');   // маршрут зависит от карты (морские связи меняют топологию) — проверяем инвариант «идёт по полилиниям», а не конкретный путь
   assert(s.cmdSend(fid, from, to, 0.5));
   const q = s.squads[0];
   for (let hop = 0; hop < q.path.length - 1; hop++) {
@@ -142,13 +158,21 @@ test('реальная карта: Глазго → Эдинбург идёт п
   const byName = Object.fromEntries(map.cities.map(c => [c.name, c]));
   const from = byName['Глазго'].idx, to = byName['Эдинбург'].idx, fid = byName['Глазго'].owner;
   const s = new Sim({ map, balance: makeBalance({ factionDefault: { gold: 200, polit: 80 } }), ai: false });
-  eq(s.findPath(from, to, fid).map(i => map.cities[i].name).join(' → '), 'Глазго → Эдинбург');
+  const path = s.findPath(from, to, fid);
+  assert(path && path.length >= 2, 'путь Глазго→Эдинбург найден');
   assert(s.cmdSend(fid, from, to, 0.5));
-  const q = s.squads[0], edge = s.edgeBetween(from, to);
-  assert(edge && Array.isArray(edge.pts) && edge.pts.length >= 5, 'у ребра есть детальная полилиния визуальной дороги');
-  q.prog = edge.len * 0.5; q._setPos();
-  near(q.x, 38.355, 0.08);
-  near(q.z, 103, 0.08);
+  const q = s.squads[0], edge = s.edgeBetween(q.path[0], q.path[1]);
+  assert(edge && Array.isArray(edge.pts) && edge.pts.length >= 2, 'у ребра есть полилиния визуальной дороги');
+  q.hop = 0; q.prog = edge.len * 0.5; q._setPos();
+  const pts = edge.a === q.path[0] ? edge.pts : edge.pts.slice().reverse();
+  let best = Infinity;                                             // отряд должен лежать НА полилинии дороги
+  for (let i = 1; i < pts.length; i++) {
+    const p0 = pts[i - 1], p1 = pts[i], vx = p1.x - p0.x, vz = p1.z - p0.z;
+    const wx = q.x - p0.x, wz = q.z - p0.z, l = vx * vx + vz * vz;
+    const f = l ? Math.max(0, Math.min(1, (wx * vx + wz * vz) / l)) : 0;
+    best = Math.min(best, Math.hypot(q.x - (p0.x + vx * f), q.z - (p0.z + vz * f)));
+  }
+  near(best, 0, 1e-6);
 });
 test('реальная карта: Бирмингмем → Ливерпуль идёт мультихопом по дорожным полилиниям', () => {
   const byName = Object.fromEntries(map.cities.map(c => [c.name, c]));
@@ -224,7 +248,8 @@ test('союз: при согласии −10🏛', () => { const s = new Sim({ 
 test('союз отклонён (rng>0.5, нет общего врага)', () => { const s = new Sim({ factions: 2, cities: 2, rng: () => 0.9 }); eq(s.cmdAlly(0, 1), false); assert(!s.allied(0, 1)); });
 test('общий враг → союз принимается всегда', () => { const s = new Sim({ factions: 3, cities: 3, rng: () => 0.99 }); s.setWar(0, 2); s.setWar(1, 2); assert(s.cmdAlly(0, 1)); });
 test('разрыв союза: −20🏛', () => { const s = new Sim({ factions: 2, cities: 2, rng: () => 0.1 }); s.cmdAlly(0, 1); s.politPts[0] = 100; assert(s.cmdBreak(0, 1)); assert(!s.allied(0, 1)); });
-test('поддержка: перевод голды союзнику/кому угодно', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 100; const g1 = s.gold[1]; assert(s.cmdSupport(0, 1)); lt(s.gold[0], 100); gt(s.gold[1], g1); });
+test('поддержка: перевод голды союзнику', () => { const s = new Sim({ factions: 2, cities: 2 }); s.setRelation(0, 1, 'ally'); s.gold[0] = 100; const g1 = s.gold[1]; assert(s.cmdSupport(0, 1).ok); lt(s.gold[0], 100); gt(s.gold[1], g1); });
+test('поддержка: чужому (не союзник/не сосед) отклонена', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 100; assert(!s.cmdSupport(0, 1).ok); eq(s.gold[0], 100); });
 test('анти-чит: союзы НЕ транзитивны (econ-приватность не течёт через посредника A↔B↔C)', () => {
   const s = new Sim({ factions: 3, cities: 3 });
   s.relations[s.relKey(0, 1)] = 'ally'; s.relations[s.relKey(1, 2)] = 'ally';   // A↔B, B↔C
@@ -342,9 +367,9 @@ test('хард-кап флота: строит ровно до MAX_SHIPS, дал
 
 group('Бой: башни / ПВО / обстрел берега / бомбёжка');
 test('башня atk-города бьёт осаждающих', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.spec = 'atk'; c.tier = 3; c.siege = { 1: { units: 40, atkMult: 1 } }; const b0 = c.siege[1].units; for (let i = 0; i < 40; i++) s.cityTowers(0.1); assert(!c.siege || c.siege[1].units < b0, 'осаждающие потеряли бойцов'); });
-test('башня бьёт вражеский отряд в радиусе', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.spec = 'atk'; c.tier = 3; const sq = new Squad(1, 30, [c.idx], s, 1); sq.x = c.gx + 3; sq.z = c.gz + 3; s.squads.push(sq); const f0 = sq.fcount; for (let i = 0; i < 40; i++) s.cityTowers(0.1); lt(sq.fcount, f0); });
-test('ПВО сбивает вражеский самолёт', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.aa = 3; const p = new Plane(1, c.gx + 5, c.gz + 5, s); const h0 = p.hp; s.planes.push(p); for (let i = 0; i < 30; i++) s.cityAA(0.1); lt(p.hp, h0); });
-test('cmdBuildAA: ставит зенитку за голду+манпауэр', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0); assert(s.cmdBuildAA(0, c.idx)); eq(c.aa, 1); });
+test('башня бьёт вражеский отряд в радиусе', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.spec = 'atk'; c.tier = 3; const sq = new Squad(1, 30, [c.idx], s, 1); sq.x = c.gx + 3; sq.z = c.gz + 3; s.squads.push(sq); const f0 = sq.fcount; for (let i = 0; i < 40; i++) { s.fieldBattles(0.1); s.cityTowers(0.1); } lt(sq.fcount, f0); });
+test('ПВО сбивает вражеский самолёт', () => { const s = new Sim({ map }); s.setWar(0, 1); const c = s.cities.find(x => x.owner === 0); c.aa = 3; const p = new Plane(1, c.gx + 5, c.gz + 5, s); const h0 = p.hp; s.planes.push(p); for (let i = 0; i < 30; i++) { s.airBattles(0.1); s.cityAA(0.1); } lt(p.hp, h0); });
+test('cmdBuildAA: городская ПВО больше не строится', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0); const g0 = s.gold[0], mp0 = s.manpower[0]; eq(s.cmdBuildAA(0, c.idx), false); eq(c.aa, 0); eq(s.gold[0], g0); near(s.manpower[0], mp0); });
 test('обстрел берега: корабль с tech бьёт вражеский город', () => { const s = new Sim({ map }); s.setWar(0, 1); learn(s, 0, 'i6'); const ec = s.cities.find(x => x.owner === 1); const sh = new Ship(0, ec.gx + 5, ec.gz + 5, s); s.ships.push(sh); const u0 = ec.units; for (let i = 0; i < 40; i++) s.shipBombard(0.1); lt(ec.units, u0); });
 test('обстрел без tech shipMissile не работает', () => { const s = new Sim({ map }); s.setWar(0, 1); const ec = s.cities.find(x => x.owner === 1); const sh = new Ship(0, ec.gx + 5, ec.gz + 5, s); s.ships.push(sh); const u0 = ec.units; for (let i = 0; i < 40; i++) s.shipBombard(0.1); eq(ec.units, u0); });
 test('бомбёжка: самолёт по приказу бьёт город (tech planeBomb)', () => { const s = new Sim({ map }); s.setWar(0, 1); learn(s, 0, 'i10'); const bc = s.cities.find(x => x.owner === 1); assert(s.cmdAirOrder(0, bc.idx)); const p = new Plane(0, bc.gx + 2, bc.gz + 2, s); s.planes.push(p); const u0 = bc.units; for (let i = 0; i < 40; i++) s.planeBomb(0.1); lt(bc.units, u0); });

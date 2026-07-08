@@ -81,7 +81,7 @@ function applyPerfStressOnce(){
   perfStressApplied=true;
   for(const c of cities){
     if(c.isShipyard||c.isAirport)continue;
-    c.prodTier=3; c.defTier=3; c.atkTier=3; c.spec='atk'; c.tier=3;
+    c.prodTier=3; c.defTier=3; c.atkTier=0; c.spec='def'; c.tier=3;
     c.units=Math.max(c.units||0,220);
     if(typeof c.buildMeshes==='function')c.buildMeshes();
   }
@@ -272,17 +272,17 @@ function loop(now){
   const pill=document.createElement('div');
   pill.style.cssText='position:fixed;bottom:12px;right:12px;z-index:30;background:rgba(8,16,26,.85);color:#cfe0f0;'+
     'font-size:12px;font-weight:700;padding:8px 12px;border-radius:9px;user-select:none;border:1px solid rgba(120,150,180,.22);';
-  pill.textContent='🌐 MP: подключение…'; document.body.appendChild(pill);
+  pill.textContent=t('toast.mpConnecting'); document.body.appendChild(pill);
   const waitBanner=document.createElement('div');
   waitBanner.style.cssText='position:fixed;top:92px;left:50%;transform:translateX(-50%);z-index:31;display:none;'+
     'background:rgba(8,16,26,.92);color:#ffd23f;font-size:15px;font-weight:800;padding:12px 20px;border-radius:10px;'+
     'border:1px solid rgba(255,210,63,.45);box-shadow:0 6px 22px rgba(0,0,0,.5);';
-  waitBanner.textContent='⏳ Ожидание хоста — он выбирает страну…';
+  waitBanner.textContent=t('toast.waitHostCountry');
   document.body.appendChild(waitBanner);
-  function setPill(){ const role=MP.host?'ХОСТ':(MP.guest?'ГОСТЬ':'—');
-    const me=FACTIONS[PLAYER]?FACTIONS[PLAYER].country:'—';
-    const extra=MP.host?(` · людей: ${MP.humans?MP.humans.size:1}`+(gameSpeed===0?' · ⏸ ВЫБЕРИТЕ СТРАНУ':'')):'';
-    pill.textContent=`🌐 ${room} · ${role} · ${me} · игроков: ${MP.players||1}${extra}`; }
+  function setPill(){ const role=MP.host?t('toast.roleHost'):(MP.guest?t('toast.roleGuest'):'—');
+    const me=FACTIONS[PLAYER]?countryDisp(FACTIONS[PLAYER].country):'—';
+    const extra=MP.host?(t('toast.pillHumans',{n:MP.humans?MP.humans.size:1})+(gameSpeed===0?t('toast.pillPickCountry'):'')):'';
+    pill.textContent=`🌐 ${room} · ${role} · ${me} · `+t('toast.pillPlayers',{n:MP.players||1})+`${extra}`; }
 
   /* ── транспорт ── */
   MP.send=o=>{ const s=MP.sock; if(s&&s.readyState===1){ try{s.send(JSON.stringify(o));}catch(e){} } };
@@ -340,8 +340,13 @@ function loop(now){
       c.batches = queued>0 ? [{count:queued, time:Math.max(0.1,(prodTime||10)/10), elapsed:Math.min((prodTime||10)/10,(prodElapsed||0)/10)}] : [];
     if(shipQ!=null){ c.shipQueue=shipQ|0; c.shipTimer=(shipT||0)/10; }                            // ⚓ верфь: очередь + таймер
     if(planeQ!=null){ c.planeQueue=planeQ|0; c.planeTimer=(planeT||0)/10; }                       // ✈ аэродром: очередь + таймер
+    c.aa=0;                                                        // legacy ПВО больше не отображаем, даже если старый сервер прислал aa
     if(siegeUnits!=null) c.siege = siegeUnits>0 ? {[siegeOwner]:{units:siegeUnits,atkMult:1}} : null; // осада → орбы + кольцо боя + тряска
     if(compI!=null) c.comp={inf:compI,arc:compA||0,cav:compC||0};   // 👥 состав гарнизона (панель города)
+    else if(c.comp){
+      const sum=(c.comp.inf||0)+(c.comp.arc||0)+(c.comp.cav||0);
+      if(sum>0){ const k=Math.max(0,units)/sum; c.comp={inf:c.comp.inf*k,arc:c.comp.arc*k,cav:c.comp.cav*k}; }
+    }
     if(specChanged){ try{c.buildMeshes&&c.buildMeshes();}catch(e){} }
     if(prevOwner!==owner){
       try{c.recolor&&c.recolor();}catch(e){}
@@ -355,7 +360,7 @@ function loop(now){
       if(ns.includes(PLAYER)){ const o=ns.find(x=>x!==PLAYER); if(o!=null)curWar.add(o); } }
     for(const fid of curWar)if(!prevWar.has(fid)&&!playerStartedWarRecently(fid)){
       if(typeof notifyWarDeclared==='function')notifyWarDeclared(fid);
-      else toast(`⚔ ${FACTIONS[fid]?FACTIONS[fid].country:'Враг'} объявил вам войну!`);
+      else toast(t('toast.warDeclaredOn',{name:FACTIONS[fid]?countryDisp(FACTIONS[fid].country):t('toast.enemyWord')}));
     }
     prevWar=curWar;
   }
@@ -364,7 +369,7 @@ function loop(now){
     const cur=new Set();
     for(const k in relations)if(relations[k]==='ally'){ const ns=(k.match(/\d+/g)||[]).map(Number);
       if(ns.includes(PLAYER)){ const o=ns.find(x=>x!==PLAYER); if(o!=null)cur.add(o); } }
-    for(const fid of cur)if(!prevAlly.has(fid))toast(`🤝 Союз с ${FACTIONS[fid]?FACTIONS[fid].country:'страной'}`);
+    for(const fid of cur)if(!prevAlly.has(fid))toast(t('toast.allianceWith',{name:FACTIONS[fid]?countryDisp(FACTIONS[fid].country):t('toast.aCountryWord')}));
     prevAlly=cur;
   }
   /* ── гость: применить снапшот ── */
@@ -384,7 +389,7 @@ function loop(now){
     const lost=!mine&&![...MP.ghosts.values()].some(g=>g.owner===PLAYER&&g.kind===0);
     if(MP._synced && MP._sawRunning && document.getElementById('countryWin').style.display!=='flex'){
       const ov=document.getElementById('overlay');
-      if((m.over||lost)&&!gameOver){ gameOver=true; document.getElementById('ovTitle').textContent=mine?'Победа!':'Поражение'; ov.style.display='flex'; }
+      if((m.over||lost)&&!gameOver){ gameOver=true; document.getElementById('ovTitle').textContent=mine?t('toast.victory'):t('toast.defeat'); ov.style.display='flex'; }
       else if(!m.over&&mine&&gameOver){ gameOver=false; ov.style.display='none'; }
     }
   }
@@ -499,6 +504,8 @@ function loop(now){
     return null;
   }
   ensureShipModels();
+  // 🚢 ТРАНСПОРТ ПЕХОТЫ: сухопутные юниты остаются на обычном road stream,
+  //    а корабль — отдельная kind-1 сущность 'shq…' над водой с авторитетным курсом.
   function rebuildTypedUnits(){
     for(const gh of MP.ghosts.values())if(gh.kind===0&&gh.group?.userData){
       const ud=gh.group.userData;
@@ -549,6 +556,7 @@ function loop(now){
     for(const b of ghostShipBatches.values()){b.im.count=0;b.im.visible=false;}
     const byKey=new Map();
     for(const gh of MP.ghosts.values())if(gh.kind===1&&!gh.group.userData.fallbackShip){
+      if(gh.transport && typeof isWaterAt==='function' && !isWaterAt(gh.group.position.x,gh.group.position.z))continue;   // 🏝 транспорт НЕ рисуем над видимой сушей (не заезжает на остров)
       const key=shipKeyForOwner(gh.owner);
       const list=byKey.get(key)||[]; list.push(gh); byKey.set(key,list);
     }
@@ -637,7 +645,14 @@ function loop(now){
     const obj={kind,owner,group:g,lab,count:0,target:new T3.Vector3(),mat,isAir:kind===2,pos:g.position};
     g.userData.ghost=obj; return obj;
   }
-  function killGhost(gh){ scene.remove(gh.group); if(gh.lab)gh.lab.remove(); }
+  function killGhost(gh){ scene.remove(gh.group); if(gh.lab)gh.lab.remove();
+    // 🧹 диспоуз per-ghost GPU-ресурсов (утечка при высокой ротации отрядов): инстанс-буферы роя + собственный материал.
+    //    Геометрию/материал инстансов НЕ трогаем — они шареные (src.geo/src.mat общей модели); InstancedMesh.dispose()
+    //    освобождает только instanceMatrix/instanceColor. gh.mat — per-ghost MeshLambertMaterial (kind 0/2) / клон материала корабля.
+    const ud=gh.group.userData;
+    if(ud&&ud.tm){ for(const b of ud.tm){ if(b.mesh&&b.mesh.dispose)b.mesh.dispose(); if(b.acc&&b.acc.dispose)b.acc.dispose(); b.mesh=null; b.acc=null; } ud.tm=null; }
+    if(gh.mat&&gh.mat.dispose)gh.mat.dispose();
+  }
   // рой отряда-призрака: n мини-юнитов по диску (золотой угол) — зеркало солошного Squad._buildCluster
   const ghostUnitDummy=new T3.Object3D();
   ghostUnitDummy.rotation.order='YXZ';                                   // yaw (курс) → pitch (наклон в беге)
@@ -942,7 +957,12 @@ function loop(now){
       if(typeof isWaterAt==='function' && isWaterAt(fwx,fwz) && !isWaterAt(smp.x,smp.z)){
         let ok=false; for(let kk=0.7;kk>0;kk-=0.23){ const tx=smp.x+(fwx-smp.x)*kk, tz=smp.z+(fwz-smp.z)*kk; if(!isWaterAt(tx,tz)){ fwx=tx; fwz=tz; ok=true; break; } } if(!ok){ fwx=smp.x; fwz=smp.z; }
       }
-      ghostUnitDummy.position.set(fwx-p.x, (u.ey-p.y)+bob-(1-fadeK)*sc*0.7, fwz-p.z);
+      // 🛟 кламп высоты к реальной поверхности ПОД фактической позицией юнита (fwx,fwz): на высадке/подъёме
+      //    берега лерп u.ey отстаёт от растущей дороги, а боковое смещение (latW) уводит с оси на склон —
+      //    юнит проваливался под берег. max(u.ey, поверхность) поднимает только вверх (мосты/рампы не трогает).
+      let eyR=u.ey;
+      if(typeof hexGroundY==='function'){ const gy=hexGroundY(fwx,fwz)+0.05; if(gy>eyR)eyR=gy; }
+      ghostUnitDummy.position.set(fwx-p.x, (eyR-p.y)+bob-(1-fadeK)*sc*0.7, fwz-p.z);
       ghostUnitDummy.rotation.set(pitch, u.cy, 0);
       ghostUnitDummy.scale.set(sxz,sy2,sxz); ghostUnitDummy.updateMatrix();
       if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
@@ -1071,8 +1091,10 @@ function loop(now){
       let gh=MP.ghosts.get(id);
       if(!gh||gh.kind!==kind){ if(gh)killGhost(gh); gh=ghostMesh(kind,d[2]); MP.ghosts.set(id,gh); gh.group.position.set(d[3],d[4],d[5]); }
       gh._mpid=id; gh.target.set(d[3],d[4],d[5]);
+      if(kind===1){ gh.transport=(id.charCodeAt(0)===115&&id.charCodeAt(1)===104&&id.charCodeAt(2)===113); gh.authHeading=(d[7]!=null?d[7]:null); }  // 🚢 транспорт 'shq…' → авторитетный курс [7]
       if(kind===0&&gh.count>d[6])gh._dmgT=performance.now();               // 🔴 потери → красная вспышка метки
       gh.count=d[6]; gh.fighting=!!d[7];
+      gh.mode=d[14]|0; gh.seaHeading=d[16]||0;                                          // 🚢 режим / курс (рад)
       gh.edgeA=d[8]!=null?d[8]:null; gh.edgeB=d[9]!=null?d[9]:null; gh.frac=d[10]||0;   // текущее ребро пути → поток юнитов (UNIT_STREAM)
       gh.comp=d[11]!=null?{inf:d[11],arc:d[12]||0,cav:d[13]||0}:null;                    // 👥 состав отряда (для рендера/лейбла)
       if(kind===0)ghostSwarm(gh,unitsForCount(d[6])); seen.add(id);
@@ -1084,10 +1106,10 @@ function loop(now){
         // тает на месте — раньше убитый в пути отряд «прибывал», и его последний юнит бежал через полкарты к городу.
         const p=gh.group.position; let best=null;
         if(typeof cities!=='undefined'){ let bd=4; for(const c of cities){ if(!c)continue; const cx=c._visualGX==null?c.gx:c._visualGX, cz=c._visualGZ==null?c.gz:c._visualGZ; const d2=(cx-p.x)*(cx-p.x)+(cz-p.z)*(cz-p.z); if(d2<bd){bd=d2;best=[cx,cz];} } }
-        if(gh.fighting || !best || (gh.count||0)<1){                     // бой / вдали от города / пустой отряд → гаснет на месте
+        if(gh.fighting || !best || (gh.count||0)<1 || gh.mode===2){      // бой / вдали / пусто / 🚢 ещё море → гаснет на месте
           gh._perish=performance.now();
           if(gh.lab)gh.lab.style.display='none';
-        } else {                                                          // прибытие: заходит в здание
+        } else {                                                          // прибытие по суше: заходит в здание
           gh._dying=performance.now(); ud._dieAt=best;
           const f=ud.fwd||[1,0];
           ud.dieDir=[f[0],f[1]];                                          // курс входа фиксируем → колонна заходит СТРОГО прямо в центр здания
@@ -1098,12 +1120,18 @@ function loop(now){
     }
   }
 
+  const _labV=new T3.Vector3();   // переиспользуемый вектор проекции меток (без new Vector3 на метку/кадр)
   window.mpTick=(now,dt)=>{
     if(MP.host){ if(MP._lastGS!==gameSpeed){MP._lastGS=gameSpeed;setPill();}
       if(now-tSnap>140){tSnap=now;MP.send(buildSnap(now));}
       if(now-tEnt>70){tEnt=now;const ent=buildEnt();if(ent)MP.send(ent);} return; }
     if(!MP.guest)return;
     if(MP._lastFid!==PLAYER){ MP._lastFid=PLAYER; MP.send({t:'joinInfo',fid:PLAYER,country:PLAYER_COUNTRY}); setPill(); } // надёжно сообщаем хосту свою фракцию
+    // ⚔ grid дерущихся kind-0 ghost'ов (раз в кадр): поиск боевой цели становится O(1) на отряд вместо O(N²) по всем ghost'ам.
+    //    Ячейка = радиус пары (3). Позиции читаются живьём в поиске; ячейка с прошлого микро-шага — для facing-анимации точности хватает.
+    const FCELL=3, _fgrid=(MP._fgrid||(MP._fgrid=new Map())); _fgrid.clear();
+    const _fkey=(x,z)=>(((x/FCELL)|0)*100003+((z/FCELL)|0));
+    for(const g2 of MP.ghosts.values()){ if(g2.kind!==0||!g2.fighting)continue; const q=g2.group.position; const kk=_fkey(q.x,q.z); let a=_fgrid.get(kk); if(!a){a=[];_fgrid.set(kk,a);} a.push(g2); }
     for(const [id,gh] of MP.ghosts){
       const p=gh.group.position,t=gh.target,k=Math.min(1,dt*12),dx=t.x-p.x,dz=t.z-p.z;
       if(gh._perish){                                                     // ⚔ погиб в бою: гаснет на месте и снимается
@@ -1127,30 +1155,51 @@ function loop(now){
         if(gh.kind===0&&ud.orbs)placeGhostSwarm(gh,now);
         continue; }
       if(gh.kind===0){
-        p.x=t.x; p.z=t.z; p.y=unitGroundY(p.x,p.z);                 // сухопутные отряды уже sampled по визуальной дороге; lerp по хорде срезал повороты
+        if(gh.edgeA!=null){
+          p.x=t.x; p.z=t.z;                                         // sampled по визуальной дороге; lerp по хорде срезал бы повороты
+        }else{
+          p.x+=dx*k; p.z+=dz*k;                                     // online Colyseus без edge/frac приходит снапшотами → сглаживаем
+        }
+        p.y=unitGroundY(p.x,p.z);
       } else {
         p.x+=dx*k; p.y+=(t.y-p.y)*k; p.z+=dz*k;
-        if((gh.kind===1||gh.kind===2)&&dx*dx+dz*dz>1e-4)gh.group.rotation.y=-Math.atan2(dz,dx);   // нос моделей смотрит +X (как у солошного корабля) → разворот по курсу
+        if(gh.kind===1&&gh.authHeading!=null){                                                    // 🚢 транспорт: АВТОРИТЕТНЫЙ курс (сглажен) → не шатается, не зависит от дельт
+          const tgt=-gh.authHeading; gh._ry=(gh._ry==null)?tgt:gh._ry+angDiff(tgt,gh._ry)*Math.min(1,dt*8); gh.group.rotation.y=gh._ry;
+        } else if((gh.kind===1||gh.kind===2)&&dx*dx+dz*dz>1e-4)gh.group.rotation.y=-Math.atan2(dz,dx);   // нос моделей смотрит +X → разворот по курсу
       }
       if(gh.mat&&gh.mat.emissive)gh.mat.emissive.setHex(selectedUnits.has(gh)?0x1f6fc0:0x000000); // подсветка выбранных
       // ⚔ цель боя: ближайший ВРАЖЕСКИЙ дерущийся отряд рядом → передний ряд разворачивается к нему (боевая анимация)
       if(gh.kind===0){
         const ud2=gh.group.userData;
         if(gh.fighting){ let bt=null,bd2=9,bc=0;   // радиус поиска пары ~3 (позиции обоих уже впритык по симу)
-          for(const g2 of MP.ghosts.values()){ if(g2===gh||g2.kind!==0||g2.owner===gh.owner||!g2.fighting)continue;
-            const q=g2.group.position,ex=q.x-p.x,ez=q.z-p.z,dd2=ex*ex+ez*ez; if(dd2<bd2){bd2=dd2;bt=[q.x,q.z];bc=g2.count||1;} }
+          const cx=(p.x/FCELL)|0, cz=(p.z/FCELL)|0;   // только соседние ячейки grid'а бойцов (не все ghost'ы)
+          for(let ax=-1;ax<=1;ax++)for(let az=-1;az<=1;az++){ const a=_fgrid.get((cx+ax)*100003+(cz+az)); if(!a)continue;
+            for(let gi=0;gi<a.length;gi++){ const g2=a[gi]; if(g2===gh||g2.owner===gh.owner)continue;   // grid уже отфильтровал kind===0 && fighting
+              const q=g2.group.position,ex=q.x-p.x,ez=q.z-p.z,dd2=ex*ex+ez*ez; if(dd2<bd2){bd2=dd2;bt=[q.x,q.z];bc=g2.count||1;} } }
           ud2.battleTgt=bt; ud2.battleFoeCount=bc;   // счёт врага → агрессия победителя/дрожь меньшинства
         } else ud2.battleTgt=null;
         // 🎉 сцепка кончилась, отряд жив и не расходится → чир победы
         if(gh._wasF&&!gh.fighting&&!gh._dying&&(gh.count||0)>0)ud2.cheerT=0.9;
         gh._wasF=gh.fighting;
       }
-      if(gh.kind===0&&gh.group.userData.orbs)placeGhostUnits(gh,now);   // 🪖 юниты отряда: 🍄 поток по дороге / строй (бой, поле, откат UNIT_STREAM=false)
-      if(gh.lab && !gh._dying){ const v=new T3.Vector3(p.x,p.y+0.4,p.z).project(camera);
-        gh.lab.style.display=v.z<1?'block':'none';
-        gh.lab.style.left=(v.x*0.5+0.5)*innerWidth+'px'; gh.lab.style.top=(-v.y*0.5+0.5)*innerHeight+'px';
-        gh.lab.textContent=gh.count;
-        gh.lab.style.color=(gh._dmgT&&now-gh._dmgT<400)?'#ff6a6a':''; }   // 🔴 вспышка метки при потерях
+      if(gh.kind===0&&gh.group.userData.orbs){   // 🪖 юниты отряда: 🍄 поток по дороге / строй (бой, поле, откат UNIT_STREAM=false)
+        // гейт: не пересчитываем рой (и не перезаливаем инстанс-буфер) для СТАТИЧНОГО отряда — не двигался, не дерётся,
+        //   не чирит, число не менялось. Движущийся отряд (общий случай) рендерится всегда; экономит кадр на стоящих/паузе.
+        const ud0=gh.group.userData;
+        if(gh._lastUX==null||Math.abs(p.x-gh._lastUX)>1e-4||Math.abs(p.z-gh._lastUZ)>1e-4||gh.fighting||(ud0.cheerT>0)||gh.count!==gh._lastUC){
+          gh._lastUX=p.x; gh._lastUZ=p.z; gh._lastUC=gh.count; placeGhostUnits(gh,now); }
+      }
+      if(gh.lab && !gh._dying){ const v=_labV.set(p.x,p.y+0.4,p.z).project(camera);   // переиспользуемый вектор + запись в DOM ТОЛЬКО при изменении (без reflow каждый кадр)
+        const vis=v.z<1;
+        if(gh._labVis!==vis){ gh._labVis=vis; gh.lab.style.display=vis?'block':'none'; }
+        if(vis){
+          const lx=((v.x*0.5+0.5)*innerWidth)|0, ly=((-v.y*0.5+0.5)*innerHeight)|0;
+          if(lx!==gh._labX){ gh._labX=lx; gh.lab.style.left=lx+'px'; }
+          if(ly!==gh._labY){ gh._labY=ly; gh.lab.style.top=ly+'px'; }
+          if(gh.count!==gh._labN){ gh._labN=gh.count; gh.lab.textContent=gh.count; }
+          const col=(gh._dmgT&&now-gh._dmgT<400)?'#ff6a6a':'';   // 🔴 вспышка метки при потерях
+          if(col!==gh._labC){ gh._labC=col; gh.lab.style.color=col; }
+        } }
     }
     updateGhostShipBatches();
     updateGhostPlaneBatches();
@@ -1163,7 +1212,7 @@ function loop(now){
     const c=m.c!=null?ci(m.c):null;
     if(m.cmd==='army'){ const a=ci(m.a),b=ci(m.b); if(a&&b&&a.owner===fid)sendUnits(a,b,(m.pct||50)/100); }
     else if(m.cmd==='buy'){ if(c&&c.owner===fid&&!c.occ){ const amt=buyAmount(c,m.spec); if(amt>0){gold[fid]-=amt*SOLDIER_PRICE;manpower[fid]-=amt;c.batches.push({count:amt,time:amt*c.trainPer,elapsed:0});} } }
-    else if(m.cmd==='upg'){ if(c&&c.owner===fid&&!c.occ){ const tier=c.branchTier(m.track); const cost=upgradeCost(tier); if(tier<MAX_TIER&&gold[fid]>=cost){gold[fid]-=cost;c[m.track+'Tier']=tier+1;c.syncLegacyTier(m.track);c.buildMeshes();markRegions();} } }
+    else if(m.cmd==='upg'){ if(c&&c.owner===fid&&!c.occ&&CITY_UPGRADE_TRACKS.includes(m.track)){ const tier=c.branchTier(m.track); const cost=upgradeCost(tier); if(tier<MAX_TIER&&gold[fid]>=cost){gold[fid]-=cost;c[m.track+'Tier']=tier+1;c.syncLegacyTier(m.track);c.buildMeshes();markRegions();} } }
     else if(m.cmd==='war'){ if(fid!==m.tg&&!atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_WAR){ politPts[fid]-=POLIT_WAR; setWar(fid,m.tg); try{dragAlliesIntoWar(fid,m.tg);}catch(e){} } }
     else if(m.cmd==='ally'){ if(fid!==m.tg&&!atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_ALLY){ politPts[fid]-=POLIT_ALLY; setRelation(fid,m.tg,'ally'); } }
     else if(m.cmd==='peace'){ if(atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_PEACE){ politPts[fid]-=POLIT_PEACE; resolveOccupation(fid,m.tg,m.land?'claimA':'white'); setRelation(fid,m.tg,'neutral'); if(typeof setTruce==='function')setTruce(fid,m.tg); } }
@@ -1206,7 +1255,7 @@ function loop(now){
     return;                                  // транспорт подключает только Colyseus bridge ниже
   }
   connect();
-  if(MP.localSim){ MP.send=()=>{}; if(pill)pill.textContent='🧪 Локальный серверный Sim (соло)'; if(typeof initLocalSim==='function')initLocalSim(); }
+  if(MP.localSim){ MP.send=()=>{}; if(pill)pill.textContent=t('toast.localSimPill'); if(typeof initLocalSim==='function')initLocalSim(); }
 
   // при выборе страны: гость уведомляет хоста, хост обновляет список людей
   const _sc=selectCountry;
@@ -1230,7 +1279,7 @@ function countryStatLine(country, cityCount){
     people:Math.max(4,Math.min(7,Math.round(cityCount/5)+3)),
   };
 }
-function cityWord(n){return n%10===1&&n%100!==11?'город':(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20)?'города':'городов');}
+function cityWord(n){return n===1?t('polit.cityWordOne'):t('polit.cityWordMany');}
 function focusStartCameraOnCountry(country){
   const cname=typeof canonicalCountry==='function'?canonicalCountry(country):country;
   const own=cities.filter(c=>c&&((typeof canonicalCountry==='function'?canonicalCountry(c.country):c.country)===cname||c.owner===PLAYER));
@@ -1275,14 +1324,15 @@ function buildCountryPick(){
       const s=countryStatLine(c,cityCount);
       const el=document.createElement('button');
       el.type='button';
-      el.className='cpick'+(c===countryPickChoice?' sel':'')+(c.length>12?' long':'');
+      const cDisp=countryDisp(c);
+      el.className='cpick'+(c===countryPickChoice?' sel':'')+(cDisp.length>12?' long':'');
       el.dataset.country=c;
       el.style.setProperty('--ccol',col);
       el.style.setProperty('--art',art?`url("${art}")`:'linear-gradient(180deg,#1a2733,#101a24)');
       el.setAttribute('aria-pressed',c===countryPickChoice?'true':'false');
       const flag=typeof flagHexSVG==='function'?flagHexSVG(c,60):`<span>${flagOf(c)}</span>`;
       el.innerHTML=`<div class="cflag">${flag}</div>`+
-        `<div class="cbody"><div class="cnm">${c}</div><div class="cmeta">${cityCount} ${cityWord(cityCount)}</div>`+
+        `<div class="cbody"><div class="cnm">${cDisp}</div><div class="cmeta">${cityCount} ${cityWord(cityCount)}</div>`+
         `<div class="countryStats"><span>⚔ ${s.sword}</span><span>♜ ${s.tower}</span><span>👥 ${s.people}</span></div></div>`;
       el.addEventListener('click',()=>{countryPickChoice=c;render();});
       list.appendChild(el);
@@ -1291,7 +1341,12 @@ function buildCountryPick(){
   if(start)start.onclick=()=>selectCountry(countryPickChoice||playable[0]);
   render();
 }
-function openCountryPick(){ buildCountryPick(); document.getElementById('countryWin').style.display='flex'; gameSpeed=0; } // пауза, пока выбирают
+function openCountryPick(){
+  buildCountryPick();
+  if(typeof window.hideGameLoading==='function')window.hideGameLoading();
+  document.getElementById('countryWin').style.display='flex';
+  gameSpeed=0;
+} // пауза, пока выбирают
 function selectCountry(country){
   PLAYER_COUNTRY=country;
   buildFactions();                 // переустановить PLAYER/OWNER.PLAYER на выбранную страну
@@ -1299,7 +1354,7 @@ function selectCountry(country){
   focusStartCameraOnCountry(country);
   document.getElementById('countryWin').style.display='none';
   gameSpeed=1;
-  toast(`${flagOf(country)} Вы играете за ${country}`);
+  toast(`${flagOf(country)} `+t('toast.youPlayAs',{country:countryDisp(country)}));
 }
 
 buildWorld();

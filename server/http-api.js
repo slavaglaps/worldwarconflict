@@ -4,12 +4,25 @@ const db = require('./db');
 const metrics = require('./metrics');
 const { generateId } = require('colyseus');
 
-const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
+// CORS по allowlist origin'ов (env ALLOWED_ORIGINS, через запятую; '*' = разрешить всё — только для dev).
+//   Дефолт — прод-домен + localhost. Токен возвращается в теле (не cookie), поэтому это не защита от CSRF-кражи,
+//   но сужает поверхность спам-регистраций/логинов с чужих сайтов. Echo только для origin из списка + Vary: Origin.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://worldwarconflict.pages.dev,http://localhost:3000,http://localhost:8080').split(',').map(s => s.trim()).filter(Boolean);
+const ALLOW_ANY_ORIGIN = ALLOWED_ORIGINS.includes('*');
+function corsFor(req) {
+  const reqOrigin = req && req.headers && req.headers.origin;
+  let origin = ALLOWED_ORIGINS[0] || '';
+  if (ALLOW_ANY_ORIGIN) origin = '*';
+  else if (reqOrigin && ALLOWED_ORIGINS.includes(reqOrigin)) origin = reqOrigin;
+  const h = { 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
+  if (origin) { h['access-control-allow-origin'] = origin; if (origin !== '*') h['vary'] = 'Origin'; }
+  return h;
+}
 const MAX_BODY = 16 * 1024;
 const AUTH_RATE = { refill: 0.25, burst: 8 };
 const buckets = new Map();
 
-function json(res, code, obj) { res.writeHead(code, { 'content-type': 'application/json', ...CORS }); res.end(JSON.stringify(obj)); }
+function json(res, code, obj, cors) { res.writeHead(code, { 'content-type': 'application/json', ...(cors || {}) }); res.end(JSON.stringify(obj)); }
 function body(req) {
   if (req.body && typeof req.body === 'object') return Promise.resolve(req.body);   // уже распарсено express.json()
   return new Promise((resolve, reject) => {
@@ -49,42 +62,43 @@ function allowAuth(req) {
 // true → запрос обработан; false → пусть дальше (404/Colyseus)
 async function handle(req, res) {
   const url = (req.url || '').split('?')[0];
-  if (req.method === 'OPTIONS') { res.writeHead(204, CORS); res.end(); return true; }
+  const cors = corsFor(req);
+  if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return true; }
 
   // здоровье (публично, безопасная сводка) — для аптайм-мониторов/балансировщика
-  if (url === '/health') { const s = metrics.snapshot(); json(res, 200, { ok: true, uptime_s: s.uptime_s, rooms: s.rooms, clients: s.clients, ts: Date.now() }); return true; }
+  if (url === '/health') { const s = metrics.snapshot(); json(res, 200, { ok: true, uptime_s: s.uptime_s, rooms: s.rooms, clients: s.clients, ts: Date.now() }, cors); return true; }
 
   // метрики: JSON или Prometheus-текст (?format=prom). Стектрейсы ошибок отдаём только с METRICS_TOKEN
   // (заголовок x-metrics-token или ?token=). Без токена — счётчики/перф без recent_errors.
   if (url === '/metrics') {
     const q = new URLSearchParams((req.url || '').split('?')[1] || '');
     const tok = process.env.METRICS_TOKEN;
-    if (tok && q.get('token') !== tok && req.headers['x-metrics-token'] !== tok) { json(res, 401, { error: 'metrics token required' }); return true; }
-    if (q.get('format') === 'prom') { res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4', ...CORS }); res.end(metrics.prometheus()); return true; }
+    if (tok && q.get('token') !== tok && req.headers['x-metrics-token'] !== tok) { json(res, 401, { error: 'metrics token required' }, cors); return true; }
+    if (q.get('format') === 'prom') { res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4', ...cors }); res.end(metrics.prometheus()); return true; }
     const snap = metrics.snapshot();
     if (!tok) { delete snap.recent_errors; snap.note = 'set METRICS_TOKEN env to require auth + expose recent_errors'; }
-    json(res, 200, snap); return true;
+    json(res, 200, snap, cors); return true;
   }
 
   if (url === '/auth/register' && req.method === 'POST') {
-    if (!allowAuth(req)) { json(res, 429, { error: 'слишком много попыток' }); return true; }
+    if (!allowAuth(req)) { json(res, 429, { error: 'слишком много попыток' }, cors); return true; }
     const { username, password } = await body(req);
-    if (!username || !password || String(username).length < 3 || String(username).length > 24 || String(password).length < 4) { json(res, 400, { error: 'username 3–24 символа, password≥4' }); return true; }
-    if (await db.getUserByName(username)) { json(res, 409, { error: 'имя занято' }); return true; }   // быстрый путь
+    if (!username || !password || String(username).length < 3 || String(username).length > 24 || String(password).length < 4) { json(res, 400, { error: 'username 3–24 символа, password≥4' }, cors); return true; }
+    if (await db.getUserByName(username)) { json(res, 409, { error: 'имя занято' }, cors); return true; }   // быстрый путь
     const user = { id: generateId(), username: String(username), pass: auth.hashPassword(password), wins: 0, losses: 0, rating: 1000, created: Date.now() };
-    if (!(await db.createUser(user))) { json(res, 409, { error: 'имя занято' }); return true; }        // атомарный backstop против гонки
-    json(res, 200, { token: auth.signToken({ id: user.id, username: user.username }), user: publicUser(user) }); return true;
+    if (!(await db.createUser(user))) { json(res, 409, { error: 'имя занято' }, cors); return true; }        // атомарный backstop против гонки
+    json(res, 200, { token: auth.signToken({ id: user.id, username: user.username }), user: publicUser(user) }, cors); return true;
   }
 
   if (url === '/auth/login' && req.method === 'POST') {
-    if (!allowAuth(req)) { json(res, 429, { error: 'слишком много попыток' }); return true; }
+    if (!allowAuth(req)) { json(res, 429, { error: 'слишком много попыток' }, cors); return true; }
     const { username, password } = await body(req);
     const user = await db.getUserByName(username || '');
-    if (!user || !auth.verifyPassword(password || '', user.pass)) { json(res, 401, { error: 'неверный логин или пароль' }); return true; }
-    json(res, 200, { token: auth.signToken({ id: user.id, username: user.username }), user: publicUser(user) }); return true;
+    if (!user || !auth.verifyPassword(password || '', user.pass)) { json(res, 401, { error: 'неверный логин или пароль' }, cors); return true; }
+    json(res, 200, { token: auth.signToken({ id: user.id, username: user.username }), user: publicUser(user) }, cors); return true;
   }
 
-  if (url === '/leaderboard') { json(res, 200, await db.leaderboard(10)); return true; }
+  if (url === '/leaderboard') { json(res, 200, await db.leaderboard(10), cors); return true; }
 
   return false;
 }

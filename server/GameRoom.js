@@ -15,7 +15,7 @@ const RECONNECT_SEC = 30;   // окно реконнекта при обрыве
 
 const TICK_HZ = 15;
 const CMD_RATE = { refill: 12, burst: 30 };
-const TRACK = { 1: 'prod', 2: 'def', 3: 'atk', prod: 'prod', def: 'def', atk: 'atk' };
+const TRACK = { 1: 'prod', 2: 'def', prod: 'prod', def: 'def' };
 const YARD_KIND = { ship: 'ship', air: 'air' };
 
 const intOrNull = (v) => {
@@ -87,7 +87,7 @@ class GameRoom extends Room {
     cmd('shipmove', (f, m) => this.sim.cmdShipMove(f, intOrNull(m.id), finiteOrNull(m.x), finiteOrNull(m.z)));
     cmd('planemove', (f, m) => this.sim.cmdPlaneMove(f, intOrNull(m.id), finiteOrNull(m.x), finiteOrNull(m.z)));
     cmd('airorder', (f, m) => this.sim.cmdAirOrder(f, m.recall ? -1 : intOrNull(m.city), finiteOrNull(m.x), finiteOrNull(m.z)));
-    cmd('aa',       (f, m) => this.sim.cmdBuildAA(f, intOrNull(m.city)));
+    cmd('aa',       () => false);
     cmd('yard',     (f, m) => this.sim.cmdBuildYard(f, intOrNull(m.city), YARD_KIND[m.kind]));
     cmd('hero',     (f, m) => this.sim.cmdHeroAbility(f, intOrNull(m.h), intOrNull(m.ab)));   // активка героя (h=индекс слота, ab=индекс активки)
     // 💰 поддержка: успех → точный ack (сумма + получатель) + немедленный econ-пуш (голда отправителя/получателя)
@@ -202,20 +202,26 @@ class GameRoom extends Room {
     this.setMetadata({ ...this.metadata, players: n });
   }
 
-  // итоги матча: W/L при выбывании/победе (только зарегистрированным игрокам)
+  // итоги матча: ОДИН транзакционный рекорд в конце партии со ВСЕМИ участниками-регистрантами (idempotent).
+  //   Раньше было: отдельный recordMatch на каждое выбывание + отдельный на победу → в pg это РАЗНЫЕ matches-строки
+  //   на одну партию, а победа писалась только в точный момент, когда выбывание сводило живых к 1 (легко пропустить).
+  //   Теперь копим ростер (ловит и тех, кто вышел ПОСЛЕ выбывания — их id уже зафиксирован), пишем один раз при завершении.
   _handleEliminations() {
+    if (this._matchOver) { this.sim.eliminations.length = 0; return; }
+    this._roster = this._roster || new Map();            // userId -> {id, won} — все не-гостевые участники за партию
     const idByFaction = {};
-    for (const sid in this.assigned) idByFaction[this.assigned[sid]] = this.identities[sid];
+    for (const sid in this.assigned) { const id = this.identities[sid]; idByFaction[this.assigned[sid]] = id; if (id && !id.guest && !this._roster.has(id.id)) this._roster.set(id.id, { id: id.id, won: false }); }
+    let ended = false;
     for (const e of this.sim.eliminations.splice(0)) {
-      const dead = idByFaction[e.dead];
-      if (dead && !dead.guest) db.recordMatch({ ts: Date.now(), players: [{ id: dead.id, won: false }] }).catch(() => {});
+      void e;
       const alive = new Set(this.sim.cities.map(c => c.owner));
-      if (alive.size === 1) {
-        const win = idByFaction[[...alive][0]];
-        if (win && !win.guest) db.recordMatch({ ts: Date.now(), players: [{ id: win.id, won: true }] }).catch(() => {});
-        this.setMetadata({ ...this.metadata, over: true });
-      }
+      if (alive.size <= 1) { ended = true; if (alive.size === 1) { const win = idByFaction[[...alive][0]]; if (win && !win.guest && this._roster.has(win.id)) this._roster.get(win.id).won = true; } break; }
     }
+    if (!ended) return;
+    this._matchOver = true;
+    const players = [...this._roster.values()];
+    if (players.length) db.recordMatch({ ts: Date.now(), players }).catch(() => {});   // единая транзакция: все W/L одной партии
+    this.setMetadata({ ...this.metadata, over: true });
   }
 
   tick(dt) {

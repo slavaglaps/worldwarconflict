@@ -374,24 +374,29 @@ class Missile{
   }
 }
 function fireMissile(ship,tgt){ missiles.push(new Missile(ship.owner,ship.pos,tgt)); spawnMuzzle(ship); }
+// общие геометрии FX-пуфов (раньше new SphereGeometry на КАЖДЫЙ спавн → GPU-churn + утечка, т.к. при удалении не диспоузились).
+//   Геометрия шареная (диспоузить нельзя); материал остаётся per-instance (opacity гаснет индивидуально в updateMissiles) и
+//   диспоузится при удалении из пула (см. updateMissiles).
+const FXGEO_BLAST=new T3.SphereGeometry(0.3,10,8), FXGEO_MUZZLE=new T3.SphereGeometry(0.25,8,6),
+      FXGEO_DUST=new T3.SphereGeometry(0.11,6,5), FXGEO_SPARK=new T3.SphereGeometry(0.09,6,5), FXGEO_CLASHDUST=new T3.SphereGeometry(0.14,6,5);
 function spawnBlast(x,y,z){
-  const m=new T3.Mesh(new T3.SphereGeometry(0.3,10,8),new T3.MeshBasicMaterial({color:0xffb24a,transparent:true,opacity:.9}));
+  const m=new T3.Mesh(FXGEO_BLAST,new T3.MeshBasicMaterial({color:0xffb24a,transparent:true,opacity:.9}));
   m.position.set(x,y+0.3,z); scene.add(m); fx.push({mesh:m,life:0.35,max:0.35,grow:6});
 }
 function spawnMuzzle(ship){
-  const m=new T3.Mesh(new T3.SphereGeometry(0.25,8,6),new T3.MeshBasicMaterial({color:0xfff0c0,transparent:true,opacity:.9}));
+  const m=new T3.Mesh(FXGEO_MUZZLE,new T3.MeshBasicMaterial({color:0xfff0c0,transparent:true,opacity:.9}));
   m.position.set(ship.pos.x,WATER_Y_SHIP+0.6,ship.pos.z); scene.add(m); fx.push({mesh:m,life:0.18,max:0.18,grow:3});
 }
 // 🚶 пыль марша: тусклый пуф под бегущей колонной (реюз fx-пула updateMissiles)
 function spawnMarchDust(x,y,z){
-  const d=new T3.Mesh(new T3.SphereGeometry(0.11,6,5),new T3.MeshBasicMaterial({color:0xa6977c,transparent:true,opacity:.38}));
+  const d=new T3.Mesh(FXGEO_DUST,new T3.MeshBasicMaterial({color:0xa6977c,transparent:true,opacity:.38}));
   d.position.set(x,y+0.06,z); scene.add(d); fx.push({mesh:d,life:0.45,max:0.45,grow:1.8});
 }
 // ⚔ искра сшибки в полевом бою: маленькая жёлтая вспышка + редкая пыль (дешёвая, реюз fx-пула updateMissiles)
 function spawnClashFX(x,y,z){
-  const m=new T3.Mesh(new T3.SphereGeometry(0.09,6,5),new T3.MeshBasicMaterial({color:Math.random()<0.5?0xfff3c0:0xffd870,transparent:true,opacity:.95}));
+  const m=new T3.Mesh(FXGEO_SPARK,new T3.MeshBasicMaterial({color:Math.random()<0.5?0xfff3c0:0xffd870,transparent:true,opacity:.95}));
   m.position.set(x,y+0.32+Math.random()*0.25,z); scene.add(m); fx.push({mesh:m,life:0.22,max:0.22,grow:2.2});
-  if(Math.random()<0.45){ const d=new T3.Mesh(new T3.SphereGeometry(0.14,6,5),new T3.MeshBasicMaterial({color:0x9a8a70,transparent:true,opacity:.5}));
+  if(Math.random()<0.45){ const d=new T3.Mesh(FXGEO_CLASHDUST,new T3.MeshBasicMaterial({color:0x9a8a70,transparent:true,opacity:.5}));
     d.position.set(x+(Math.random()-0.5)*0.3,y+0.12,z+(Math.random()-0.5)*0.3); scene.add(d); fx.push({mesh:d,life:0.5,max:0.5,grow:1.6}); }
 }
 // урон гхост-отряду в момент попадания трассера: наносим авторитетно в LOCALSIM (соло — сим только выбрал цель, урон за клиентом).
@@ -431,7 +436,7 @@ function updateMissiles(dt){
   for(let i=missiles.length-1;i>=0;i--)if(missiles[i].update(dt))missiles.splice(i,1);
   for(let i=fx.length-1;i>=0;i--){const e=fx[i];e.life-=dt;
     const k=1-e.life/e.max; e.mesh.scale.setScalar(1+k*e.grow); e.mesh.material.opacity=Math.max(0,e.life/e.max*0.9);
-    if(e.life<=0){scene.remove(e.mesh);fx.splice(i,1);}}
+    if(e.life<=0){scene.remove(e.mesh); if(e.mesh.material&&e.mesh.material.dispose)e.mesh.material.dispose(); fx.splice(i,1);}}   // диспоуз per-instance материала (геометрия шареная — не трогаем)
   _updateScatter(dt);
 }
 
@@ -515,7 +520,7 @@ function cityTowersFX(dt){
 function shipBombardFX(dt){
   const guest=(typeof MP!=='undefined'&&MP.guest&&MP.ghosts);
   // корабли-стрелки: в guest — гхосты kind 1; их «_fxT» держим на ghost-объекте
-  const shooters=guest?[...MP.ghosts.values()].filter(g=>g.kind===1).map(g=>({o:g.owner,x:g.group.position.x,z:g.group.position.z,alive:(g.count||1)>0,fx:g}))
+  const shooters=guest?[...MP.ghosts.values()].filter(g=>g.kind===1&&!g.transport).map(g=>({o:g.owner,x:g.group.position.x,z:g.group.position.z,alive:(g.count||1)>0,fx:g}))
                       :ships.map(s=>({o:s.owner,x:s.pos.x,z:s.pos.z,alive:s.hp>0,fx:s,muzzle:s}));
   for(const s of shooters){
     if(!s.alive||!techFlag(s.o,'shipMissile'))continue;
@@ -571,16 +576,16 @@ function setAirOrder(fromAirport,toCity,gx,gz,actor){
   const a=actor==null?PLAYER:actor, P=a===PLAYER;
   if(toCity&&toCity!==fromAirport&&toCity.owner!==a&&atWar(a,toCity.owner)){
     airOrder[a]={kind:'bomb',city:toCity,x:toCity.gx,z:toCity.gz};
-    if(P)toast(`✈ Бомбардировка: ${CITY_NAMES[toCity.idx]}`+(techFlag(a,'planeBomb')?'':' — откройте «Бомбардировка» 🔬'));
-  } else if(toCity===fromAirport){ airOrder[a]=null; if(P)toast('✈ Авиация отозвана на базу'); }
-  else { airOrder[a]={kind:'patrol',x:gx,z:gz}; if(P)toast('✈ Патруль/прикрытие'); }
+    if(P)toast(t('toast.airBombing',{name:cityDisp(toCity.idx)})+(techFlag(a,'planeBomb')?'':t('toast.airBombingLocked')));
+  } else if(toCity===fromAirport){ airOrder[a]=null; if(P)toast(t('toast.airRecalled')); }
+  else { airOrder[a]={kind:'patrol',x:gx,z:gz}; if(P)toast(t('toast.airPatrol')); }
 }
-function recallAir(){ if(MP.guest){ MP.cmd({cmd:'airorder',recall:true}); return; } if(!airOrder[PLAYER])return; airOrder[PLAYER]=null; toast('✈ Авиация отозвана на базу'); if(typeof updatePanel==='function')updatePanel(); }
+function recallAir(){ if(MP.guest){ MP.cmd({cmd:'airorder',recall:true}); return; } if(!airOrder[PLAYER])return; airOrder[PLAYER]=null; toast(t('toast.airRecalled')); if(typeof updatePanel==='function')updatePanel(); }
 // краткое описание текущего приказа авиации (для кнопки/статуса)
 function airOrderLabel(){
   const o=airOrder[PLAYER]; if(!o)return '';
-  if(o.kind==='bomb')return o.city?`бомбит ${CITY_NAMES[o.city.idx]}`:'бомбардировка';
-  if(o.kind==='patrol')return 'патруль';
+  if(o.kind==='bomb')return o.city?t('toast.airOrderBombing',{name:cityDisp(o.city.idx)}):t('toast.airOrderBomb');
+  if(o.kind==='patrol')return t('toast.airOrderPatrol');
   return '';
 }
 /* Plane + spawnPlane — в серверном Sim (юниты рендерятся призраками) */

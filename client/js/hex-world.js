@@ -32,35 +32,55 @@
   // Нужны и hexBuildWorld (точная запечённая карта), и ensureHexRoadSamplesForMap (фолбэк для сим-рёбер,
   // который initLocalSim зовёт ДО buildWorld). До постройки карты _visualTopByCell/_brTops пусты → высота
   // деградирует к рельефу тайлов, а точные samples перепекутся при buildWorld (он безусловно перезаписывает HEXROADS).
-  let _visualTopByCell = new Map(), _brTops = [];
+  let _visualTopByCell = new Map(), _brTops = [], _roadTopByCell = new Map();
+  const _cellKey = (a, b) => a * 100003 + b;   // числовой ключ клетки (a,b — целые индексы 0..GRID): без аллокации строки на юнит/кадр в hexGroundY/roadPtY
   const ROAD_SAMPLE_STEP = 0.12;
+  // БИЛИНЕЙНАЯ высота рельефа: гладкая рампа между клетками (без ступенек nearest-cell). На подъёме
+  // наклонный road-тайл идёт от elev низкой клетки к elev высокой — билинейка даёт ту же рампу,
+  // поэтому юнит не проваливается ниже полотна и не взлетает на соседний пик (это не максимум по 3×3).
+  const _bilinearTopY = (x, z) => {
+    if (typeof tiles === 'undefined' || !tiles) return null;
+    const x0 = Math.floor(x), z0 = Math.floor(z), fx = x - x0, fz = z - z0;
+    // на дорожных клетках предпочитаем ВЕРХ ПОДНЯТОГО road-тайла (насыпь/рампа), иначе — рельеф клетки
+    const at = (px, pz) => { const rt = _roadTopByCell.get(_cellKey(px, pz)); if (rt != null) return rt; const c = tiles[px]; const t = c && c[pz]; return (t && t.topY != null && !t.isWater) ? t.topY : null; };
+    let h00 = at(x0, z0), h10 = at(x0 + 1, z0), h01 = at(x0, z0 + 1), h11 = at(x0 + 1, z0 + 1);
+    const valid = [h00, h10, h01, h11].filter((v) => v != null);
+    if (!valid.length) return null;
+    const avg = valid.reduce((a, b) => a + b, 0) / valid.length;   // край/вода → добираем средним валидных (не тянем к 0)
+    if (h00 == null) h00 = avg; if (h10 == null) h10 = avg; if (h01 == null) h01 = avg; if (h11 == null) h11 = avg;
+    const a = h00 * (1 - fx) + h10 * fx, b = h01 * (1 - fx) + h11 * fx;
+    return a * (1 - fz) + b * fz;
+  };
   const roadPtY = (x, z) => {
-    let h = -Infinity;
-    const ix = Math.floor(x), iz = Math.floor(z);
-    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
-      const px = ix + dx, pz = iz + dz;
-      const col = (typeof tiles !== 'undefined' && tiles) ? tiles[px] : null, t = col && col[pz];
-      if (t && t.topY != null) h = Math.max(h, t.topY);
-      const vt = _visualTopByCell.get(px + ',' + pz);
-      if (vt != null) h = Math.max(h, vt);
-    }
-    if (!Number.isFinite(h)) h = (typeof getTerrainHeight === 'function' ? getTerrainHeight(x, z) : 0);
-    for (const br of _brTops) { const d2 = (br.gx - x) * (br.gx - x) + (br.gz - z) * (br.gz - z); if (d2 < 1.2 * 1.2 && br.top > h) h = br.top; }
+    let h = _bilinearTopY(x, z);
+    if (h == null) h = (typeof getTerrainHeight === 'function') ? getTerrainHeight(x, z) : -Infinity;
+    const vt = _visualTopByCell.get(_cellKey(Math.round(x), Math.round(z)));   // sloped/override-полотно своей клетки
+    if (vt != null) h = Math.max(h, vt);
+    if (!Number.isFinite(h)) h = 0;
+    for (const br of _brTops) { const d2 = (br.gx - x) * (br.gx - x) + (br.gz - z) * (br.gz - z); if (d2 < 0.9 * 0.9 && br.top > h) h = br.top; }
     return h;
   };
+  // Дешёвый лукап поверхности ПОД фактической позицией юнита (для клампа рендер-высоты в loop.js):
+  //   билинейка полотна/рельефа + верх поднятого sloped/override-тайла своей клетки. БЕЗ цикла мостов
+  //   (на мосту u.ey уже = верх полотна, кламп к рельефу его не опустит). O(1) — безопасно на юнит/кадр.
+  //   Над водой билинейка = null → рельеф = уровень моря, поэтому корабль/десант на воде не поднимается.
+  window.hexGroundY = (x, z) => {
+    let h = _bilinearTopY(x, z);
+    if (h == null) h = (typeof getTerrainHeight === 'function') ? getTerrainHeight(x, z) : -Infinity;
+    const vt = _visualTopByCell.get(_cellKey(Math.round(x), Math.round(z)));
+    if (vt != null && vt > h) h = vt;
+    return Number.isFinite(h) ? h : -Infinity;
+  };
   const buildRoadSamples = (rd) => {
-    const pts = rd.pts, cum = rd.cum, hts = rd.hts, len = rd.len;
+    const pts = rd.pts, cum = rd.cum, len = rd.len;
     const atDist = (dist) => {
       const target = Math.max(0, Math.min(len, dist));
       let i = 1; while (i < cum.length && cum[i] < target) i++;
       if (i >= pts.length) i = pts.length - 1;
       const seg = cum[i] - cum[i - 1] || 1, f = Math.max(0, Math.min(1, (target - cum[i - 1]) / seg));
-      return {
-        s: target,
-        x: pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f,
-        z: pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f,
-        y: hts ? hts[i - 1] + (hts[i] - hts[i - 1]) * f : 0,
-      };
+      const x = pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f;
+      const z = pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f;
+      return { s: target, x, z, y: roadPtY(x, z) };   // Y пересэмплируется билинейно в каждой точке (рампа, без провала/взлёта)
     };
     const count = Math.max(2, Math.ceil(len / ROAD_SAMPLE_STEP) + 1);
     const samples = new Array(count);
@@ -616,6 +636,7 @@
     // tiles: [q, r, water, elev, colHex, rivKey, rivRy, roadKey, roadRy, tileKey?, tileRy?]
     const tileByKey = {};                          // ручные тайл-переопределения (coast*/grassSlope*)
     const visualTopByCell = (_visualTopByCell = new Map());             // gx,z -> реальный верх override/sloped-модели (алиас модульного для roadPtY)
+    _roadTopByCell = new Map();                                          // клетка → верх поднятого road-тайла (насыпь/рампа), заполняется блоком 3×3 как tiles[][]
     for (const t of MAP.tiles) {
       const q = t[0], r = t[1], isW = t[2], elev = t[3], colHex = t[4], rk = t[5], rry = t[6], dk = t[7], dry = t[8], tk = t[9], try_ = t[10], biome = t[11] || 'default', yOffset = Number(t[12]) || 0;
       const gx = wxToGX(qrToWX(q, r)), gz = wzToGZ(qrToWZ(q, r));
@@ -629,7 +650,7 @@
         const textureKey = biomeTextureKey(biome), tileBucket = tk + ':' + textureKey;
         const isSloped = isSlopedTileAsset(tk);
         const visualTop = (elev + (isSloped ? yOffset : 0)) * kY;
-        visualTopByCell.set(Math.round(gx) + ',' + Math.round(gz), visualTop);
+        visualTopByCell.set(_cellKey(Math.round(gx), Math.round(gz)), visualTop);
         (tileByKey[tileBucket] || (tileByKey[tileBucket] = { modelKey: tk, textureKey, list: [] })).list.push({ gx, gz, top: visualTop, scaleTop: elev * kY, ry: try_, biome, col: String(tk).startsWith('coast') ? WHITE : tileInstanceColor(biome) });
       } else if (rk) {                            // речной тайл — только модель реки
         (rivByKey[rk] || (rivByKey[rk] = [])).push({ gx, gz, top: elev * kY, ry: rry, q, r });
@@ -640,7 +661,15 @@
         const textureKey = biomeTextureKey(biome);
         const roadBucket = dk + ':' + textureKey;
         const isSloped = isSlopedTileAsset(dk);
-        (roadByKey[roadBucket] || (roadByKey[roadBucket] = { modelKey: dk, textureKey, list: [] })).list.push({ gx, gz, top: (elev + (isSloped ? yOffset : 0)) * kY, scaleTop: elev * kY, ry: dry, q, r, biome, col: landInstanceColor(biome, colHex) });
+        const roadTop = (elev + (isSloped ? yOffset : 0)) * kY;
+        // ФИКС: верх ПОДНЯТОГО road-тайла в блок 3×3 (шаг хексов 1.63 → между центрами есть целые клетки).
+        //   Иначе roadPtY брал рельеф и юнит проваливался под насыпь/рампу. Заполняем МАКСИМУМОМ (только вверх).
+        const rxi = Math.round(gx), rzi = Math.round(gz);
+        for (let aa = -1; aa <= 1; aa++) for (let bb = -1; bb <= 1; bb++) {
+          const rk2 = _cellKey(rxi + aa, rzi + bb), cur = _roadTopByCell.get(rk2);
+          if (cur == null || roadTop > cur) _roadTopByCell.set(rk2, roadTop);
+        }
+        (roadByKey[roadBucket] || (roadByKey[roadBucket] = { modelKey: dk, textureKey, list: [] })).list.push({ gx, gz, top: roadTop, scaleTop: elev * kY, ry: dry, q, r, biome, col: landInstanceColor(biome, colHex) });
       } else {                                    // обычная суша
         grass.push({ gx, gz, top: elev * kY, q, r, biome, textureKey: biomeTextureKey(biome), col: landInstanceColor(biome, colHex) });
       }

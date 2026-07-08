@@ -50,7 +50,7 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
     assert(bal1.tech.nodes.m1 && bal1.tech.nodes.m1.g > 0, 'узел m1 дерева с ценой пришёл');
   });
 
-  await testAsync('ветки upg через сеть применяются независимо', async () => {
+  await testAsync('ветки upg через сеть: только экономика и оборона', async () => {
     const [k] = myCity(r1, f1);
     r1.send('upg', { city: Number(k), track: 'prod' });
     await sleep(250);
@@ -59,7 +59,7 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
     r1.send('upg', { city: Number(k), track: 'atk' });
     await sleep(500);
     const c = r1.state.cities.get(k);
-    eq(c.prodTier, 1); eq(c.defTier, 1); eq(c.atkTier, 1);
+    eq(c.prodTier, 1); eq(c.defTier, 1); eq(c.atkTier, 0);
   });
 
   await testAsync('buy через сеть → производство → гарнизон растёт', async () => {
@@ -106,10 +106,12 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
   });
 
   await testAsync('поддержка через сеть: голда списывается у дарителя (экономика получателя скрыта)', async () => {
+    r1.send('ally', { tg: enemyFid });   // поддержка разрешена только союзнику/соседу (гард cmdSupport) — сначала союз
+    await sleep(400);
     const g0 = eGold(r1, f1);
     r1.send('sup', { tg: enemyFid });
     await sleep(400);
-    lt(eGold(r1, f1), g0);   // даритель заплатил; экономику получателя-неприятеля клиент НЕ видит — это и есть приватность
+    lt(eGold(r1, f1), g0);   // даритель заплатил; экономику получателя клиент НЕ видит (per-client _sendEcon) — это и есть приватность
   });
 
   await testAsync('исследование через сеть: тратит голду (m1 = 100💰)', async () => {
