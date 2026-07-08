@@ -850,14 +850,15 @@ function loop(now){
     const key=Math.min(a,b)+'_'+Math.max(a,b);
     // Не рефайним дорогу из горячего цикла рендера: путь уже имеет precomputed samples.
     let st=ud.st;
-    if(!st) st=ud.st={key,a,b,len,sHead:(gh.frac||0)*len,prev:null,v:0};
+    const _fr=(gh._fracR!=null?gh._fracR:(gh.frac||0));               // сглаженная (предсказанная) фракция из mpTick — гладкая голова между снапшотами
+    if(!st) st=ud.st={key,a,b,len,sHead:_fr*len,prev:null,v:0};
     else if(st.key!==key){
       st.prev=(a===st.b)?{a:st.a,b:st.b,len:st.len}:null;   // следующее ребро пути → хвост доезжает по прошлому; редирект → без хвостового ребра
       st.key=key; st.a=a; st.b=b; st.len=len;
     } else { st.a=a; st.b=b; st.len=len; }
     // голова: в норме — точная арк-позиция сима (срезания невозможны); при роспуске — сама дошагивает до здания
     const spd=((typeof LOCALSIM!=='undefined'&&LOCALSIM&&LOCALSIM.K&&LOCALSIM.K.SQUAD_SPEED!=null)?LOCALSIM.K.SQUAD_SPEED:0.8)*(typeof gameSpeed!=='undefined'?gameSpeed:1);
-    const target=gh._dying? st.sHead+spd*Math.min(0.05,dt) : (gh.frac||0)*len;
+    const target=gh._dying? st.sHead+spd*Math.min(0.05,dt) : _fr*len;
     st.v=st.v+((target-st.sHead)/(dt||0.016)-st.v)*Math.min(1,dt*6);      // сглаженная скорость головы
     st.sHead=target;
     const run=Math.max(0,Math.min(1,Math.abs(st.v)/(spd*0.6||0.5)));
@@ -1156,8 +1157,23 @@ function loop(now){
         continue; }
       if(gh.kind===0){
         if(gh.edgeA!=null){
-          p.x=t.x; p.z=t.z;                                         // sampled по визуальной дороге; lerp по хорде срезал бы повороты
+          // 🛰 client-side prediction фракции: голова гладко едет вперёд по дороге КАЖДЫЙ кадр + мягкая коррекция к
+          //   авторитетной серверной frac (снапшоты 12.5 Гц — без предсказания дёргалось бы). Смена ребра / откат /
+          //   большой рассинхрон → снап. В соло frac обновляется каждый кадр → коррекция сходится сразу (без регресса).
+          const ekey=gh.edgeA*100003+(gh.edgeB==null?-1:gh.edgeB), len=(typeof hexRoadLen==='function')?hexRoadLen(gh.edgeA,gh.edgeB):0, sf=gh.frac||0;
+          if(gh._fracR==null||gh._fracEdge!==ekey||!(len>0)){ gh._fracR=sf; gh._fracEdge=ekey; }
+          else{
+            const spd=((typeof LOCALSIM!=='undefined'&&LOCALSIM&&LOCALSIM.K&&LOCALSIM.K.SQUAD_SPEED!=null)?LOCALSIM.K.SQUAD_SPEED:0.8)*(typeof gameSpeed!=='undefined'?gameSpeed:1);
+            gh._fracR+=(spd/len)*dt;                                 // предсказание вперёд
+            const err=sf-gh._fracR;
+            if(err<-0.12||err>0.30) gh._fracR=sf;                    // откат/редирект/большой скачок → снап
+            else gh._fracR+=err*Math.min(1,dt*7);                    // мягкая коррекция к серверу
+            gh._fracR=gh._fracR<0?0:(gh._fracR>1?1:gh._fracR);
+          }
+          const sm=(typeof hexRoadSample==='function')?hexRoadSample(gh.edgeA,gh.edgeB,gh._fracR):null;
+          if(sm){ p.x=sm.x; p.z=sm.z; } else { p.x=t.x; p.z=t.z; }   // предсказанная арк-позиция; fallback — снапшот
         }else{
+          gh._fracR=null;                                           // без ребра → сглаживаем лерпом к снапшоту
           p.x+=dx*k; p.z+=dz*k;                                     // online Colyseus без edge/frac приходит снапшотами → сглаживаем
         }
         p.y=unitGroundY(p.x,p.z);
