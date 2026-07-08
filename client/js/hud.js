@@ -369,12 +369,7 @@ function updateHUD(){
   {const mp=Math.floor(manpower[PLAYER]||0), mpcap=Math.round(manpowerCap(PLAYER));
    const hmp=document.getElementById('hMp'); hmp.textContent=mp; hmp.style.color=mp<mpcap*0.12?'#ff7a6a':'';
    document.getElementById('hMpCap').textContent=mpcap;}
-  document.getElementById('hMine').textContent=mine;
-  document.getElementById('hTotal').textContent=cities.length;
-  document.getElementById('hRank').textContent=rank;
-  document.getElementById('hRankTot').textContent=aliveCount;
-  document.getElementById('hAlive').textContent=aliveCount;
-  document.getElementById('hUnits').textContent=Math.round(cities.filter(c=>c.owner===PLAYER).reduce((s,c)=>s+c.units,0));
+  // Cities / Rank / Factions-alive / Army убраны из топбара
   document.getElementById('sbTech').classList.toggle('active',!!techWinOpen);
   document.getElementById('sbPol').classList.toggle('active',!!polWinOpen);
 }
