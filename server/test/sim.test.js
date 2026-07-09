@@ -51,15 +51,19 @@ test('гарнизон не превышает capacity', () => {
   c.batches.push({ count: 10, time: 0.1, elapsed: 0 });
   c.update(0.2); eq(c.units, c.capacity);
 });
-test('переполнение: прибывшие входят СВЕРХ capacity, излишек дренажится до capacity (OVERCAP_DRAIN)', () => {
-  const s = new Sim({ factions: 1, cities: 2 });
+test('переполнение: прибывшие входят СВЕРХ capacity; дренаж — целые юниты раз в OVERCAP_DRAIN_SEC, тип случайный', () => {
+  const s = new Sim({ factions: 1, cities: 2, rng: () => 0.5 });
+  s.K.OVERCAP_DRAIN_SEC = 5; s.K.OVERCAP_DRAIN_N = 1;
   const c = s.cities[1]; c.units = c.capacity;                         // город полон
-  s.resolveArrival({ owner: 0, stopCity: c.idx, fcount: 50, comp: { inf: 50, arc: 0, cav: 0 }, atkMult: 1 });
-  gt(c.units, c.capacity, 'прибывшие вошли сверх capacity (переполнение)');
-  near(c.units, c.capacity + 50, 1e-6);
-  c.update(1.0); near(c.units, c.capacity + 50 - s.K.OVERCAP_DRAIN, 0.02, 'дренаж ~OVERCAP_DRAIN/с');
-  for (let i = 0; i < 500; i++) c.update(1.0);
-  near(c.units, c.capacity, 1e-6, 'дренаж останавливается ровно на capacity, не ниже');
+  s.resolveArrival({ owner: 0, stopCity: c.idx, fcount: 50, comp: { inf: 30, arc: 15, cav: 5 }, atkMult: 1 });
+  const over = c.units;
+  gt(over, c.capacity, 'прибывшие вошли сверх capacity (переполнение)');
+  s._drainOvercap(c, 4.9); eq(c.units, over, 'до интервала (5с) — без потерь');
+  s._drainOvercap(c, 0.2); eq(c.units, over - 1, 'раз в OVERCAP_DRAIN_SEC гибнет ровно OVERCAP_DRAIN_N=1 целый юнит');
+  assert(Number.isInteger(over - c.units), 'потери — целое число');
+  for (let i = 0; i < 200; i++) s._drainOvercap(c, 5);                 // прогоняем до capacity
+  assert(c.units <= c.capacity + 1e-6, 'дренаж не оставляет выше capacity');
+  near(c.units, c.capacity, 1.0, 'спадает ровно до ~capacity, не ниже');
 });
 test('FIFO: продвигается только первая партия', () => {
   const c = mkCity({ size: 1 }); const u0 = c.units;

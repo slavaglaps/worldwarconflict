@@ -160,7 +160,7 @@ class Sim {
     const c = this.cities[s.stopCity]; if (!c) return;
     syncComp(s.comp, s.fcount);                                        // 👥 актуализировать состав после потерь в пути
     if (c.owner === s.owner || this.allied(s.owner, c.owner)) {
-      c.units += s.fcount;                                              // 👥 ВСЕ юниты входят в город, даже сверх capacity (переполнение, напр. 170/80) — излишек дренажится в City.update
+      c.units += s.fcount;                                              // 👥 ВСЕ юниты входят в город, даже сверх capacity (переполнение, напр. 170/80) — излишек дренажится в Sim._drainOvercap
       if (c.comp && s.comp) addComp(c.comp, s.comp);
     } else {
       c.siege = c.siege || {};
@@ -169,6 +169,28 @@ class Sim {
       p.units += s.fcount; p.atkMult = s.atkMult;
       if (s.comp) addComp(p.comp, s.comp);
     }
+  }
+  // 👥 дренаж переполнения гарнизона: раз в OVERCAP_DRAIN_SEC сек, пока units>capacity, гибнет OVERCAP_DRAIN_N
+  //    ЦЕЛЫХ юнитов; тип каждого выбирается случайно, взвешенно по составу (сид-rng → детерминизм/сеть).
+  _drainOvercap(c, dt) {
+    if (c.units <= c.capacity) { c._overcapT = 0; return; }
+    const interval = this.K.OVERCAP_DRAIN_SEC > 0 ? this.K.OVERCAP_DRAIN_SEC : 5;
+    const n = Math.max(0, Math.round(this.K.OVERCAP_DRAIN_N || 0));
+    c._overcapT = (c._overcapT || 0) + dt;
+    while (c._overcapT >= interval && c.units > c.capacity) {
+      c._overcapT -= interval;
+      for (let k = 0; k < n && c.units > c.capacity; k++) this._killOvercapUnit(c);
+    }
+  }
+  _killOvercapUnit(c) {   // −1 целый юнит; тип — взвешенный случайный по составу
+    const T = this.K.UNIT_TYPES || ['inf', 'arc', 'cav'], comp = c.comp;
+    let pick = null;
+    if (comp) {
+      let tot = 0; for (const t of T) tot += Math.max(0, comp[t] || 0);
+      if (tot > 1e-9) { let r = this.rng() * tot; for (const t of T) { r -= Math.max(0, comp[t] || 0); if (r <= 0) { pick = t; break; } } }
+    }
+    if (pick && comp[pick] != null) comp[pick] = Math.max(0, comp[pick] - 1);
+    c.units = Math.max(0, c.units - 1);
   }
   // дорожная дистанция между отрядами: одно ребро → |Δarc| вдоль дороги;
   // смежные рёбра → сумма расстояний до общего узла (встреча на перекрёстке); иначе null (не на одной дороге)
@@ -759,6 +781,7 @@ class Sim {
     for (const c of this.cities) {
       const income = c.update(dt);
       if (income) this.gold[c.owner] = (this.gold[c.owner] || 0) + income;
+      this._drainOvercap(c, dt);   // 👥 переполнение гарнизона: дискретный дренаж целых юнитов (рандомный тип)
       if (c._captured !== undefined) { const prev = c._captured; c._captured = undefined; captured = true; if (prev != null && !this.cities.some(x => x.owner === prev)) this.permanentAnnex(prev, c.owner); }
     }
     if (captured) this._updateCountryBoost();           // смена владельца → пересчёт бонуса контроля страны

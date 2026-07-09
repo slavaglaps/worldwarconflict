@@ -38,9 +38,10 @@ module.exports = {
   // 🏙 город: вместимость = CAP_BASE + size*CAP_PER_SIZE; голда каждые GOLD_INTERVAL/eco сек (×size×GOLD_YIELD);
   //    время найма бойца = (TRAIN_BASE − size*TRAIN_PER_SIZE)/prod. Тюнятся через balance.tune.
   CITY_CAP_BASE: 32, CITY_CAP_PER_SIZE: 24,
-  // 👥 переполнение гарнизона: прибывшие отряды входят в город сверх capacity, но излишек постепенно гибнет.
-  //    OVERCAP_DRAIN — юнитов/сек сверх лимита (0.2 = 2 юнита за 10с). Тюнится через balance.tune (overcap_drain).
-  OVERCAP_DRAIN: 0.2,
+  // 👥 переполнение гарнизона: прибывшие отряды входят в город сверх capacity, но излишек гибнет дискретно —
+  //    раз в OVERCAP_DRAIN_SEC секунд умирает OVERCAP_DRAIN_N ЦЕЛЫХ юнитов (тип выбирается случайно, взвешенно
+  //    по составу), пока не спадёт до capacity. Тюнится через balance.tune (overcap_drain_sec / overcap_drain_n).
+  OVERCAP_DRAIN_SEC: 5, OVERCAP_DRAIN_N: 1,
   CITY_GOLD_INTERVAL: 4, CITY_GOLD_YIELD: 1, CITY_TRAIN_BASE: 0.5, CITY_TRAIN_PER_SIZE: 0.07,
   // спец/тир коэффициенты: +cap/def/atk за тир у соответствующего спеца; prod-город — pow(GOLD_DECAY,tier) к интервалу
   CITY_DEF_CAP_PER_TIER: 0.22, CITY_DEF_MULT_PER_TIER: 0.32, CITY_ATK_MULT_PER_TIER: 0.28, CITY_PROD_GOLD_DECAY: 0.68,
