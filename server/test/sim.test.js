@@ -51,6 +51,16 @@ test('гарнизон не превышает capacity', () => {
   c.batches.push({ count: 10, time: 0.1, elapsed: 0 });
   c.update(0.2); eq(c.units, c.capacity);
 });
+test('переполнение: прибывшие входят СВЕРХ capacity, излишек дренажится до capacity (OVERCAP_DRAIN)', () => {
+  const s = new Sim({ factions: 1, cities: 2 });
+  const c = s.cities[1]; c.units = c.capacity;                         // город полон
+  s.resolveArrival({ owner: 0, stopCity: c.idx, fcount: 50, comp: { inf: 50, arc: 0, cav: 0 }, atkMult: 1 });
+  gt(c.units, c.capacity, 'прибывшие вошли сверх capacity (переполнение)');
+  near(c.units, c.capacity + 50, 1e-6);
+  c.update(1.0); near(c.units, c.capacity + 50 - s.K.OVERCAP_DRAIN, 0.02, 'дренаж ~OVERCAP_DRAIN/с');
+  for (let i = 0; i < 500; i++) c.update(1.0);
+  near(c.units, c.capacity, 1e-6, 'дренаж останавливается ровно на capacity, не ниже');
+});
 test('FIFO: продвигается только первая партия', () => {
   const c = mkCity({ size: 1 }); const u0 = c.units;
   c.batches = [{ count: 3, time: 1, elapsed: 0 }, { count: 5, time: 1, elapsed: 0 }];

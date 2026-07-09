@@ -153,6 +153,12 @@ class City {
         this.batches.shift();
       }
     }
+    // 👥 переполнение гарнизона: прибывшие отряды ВХОДЯТ даже сверх capacity (напр. 170/80), но излишек
+    //    постепенно гибнет — OVERCAP_DRAIN юнитов/сек, ровно до capacity (тюн через баланс: overcap_drain).
+    if (this.units > this.capacity) {
+      this.units = Math.max(this.capacity, this.units - (this.K.OVERCAP_DRAIN || 0) * dt);
+      syncComp(this.comp, this.units);
+    }
     return income;
   }
 }

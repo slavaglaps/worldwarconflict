@@ -161,9 +161,8 @@ class Sim {
     const c = this.cities[s.stopCity]; if (!c) return;
     syncComp(s.comp, s.fcount);                                        // 👥 актуализировать состав после потерь в пути
     if (c.owner === s.owner || this.allied(s.owner, c.owner)) {
-      const add = Math.max(0, Math.min(c.capacity - c.units, s.fcount));
-      c.units += add;
-      if (c.comp && s.comp && s.fcount > 1e-9) addComp(c.comp, s.comp, add / s.fcount);   // излишек сверх capacity пропадает, как раньше
+      c.units += s.fcount;                                              // 👥 ВСЕ юниты входят в город, даже сверх capacity (переполнение, напр. 170/80) — излишек дренажится в City.update
+      if (c.comp && s.comp) addComp(c.comp, s.comp);
     } else {
       c.siege = c.siege || {};
       const p = c.siege[s.owner] || (c.siege[s.owner] = { units: 0, atkMult: s.atkMult, comp: { inf: 0, arc: 0, cav: 0 } });
