@@ -209,11 +209,16 @@ function updateHireTypeBtns(){
     hireTypeBtns[t].classList.toggle('sel',on); }
 }
 function updateCityPanelHeader(c){
+  document.getElementById('pName').textContent=cityDisp(c.idx);
+  const meta=document.getElementById('pMeta');
+  if(c._fog){   // 🌫 город вне вижена: только last-seen число (или «?»), без уровней/состава
+    const seen=c._seenUnits!=null?c._seenUnits:'?';
+    if(meta)meta.innerHTML=`<span class="pGarrison">Garrison ${seen}</span>`;
+    return;
+  }
   const lvl=CITY_UPGRADE_TRACKS.map(tr=>`<span class="pLevelChip"><span>${SPEC[tr].icon}</span><b>${c.branchTier(tr)}</b></span>`).join('');
   const comp=c.comp||{inf:c.units,arc:0,cav:0};
   const unitChips=PANEL_UNITS.map(u=>`<span class="pUnitChip"><span>${u.icon}</span><b>${Math.round(comp[u.id]||0)}</b></span>`).join('');
-  document.getElementById('pName').textContent=cityDisp(c.idx);
-  const meta=document.getElementById('pMeta');
   if(meta)meta.innerHTML=lvl+`<span class="pGarrison">Garrison ${Math.round(c.units)}/${Math.round(c.capacity)}</span>`+unitChips;
 }
 function updateUnitQueue(c){

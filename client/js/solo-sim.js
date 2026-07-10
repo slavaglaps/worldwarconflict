@@ -7,9 +7,21 @@
    делал только Colyseus ради трафика). spec-кодировка совпадает с сервером. */
 var _SOLO_SPEC2ID = { prod: 1, def: 2, atk: 3 };   // = server SPEC_ID (SPEC2ID в loop.js — локальный, недоступен тут)
 function projectLocalSim(sim, onMsg) {
+  // 🌫 туман войны в соло: та же математика видимости, что на сервере (sim/vision.js)
+  const _V = (window.__WWCSim && window.__WWCSim.vision) || null;
+  const _mask = _V ? _V.visionMask(sim, PLAYER) : null;
+  const _G = sim.K.GRID;
+  const inVision = (x, z) => { if (!_mask) return true; const cx = Math.round(x), cz = Math.round(z);
+    return cx >= 0 && cz >= 0 && cx < _G && cz < _G && _mask[cx * _G + cz] === 1; };
   // ── города (тапл как в push(): [idx,owner,units,spec,tier,occ,queued,siegeU,siegeO,prodT,prodE,shipQ,shipT,planeQ,planeT]) ──
   const c = [];
   for (const cc of sim.cities) {
+    // 🌫 город вне вижена → «оболочка»: units=null (applyCity заморозит last-seen)
+    if (!(cc.owner === PLAYER || sim.allied(PLAYER, cc.owner) || inVision(cc.gx, cc.gz))) {
+      c.push([cc.idx, cc.owner, null, 0, 0, cc.occ ? 1 : 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        null, null, null, cc.occ && cc.occFrom != null ? cc.occFrom : 255, null]);
+      continue;
+    }
     const b0 = cc.batches && cc.batches[0];
     let su = 0, so = 0;
     if (cc.siege) for (const o in cc.siege) if (cc.siege[o].units > su) { su = cc.siege[o].units; so = +o; }
@@ -37,7 +49,9 @@ function projectLocalSim(sim, onMsg) {
   const WY = (typeof WATER_Y_SHIP !== 'undefined' ? WATER_Y_SHIP : -0.1);
   const PA = (typeof PLANE_ALT !== 'undefined' ? PLANE_ALT : 4.5);
   const e = [];
+  const moverVisible = (o, x, z) => o === PLAYER || sim.allied(PLAYER, o) || inVision(x, z);   // 🌫 чужие видны только в вижене
   for (const s of sim.squads) {
+    if (!moverVisible(s.owner, s.x, s.z)) continue;
     let x = s.x, z = s.z;                                          // прямая интерполяция ребра…
     let ea = null, eb = null, ef = 0;                              // текущее ребро + доля пути — для потока юнитов (UNIT_STREAM)
     if (typeof hexRoadPos === 'function' && s.path) {              // …но рисуем ВДОЛЬ визуальной дороги — и В БОЮ тоже (иначе прыжок с дороги при сцепке)
@@ -52,8 +66,8 @@ function projectLocalSim(sim, onMsg) {
       s.comp ? Math.round(s.comp.inf) : Math.round(s.fcount), s.comp ? Math.round(s.comp.arc) : 0, s.comp ? Math.round(s.comp.cav) : 0, s.mode | 0, 0, s.heading || 0]);  // [7]=fighting; [8..10]=ребро; [11..13] состав; [14]=🚢 mode; [16]=курс(рад)
     if ((s.mode | 0) === 2) e.push(['shq' + s.id, 1, s.owner, x, WY, z, 0, s.heading || 0]);   // 🚢 ОТДЕЛЬНЫЙ корабль над водой (kind-1, авторитетный курс [7]) — в визуальной позиции отряда
   }
-  for (const s of sim.ships) e.push(['sh' + s.id, 1, s.owner, s.x, WY, s.z, 0]);
-  for (const p of sim.planes) e.push(['pl' + p.id, 2, p.owner, p.x, PA, p.z, 0]);
+  for (const s of sim.ships) if (moverVisible(s.owner, s.x, s.z)) e.push(['sh' + s.id, 1, s.owner, s.x, WY, s.z, 0]);
+  for (const p of sim.planes) if (moverVisible(p.owner, p.x, p.z)) e.push(['pl' + p.id, 2, p.owner, p.x, PA, p.z, 0]);
   onMsg({ data: JSON.stringify({ t: 'ent', e }) });
 }
 

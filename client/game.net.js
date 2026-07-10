@@ -173,7 +173,9 @@
       }
     });
     const parseQueue=s=>String(s||'').split(';').filter(Boolean).slice(0,6).map(part=>{const a=part.split(',');return [(+a[0]||0),(+a[1]||0),(+a[2]||0),a[3]||'inf'];});
-    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0, cc.prodTier|0, cc.defTier|0, cc.atkTier|0,
+    // 🌫 туман войны: приватные поля города приходят ТОЛЬКО в вижене (view-теги схемы);
+    //    units===undefined → город в тумане → units:null (applyCity заморозит last-seen)
+    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units!==undefined?cc.units:null, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0, cc.prodTier|0, cc.defTier|0, cc.atkTier|0,
       cc.compInf!=null?cc.compInf:null, cc.compArc!=null?cc.compArc:null, cc.compCav!=null?cc.compCav:null,
       cc.occFrom==null?255:cc.occFrom, parseQueue(cc.recruitQueue)]));
     const rel=[]; state.relations.forEach((v,k)=> rel.push([k, v===1?'war':'ally']));

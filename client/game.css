@@ -62,6 +62,7 @@
   .lab{position:absolute;left:0;top:0;transform:translate(-50%,-50%);font-size:12px;font-weight:700;color:#06121e;
        text-shadow:0 0 3px rgba(255,255,255,.6);white-space:nowrap;text-align:center;}
   .lab .q{display:block;font-size:10px;font-weight:600;color:#ffce6a;text-shadow:0 1px 2px #000;}
+  .lab .fogSeen{color:#8e9aa6;opacity:.8;font-weight:700;}   /* 🌫 last-seen гарнизон в тумане */
   .lab .nm{display:block;font-size:10px;font-weight:600;color:#fff;text-shadow:0 1px 2px #000;}
   .lab .aa{display:inline-block;font-size:10px;font-weight:700;color:#7fe3ff;text-shadow:0 1px 2px #000;margin-left:2px;}
   /* city / army panel */

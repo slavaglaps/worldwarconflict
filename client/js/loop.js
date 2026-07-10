@@ -336,6 +336,17 @@ function loop(now){
 
   /* ── гость: применить состояние одного города ── */
   function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner,prodTime,prodElapsed,shipQ,shipT,planeQ,planeT,prodTier,defTier,atkTier,compI,compA,compC,occFrom,queueList){
+    // 🌫 туман войны: units===null → город вне вижена. Обновляем только публичную «оболочку»
+    //    (владелец/оккупация); приватное замораживаем как last-seen (units/comp/очереди/осада).
+    if(units==null){
+      const pOwner=c.owner;
+      c.owner=owner; c.occ=!!occ;
+      c.occFrom = c.occ ? (occFrom!=null && occFrom!==255 ? occFrom : c.occFrom) : null;
+      if(!c._fog){ c._fog=true; c._seenUnits=(typeof c.units==='number'&&c._everSeen)?Math.round(c.units):null; }
+      if(pOwner!==owner){ try{c.recolor&&c.recolor();}catch(e){} if(typeof markRegions==='function')markRegions(); }
+      return;
+    }
+    if(c._fog||!c._everSeen){ c._fog=false; c._everSeen=true; }
     const spec=ID2SPEC[specId]||null, prevOwner=c.owner;
     const nextProd=prodTier==null?(spec==='prod'?tier:0):prodTier;
     const nextDef=defTier==null?(spec==='def'?tier:0):defTier;

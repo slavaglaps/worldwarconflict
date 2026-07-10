@@ -9,7 +9,7 @@ async function loadServerSim(base) {
   base = base || 'sim/';
   // порядок = граф require (зависимости раньше зависимых); City ДО Squad (Squad требует syncComp из City)
   const ORDER = ['constants', 'tech-data', 'water-data.json', 'water', 'tech',
-                 'balance', 'SpatialGrid', 'City', 'Squad', 'Ship', 'Plane', 'Sim'];
+                 'balance', 'SpatialGrid', 'City', 'Squad', 'Ship', 'Plane', 'Sim', 'vision'];
   const parts = [
     '(function(){',
     'var __M={};',
@@ -32,7 +32,7 @@ async function loadServerSim(base) {
   }
   parts.push('window.__WWCSim={Sim:__M["Sim"].Sim,makeBalance:__M["balance"].makeBalance,'
     + 'makeConstants:__M["balance"].makeConstants,factionBal:__M["balance"].factionBal,'
-    + 'deepMerge:__M["balance"].deepMerge,water:__M["water"],tech:__M["tech"]};');
+    + 'deepMerge:__M["balance"].deepMerge,water:__M["water"],tech:__M["tech"],vision:__M["vision"]};');
   parts.push('})();');
 
   const s = document.createElement('script');

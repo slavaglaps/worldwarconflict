@@ -398,6 +398,7 @@ class City{
   }
   drawProdRing(){
     let frac=null;
+    if(this._fog){ if(this.pring.visible){this.pring.visible=false;this._pringSeg=-1;} return; }   // 🌫 в тумане прогресс скрыт
     if(this.batches.length){ const b=this.batches[0]; frac=Math.min(1,b.elapsed/b.time); }                                                  // найм солдат
     else if(this.isShipyard&&this.shipQueue>0&&typeof SHIP_BUILD_TIME!=='undefined'){ frac=Math.min(1,this.shipTimer/SHIP_BUILD_TIME); }     // ⚓ постройка корабля
     else if(this.isAirport&&this.planeQueue>0&&typeof PLANE_BUILD_TIME!=='undefined'){ frac=Math.min(1,this.planeTimer/PLANE_BUILD_TIME); }   // ✈ постройка самолёта
@@ -413,8 +414,16 @@ class City{
     if(v.z>1){showLab(this.lab,false);return;}
     showLab(this.lab,true);
     posLab(this.lab,(v.x*0.5+0.5)*innerWidth,(-v.y*0.5+0.5)*innerHeight);
-    const q=this.queued;
     const nm=`<span class="nm">${cityDisp(this.idx)}</span>`; // имя для ВСЕХ городов
+    // 🌫 туман войны: город вне вижена → last-seen серым (или «?», если ни разу не видели);
+    //    состав/очередь/осада скрыты — только застывшее число
+    if(this._fog){
+      const seen=this._seenUnits!=null?String(this._seenUnits):'?';
+      setLabHTML(this.lab,`<span class="fogSeen">${seen}</span>${nm}`);
+      setLabColor(this.lab,'#06121e');
+      return;
+    }
+    const q=this.queued;
     // гарнизон трясётся красным когда обороняется
     const def=this.siege?'<span style="color:#ff6a4a">🛡</span>':'';
     const occm=this.occ?`<span style="color:#${(OWNER_COL[this.occFrom]||0).toString(16).padStart(6,'0')};text-shadow:0 0 2px #000">⚑</span>`:''; // занят (флаг де-юре владельца)
@@ -435,7 +444,7 @@ class City{
     _updateSiegeFX(now);                                                   // пыль/осколки (раз в кадр)
     const orbs=this.siegeOrbs;
     const bx=this._visualGX==null?this.gx:this._visualGX, bz=this._visualGZ==null?this.gz:this._visualGZ, by=this._visualY==null?this.baseY:this._visualY;
-    if(!this.siege){
+    if(!this.siege||this._fog){                                            // 🌫 в тумане чужой бой не показываем
       for(const o in orbs){this._killSiegeOrb(orbs[o]);delete orbs[o];}    // старый рой (если остался) — убрать
       if(this._siegeLab)showLab(this._siegeLab,false);
       this.buildGroup.position.set(bx,by,bz);                              // снять тряску
