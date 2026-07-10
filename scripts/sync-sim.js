@@ -21,7 +21,7 @@ const DST = path.join(__dirname, '..', 'client', 'sim');
 const FILES = [
   'constants.js', 'tech-data.js', 'tech.js', 'balance.js',
   'SpatialGrid.js', 'Squad.js', 'Ship.js', 'Plane.js', 'City.js', 'Sim.js',
-  'water.js', 'water-data.json', 'map-data.json',
+  'water.js', 'vision.js', 'water-data.json', 'map-data.json',
 ];
 
 const HEADER = '/* СКОПИРОВАНО из server/sim/ скриптом scripts/sync-sim.js — НЕ РЕДАКТИРОВАТЬ. Источник: server/sim/%F */\n';

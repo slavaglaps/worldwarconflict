@@ -8,6 +8,29 @@ document.getElementById('ovBtn').onclick=openCountryPick;  // «Играть с�
 let panelCity=null, shipBuildRow=null, planeBuildRow=null, airRecallRow=null, yardShipRow=null, yardAirRow=null;
 const upgRows={}, buyRows={};
 function panelRowAccent(row,color){ row.style.setProperty('--row-accent',color); row.style.background=''; }
+const PANEL_UNITS=[
+  {id:'inf',name:'Пехота',label:'Infantry',icon:'⚔'},
+  {id:'arc',name:'Лучники',label:'Archers',icon:'🏹'},
+  {id:'cav',name:'Конница',label:'Cavalry',icon:'🐎'}
+];
+const PANEL_LOCKED_UNITS=[
+  {label:'Crossbowman',icon:'⌁'},
+  {label:'Mage',icon:'✦'},
+  {label:'Siege',icon:'⚒'},
+  {label:'Alchemist',icon:'⚗'}
+];
+const PANEL_UPG={
+  prod:{desc:'capacity and city storage',effect:()=>`+${Math.round(CITY_DEF_CAP_PER_TIER*100)}% garrison capacity`},
+  def:{desc:'city damage reduction',effect:()=>`+${Math.round(CITY_DEF_MULT_PER_TIER*100)}% city defense`},
+  atk:{desc:'tower fire and strike range',effect:()=>'+1 tower damage · +range'}
+};
+function panelSectionTitle(label){return `<div class="panelSectTitle">${label}</div>`;}
+function unitInfo(id){return PANEL_UNITS.find(u=>u.id===id)||PANEL_UNITS[0];}
+function panelFmtTime(sec){return sec>=10?Math.ceil(sec)+'s':Math.max(0,sec).toFixed(1)+'s';}
+function unitBuyHtml(spec){
+  const n=+spec||0;
+  return `<b>x${spec}</b><span>💰${n*SOLDIER_PRICE} 👥${n*SOLDIER_MP}</span>`;
+}
 function buildShip(yard,actor){
   if(MP.guest){ MP.cmd({cmd:'bship',c:yard.idx}); return; }   // гость → команда хосту
   const a=actor==null?PLAYER:actor, P=a===PLAYER;
@@ -118,6 +141,7 @@ function buildYard(parent,kind,actor){
 function buildPanelRows(){
   const ub=document.getElementById('upgTab'); ub.innerHTML='';
   const bb0=document.getElementById('buyRows'); bb0.innerHTML='';
+  const uq=document.getElementById('unitQueue'); if(uq)uq.innerHTML='';
   if(panelCity.isShipyard||panelCity.isAirport){ // верфь/аэропорт — одна кнопка постройки
     const air=panelCity.isAirport;
     const row=document.createElement('div'); row.className='row'; panelRowAccent(row,air?'#7a6fd0':'#4a8fd0');
@@ -128,10 +152,16 @@ function buildPanelRows(){
     return;
   }
   shipBuildRow=null; planeBuildRow=null; airRecallRow=null;
+  ub.insertAdjacentHTML('beforeend',panelSectionTitle('Upgrade'));
   for(const tr of CITY_UPGRADE_TRACKS){
     const s=SPEC[tr];
-    const row=document.createElement('div'); row.className='row'; panelRowAccent(row,s.color);
-    row.innerHTML=`<span>${s.icon} ${(typeof tName==='function')?tName('spec',s.name):s.name}</span><small></small>`;
+    const ui=PANEL_UPG[tr]||{desc:'',effect:()=>''};
+    const row=document.createElement('div'); row.className='upgCard'; panelRowAccent(row,s.color);
+    row.innerHTML=
+      `<div class="upgIcon">${s.icon}</div>`+
+      `<div><div class="upgName"><span>${(typeof tName==='function')?tName('spec',s.name):s.name}</span><b class="upgLvl"></b></div><div class="upgDesc">${ui.desc}</div></div>`+
+      `<div class="upgEffect"></div>`+
+      `<button class="upgBtn" type="button"></button>`;
     // обработчик стабилен; читает panelCity на момент клика, проверяет .dis сам
     row.addEventListener('click',()=>{ if(!row.classList.contains('dis')&&panelCity){upgradeCity(panelCity,tr);updatePanel();} });
     ub.appendChild(row); upgRows[tr]=row;
@@ -139,42 +169,67 @@ function buildPanelRows(){
   // ⚓ верфь и ✈ аэропорт теперь ставятся из общего меню строительства на соседних хексах.
   yardShipRow=null; yardAirRow=null;
   const bb=document.getElementById('buyRows'); bb.innerHTML='';
-  // 👥 селектор типа найма: пехота / лучники / конница
-  { const sel=document.createElement('div'); sel.className='row'; sel.style.gap='6px'; sel.style.cursor='default';
-    hireTypeBtns={};
-    for(const [t,ic,nm] of [['inf','⚔','Пехота'],['arc','🏹','Лучники'],['cav','🐎','Конница']]){
-      const b=document.createElement('button'); b.textContent=`${ic} ${(typeof tName==='function')?tName('unit',nm):nm}`;
-      b.style.cssText='flex:1;padding:4px 6px;border-radius:6px;border:1px solid #33415a;background:#141b28;color:#cfd8ea;cursor:pointer;font:inherit;font-size:12px';
-      b.addEventListener('click',()=>{ hireType=t; updateHireTypeBtns(); updatePanel(); });
-      sel.appendChild(b); hireTypeBtns[t]=b;
+  bb.insertAdjacentHTML('beforeend',panelSectionTitle('Recruit'));
+  const rg=document.createElement('div'); rg.className='recruitGrid'; hireTypeBtns={};
+  for(const u of PANEL_UNITS){
+    const card=document.createElement('div'); card.className='unitCard'; card.dataset.unit=u.id;
+    card.innerHTML=`<div class="unitArt">${u.icon}</div><div class="unitName">${u.label}</div><div class="unitBtns"></div>`;
+    const btns=card.querySelector('.unitBtns');
+    for(const spec of ['5','20']){
+      const b=document.createElement('button'); b.type='button'; b.className='unitBuy'; b.dataset.unit=u.id; b.dataset.spec=spec; b.innerHTML=unitBuyHtml(spec);
+      b.addEventListener('click',ev=>{ev.stopPropagation(); if(!b.classList.contains('dis')&&panelCity){hireType=u.id;buySoldiers(panelCity,spec,u.id);updatePanel();}});
+      btns.appendChild(b); buyRows[u.id+'_'+spec]=b;
     }
-    bb.appendChild(sel); updateHireTypeBtns();
+    card.addEventListener('click',()=>{hireType=u.id;updateHireTypeBtns();});
+    rg.appendChild(card); hireTypeBtns[u.id]=card;
   }
+  { const card=document.createElement('div'); card.className='unitCard locked';
+    card.innerHTML='<div class="unitArt">♞</div><div class="unitName">Knight</div><div class="unitLock">Tech</div>';
+    rg.appendChild(card);
+  }
+  bb.appendChild(rg);
+  const yardBox=document.createElement('div'); yardBox.className='yardActions'; bb.appendChild(yardBox);
   { const r=document.createElement('div'); r.className='row'; panelRowAccent(r,'#4a8fd0');
     r.innerHTML=`<span>${t('hud.build_ship')}</span><small></small>`;
     r.addEventListener('click',()=>{ if(!r.classList.contains('dis')&&panelCity)buildShip(panelCity); });
-    bb.appendChild(r); shipBuildRow=r;
+    yardBox.appendChild(r); shipBuildRow=r;
   }
   { const r=document.createElement('div'); r.className='row'; panelRowAccent(r,'#7a6fd0');
     r.innerHTML=`<span>${t('hud.build_airship')}</span><small></small>`;
     r.addEventListener('click',()=>{ if(!r.classList.contains('dis')&&panelCity)buildPlane(panelCity); });
-    bb.appendChild(r); planeBuildRow=r;
+    yardBox.appendChild(r); planeBuildRow=r;
   }
-  for(const spec of ['5','20','max']){
-    const row=document.createElement('div'); row.className='row'; panelRowAccent(row,'#ff9a4a');
-    row.innerHTML=`<span>⚔ ${spec==='max'?t('hud.buy_max'):t('hud.buy_amount',{n:'+'+spec})}</span><small></small>`;
-    row.addEventListener('click',()=>{ if(!row.classList.contains('dis')&&panelCity){buySoldiers(panelCity,spec,hireType);updatePanel();} });
-    bb.appendChild(row); buyRows[spec]=row;
-  }
+  updateHireTypeBtns();
 }
 let hireType='inf', hireTypeBtns=null;   // 👥 выбранный тип найма
 const HIRE_ICON={inf:'⚔',arc:'🏹',cav:'🐎'};
 function updateHireTypeBtns(){
   if(!hireTypeBtns)return;
   for(const t in hireTypeBtns){ const on=t===hireType;
-    hireTypeBtns[t].style.borderColor=on?'#ff9a4a':'#33415a';
-    hireTypeBtns[t].style.background=on?'#2a2216':'#141b28';
-    hireTypeBtns[t].style.color=on?'#ffd9a8':'#cfd8ea'; }
+    hireTypeBtns[t].classList.toggle('sel',on); }
+}
+function updateCityPanelHeader(c){
+  const lvl=CITY_UPGRADE_TRACKS.map(tr=>`<span class="pLevelChip"><span>${SPEC[tr].icon}</span><b>${c.branchTier(tr)}</b></span>`).join('');
+  const comp=c.comp||{inf:c.units,arc:0,cav:0};
+  const unitChips=PANEL_UNITS.map(u=>`<span class="pUnitChip"><span>${u.icon}</span><b>${Math.round(comp[u.id]||0)}</b></span>`).join('');
+  document.getElementById('pName').textContent=cityDisp(c.idx);
+  const meta=document.getElementById('pMeta');
+  if(meta)meta.innerHTML=lvl+`<span class="pGarrison">Garrison ${Math.round(c.units)}/${Math.round(c.capacity)}</span>`+unitChips;
+}
+function updateUnitQueue(c){
+  const el=document.getElementById('unitQueue'); if(!el)return;
+  el.className='active';
+  let html=panelSectionTitle('Queue')+'<div class="queueSlots">';
+  for(let i=0;i<6;i++){
+    const b=c.batches&&c.batches[i];
+    if(!b){html+=`<div class="qSlot empty"><div class="qNum">${i+1}</div></div>`;continue;}
+    const u=unitInfo(b.type||c.recruitType||'inf');
+    const prog=Math.max(0,Math.min(100,((b.elapsed||0)/(b.time||1))*100));
+    const remain=Math.max(0,(b.time||0)-(b.elapsed||0));
+    html+=`<div class="qSlot"><div class="qNum">${i+1}</div><div class="qArt">${u.icon}</div><div class="qQty">+${Math.round(b.count||0)}</div><div class="qTime">${panelFmtTime(remain)}</div><div class="qProg"><i style="width:${prog}%"></i></div></div>`;
+  }
+  html+='</div>';
+  el.innerHTML=html;
 }
 
 function updatePanel(){
@@ -188,8 +243,7 @@ function updatePanel(){
   const airportSeen=!yard&&hasYardNear(c,false);
   p.classList.toggle('yardPanel',yard);
   if(c!==panelCity||c._panelShipyardSeen!==shipyardSeen||c._panelAirportSeen!==airportSeen){ panelCity=c; c._panelShipyardSeen=shipyardSeen; c._panelAirportSeen=airportSeen; if(yard)panelTab='army'; buildPanelRows(); }   // пересборка при смене города/появлении верфи/аэропорта
-  const tiers=CITY_UPGRADE_TRACKS.filter(tr=>c.branchTier(tr)>0).map(tr=>`${SPEC[tr].icon}${c.branchTier(tr)}`).join(' ');
-  document.getElementById('pName').textContent=tiers?`${cityDisp(c.idx)} · ${tiers}`:cityDisp(c.idx);
+  updateCityPanelHeader(c);
   document.getElementById('pGold').textContent=gold[PLAYER]|0;
   // верфь/аэропорт: скрываем вкладку прокачки, только армия
   tabUpgBtn.style.display=yard?'none':'';
@@ -200,6 +254,9 @@ function updatePanel(){
   document.getElementById('armyTab').style.display=panelTab==='army'?'block':'none';
 
   if(yard){ // верфь/аэропорт — очередь техники
+    const uq=document.getElementById('unitQueue'); if(uq){uq.className='';uq.innerHTML='';}
+    document.getElementById('qbar').style.display='';
+    document.getElementById('info').style.display='flex';
     const air=c.isAirport;
     const COST=air?PLANE_COST:SHIP_COST, BT=air?PLANE_BUILD_TIME:SHIP_BUILD_TIME;
     const Q=air?c.planeQueue:c.shipQueue, TM=air?c.planeTimer:c.shipTimer;
@@ -225,13 +282,17 @@ function updatePanel(){
 
   // прокачка — обновляем только текст/состояние постоянных строк
   for(const tr of CITY_UPGRADE_TRACKS){
-    const row=upgRows[tr]; let enabled,right;
+    const row=upgRows[tr]; let enabled,btnText;
     const tier=c.branchTier(tr);
-    if(tier>=MAX_TIER){enabled=false;right=`${tier} · MAX`;}
-    else{const cost=upgradeCost(tier);enabled=gold[PLAYER]>=cost;right=`${tier} → ${tier+1} · −${cost}💰`;}
-    if(occ){enabled=false;right=t('hud.small_occ');}
+    const cost=upgradeCost(tier), ui=PANEL_UPG[tr]||{effect:()=>''};
+    if(tier>=MAX_TIER){enabled=false;btnText='MAX';}
+    else{enabled=gold[PLAYER]>=cost;btnText=`Upgrade 💰${cost}`;}
+    if(occ){enabled=false;btnText=t('hud.small_occ');}
     row.classList.toggle('dis',!enabled);
-    row.querySelector('small').textContent=right;
+    const lvl=row.querySelector('.upgLvl'), eff=row.querySelector('.upgEffect'), btn=row.querySelector('.upgBtn');
+    if(lvl)lvl.textContent='Lvl '+tier;
+    if(eff)eff.textContent=tier>=MAX_TIER?'Maximum level':ui.effect(tier);
+    if(btn)btn.textContent=btnText;
   }
   // ⚓ верфь
   if(yardShipRow){ const has=hasYardNear(c,true), tech=techFlag(PLAYER,'ships');
@@ -246,20 +307,13 @@ function updatePanel(){
     yardAirRow.querySelector('small').textContent = occ?t('hud.small_occ') : has?t('hud.small_have') : !tech?t('hud.small_research') : t('hud.small_cost_gold',{cost:AIRPORT_BUILD_COST});
   }
   // армия (👥 состав гарнизона по типам: пехота/лучники/конница)
+  document.getElementById('qbar').style.display='none';
+  document.getElementById('info').style.display='none';
+  updateUnitQueue(c);
   const compStr=c.comp?` · ⚔${Math.round(c.comp.inf)} 🏹${Math.round(c.comp.arc)} 🐎${Math.round(c.comp.cav)}`:'';
   document.getElementById('info').textContent=occ
     ? t('hud.garrison_occ',{cur:c.units|0,cap:c.capacity|0,comp:compStr})
     : t('hud.garrison_info',{cur:c.units|0,cap:c.capacity|0,comp:compStr,yard:shipyardSeen?t('hud.garrison_yard_suffix'):'',price:SOLDIER_PRICE,mp:Math.floor(manpower[PLAYER]||0)});
-  const fill=document.getElementById('qfill'), qt=document.getElementById('qtext');
-  if(c.shipQueue>0){
-    fill.style.width=Math.min(100,c.shipTimer/SHIP_BUILD_TIME*100)+'%';
-    qt.textContent=t('hud.queue_ships',{n:c.shipQueue,sec:Math.ceil(c.shipQueue*SHIP_BUILD_TIME-c.shipTimer)});
-  } else if(c.planeQueue>0){
-    fill.style.width=Math.min(100,c.planeTimer/PLANE_BUILD_TIME*100)+'%';
-    qt.textContent=t('hud.queue_planes',{n:c.planeQueue,sec:Math.ceil(c.planeQueue*PLANE_BUILD_TIME-c.planeTimer)});
-  } else if(c.queued>0){const b=c.batches[0];fill.style.width=Math.min(100,b.elapsed/b.time*100)+'%';
-    const eta=c.batches.reduce((s,x)=>s+x.time,0)-b.elapsed; qt.textContent=t('hud.queue_soldiers',{n:c.queued,sec:eta.toFixed(0)});}
-  else{fill.style.width='0';qt.textContent=t('hud.queue_empty');}
   if(shipBuildRow){
     const tech=techFlag(PLAYER,'ships');
     const enabled=!occ&&shipyardSeen&&tech&&gold[PLAYER]>=SHIP_COST&&(manpower[PLAYER]||0)>=SHIP_MP;
@@ -274,15 +328,14 @@ function updatePanel(){
     planeBuildRow.classList.toggle('dis',!enabled);
     planeBuildRow.querySelector('small').textContent=occ?t('hud.small_occ'):!airportSeen?t('hud.small_no_airport'):!tech?t('hud.small_research'):(manpower[PLAYER]||0)<PLANE_MP?t('hud.small_mp_low',{n:PLANE_MP}):t('hud.small_cost_mp',{cost:PLANE_COST,mp:PLANE_MP});
   }
-  for(const spec of ['5','20','max']){
-    const row=buyRows[spec]; const amt=buyAmount(c,spec), cost=amt*SOLDIER_PRICE;
-    row.querySelector('span').textContent=`${HIRE_ICON[hireType]||'⚔'} ${spec==='max'?t('hud.buy_max'):t('hud.buy_amount',{n:'+'+spec})}`;   // 👥 иконка выбранного типа
-    row.classList.toggle('dis',occ||amt<=0);
-    let reason=t('hud.small_no_space');
-    if(amt<=0){ const space=Math.floor(c.capacity-c.units-c.queued);
-      reason = space<=0?t('hud.small_no_space') : (Math.floor(manpower[PLAYER]||0)<1?t('hud.small_no_mp'):t('hud.small_no_gold')); }
-    row.querySelector('small').textContent=occ?t('hud.small_occ'):(amt>0?t('hud.small_buy_cost',{n:amt,cost:cost}):reason);
+  for(const u of PANEL_UNITS)for(const spec of ['5','20']){
+    const btn=buyRows[u.id+'_'+spec]; if(!btn)continue;
+    const amt=buyAmount(c,spec);
+    btn.classList.toggle('dis',occ||amt<=0);
+    btn.innerHTML=unitBuyHtml(spec);
+    btn.title=occ?t('hud.small_occ'):(amt>0?t('hud.small_buy_cost',{n:amt,cost:amt*SOLDIER_PRICE}):t('hud.small_no_space'));
   }
+  updateHireTypeBtns();
 }
 
 /* ── флаги фракций в эмблеме (клип по гексагону) ─────────────── */

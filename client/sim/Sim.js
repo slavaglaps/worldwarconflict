@@ -833,7 +833,7 @@ class Sim {
   }
   cmdUpgrade(fid, idx, track) {
     const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ) return false;
-    if (!['prod', 'def'].includes(track)) return false;
+    if (!['prod', 'def', 'atk'].includes(track)) return false;
     c.migrateTiers();
     const tier = c.branchTier(track);
     if (tier >= this.K.MAX_TIER) return false;

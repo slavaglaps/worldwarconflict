@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Voxel Wars</title>
-<link rel="stylesheet" href="game.css">
+<link rel="stylesheet" href="game.css?v=country-art-greece-spain-1">
 </head>
 <body>
 <div id="app"></div>
@@ -43,7 +43,7 @@
 <div id="warPreps" style="position:fixed;top:150px;left:12px;display:flex;flex-direction:column;gap:5px;z-index:14;"></div>
 
 <div id="panel" class="panelbox">
-  <div class="title"><span id="pName">Город</span><span class="gold">💰<span id="pGold">0</span></span></div>
+  <div class="title"><span id="pName">Город</span><span id="pMeta"></span><span class="gold">💰<span id="pGold">0</span></span></div>
   <div id="tabs">
     <button id="tabUpg" class="active">✦ Upgrade</button>
     <button id="tabArmy">⚔ Army</button>
@@ -52,6 +52,7 @@
   <div id="armyTab" style="display:none">
     <div id="info">Garrison 0/0</div>
     <div id="qbar"><div id="qfill"></div><div id="qtext"></div></div>
+    <div id="unitQueue"></div>
     <div id="buyRows"></div>
   </div>
 </div>

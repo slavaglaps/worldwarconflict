@@ -38,7 +38,12 @@ test('манпауэр стартует на потолке', () => { const s = 
 group('Экономика (доход = размер города / интервал)');
 test('size=2 даёт +2 голды за интервал', () => { const c = mkCity({ size: 2 }); eq(c.goldInterval, 4); eq(c.update(4.0001), 2); });
 test('несколько интервалов за большой dt', () => { const c = mkCity({ size: 1 }); eq(c.update(8.5), 2); }); // пересёк 4 и 8
-test('spec=prod ускоряет интервал (0.68^tier)', () => { const c = mkCity({ size: 1 }); c.spec = 'prod'; c.tier = 1; near(c.goldInterval, 4 * 0.68); });
+test('prod повышает вместимость гарнизона, но не ускоряет золото', () => {
+  const c = mkCity({ size: 1 }); const baseCap = c.capacity;
+  c.prodTier = 1; c.spec = 'prod'; c.tier = 1;
+  near(c.goldInterval, 4);
+  near(c.capacity, baseCap * (1 + C.CITY_DEF_CAP_PER_TIER));
+});
 
 group('Производство (FIFO-очередь найма)');
 test('партия завершается через time → гарнизон растёт', () => {
@@ -95,9 +100,9 @@ test('ветки прокачиваются независимо', () => {
   const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 500;
   assert(s.cmdUpgrade(0, 0, 'prod'));
   assert(s.cmdUpgrade(0, 0, 'def'));
-  eq(s.cmdUpgrade(0, 0, 'atk'), false);
-  eq(s.cities[0].prodTier, 1); eq(s.cities[0].defTier, 1); eq(s.cities[0].atkTier, 0);
-  eq(s.cities[0].totalTier, 2); eq(s.gold[0], 400);
+  assert(s.cmdUpgrade(0, 0, 'atk'));
+  eq(s.cities[0].prodTier, 1); eq(s.cities[0].defTier, 1); eq(s.cities[0].atkTier, 1);
+  eq(s.cities[0].totalTier, 3); eq(s.gold[0], 350);
 });
 test('тиры 1→2→3 по растущей цене', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1000; s.cmdUpgrade(0, 0, 'prod'); s.cmdUpgrade(0, 0, 'prod'); s.cmdUpgrade(0, 0, 'prod'); eq(s.cities[0].tier, 3); eq(s.gold[0], 1000 - 50 - 100 - 150); });
 test('не выше MAX_TIER', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1e9; for (let i = 0; i < 5; i++) s.cmdUpgrade(0, 0, 'prod'); eq(s.cities[0].tier, C.MAX_TIER); });

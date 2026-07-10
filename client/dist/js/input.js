@@ -253,6 +253,7 @@ window.addEventListener('keydown',e=>{
   if(sel.length){
     if(e.key==='1')for(const c of sel)upgradeCity(c,'prod');
     if(e.key==='2')for(const c of sel)upgradeCity(c,'def');
+    if(e.key==='3')for(const c of sel)upgradeCity(c,'atk');
     updatePanel();
   }
 });

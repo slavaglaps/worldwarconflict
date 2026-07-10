@@ -1,7 +1,9 @@
 // Авторитетная комната: крутит чистый Sim и проецирует его в схему Colyseus.
 // Клиент только рисует state и шлёт команды; вся логика и валидация — здесь.
 const { Room, ServerError } = require('colyseus');
+const { StateView } = require('@colyseus/schema');
 const { GameState, CityState, SquadState, ShipState, PlaneState, POS_Q } = require('./schema');
+const { visionMask } = require('./sim/vision');
 const { projectState } = require('./schema-project');   // проекция Sim → схема (тестируется отдельно)
 const { Sim } = require('./sim/Sim');
 const { deepMerge } = require('./sim/balance');
@@ -15,7 +17,7 @@ const RECONNECT_SEC = 30;   // окно реконнекта при обрыве
 
 const TICK_HZ = 15;
 const CMD_RATE = { refill: 12, burst: 30 };
-const TRACK = { 1: 'prod', 2: 'def', prod: 'prod', def: 'def' };
+const TRACK = { 1: 'prod', 2: 'def', 3: 'atk', prod: 'prod', def: 'def', atk: 'atk' };
 const YARD_KIND = { ship: 'ship', air: 'air' };
 
 const intOrNull = (v) => {
@@ -70,7 +72,7 @@ class GameRoom extends Room {
       if (!ok) cl.send('denied', { cmd: type });
       metrics.command(!ok);
     });
-    cmd('buy',      (f, m) => this.sim.cmdBuy(f, intOrNull(m.city), String(m.spec ?? m.n ?? 'max')));
+    cmd('buy',      (f, m) => this.sim.cmdBuy(f, intOrNull(m.city), String(m.spec ?? m.n ?? 'max'), m.unit != null ? String(m.unit) : undefined));
     cmd('upg',      (f, m) => this.sim.cmdUpgrade(f, intOrNull(m.city), TRACK[m.track]));
     cmd('send',     (f, m) => this.sim.cmdSend(f, intOrNull(m.from), intOrNull(m.to), pctOrNull(m.pct)));
     cmd('war',      (f, m) => this.sim.cmdWar(f, intOrNull(m.tg)));
@@ -147,6 +149,38 @@ class GameRoom extends Room {
     return { cd: hs.map(h => h.cd.map(x => Math.max(0, Math.round(x * 10) / 10))), buffs };
   }
 
+  // 🌫 туман войны: наполняем client.view по маске видимости фракции.
+  //   Города публичны «оболочкой» (позиция/владелец); приватные поля (гарнизон/состав/очереди)
+  //   и движущиеся сущности (отряды/корабли/самолёты) — только в вижене.
+  //   Свои и союзные сущности добавляются всегда (без ожидания пересчёта маски).
+  _updateViewFor(cl, f) {
+    const view = cl.view; if (!view) return;
+    const sim = this.sim, GRID = sim.K.GRID;
+    const mask = visionMask(sim, f);
+    const friendly = (o) => o === f || sim.allied(f, o);
+    const at = (x, z) => { const cx = Math.round(x), cz = Math.round(z);
+      return cx >= 0 && cz >= 0 && cx < GRID && cz < GRID && mask[cx * GRID + cz] === 1; };
+    for (const c of sim.cities) {
+      const cs = this.state.cities.get(String(c.idx)); if (!cs) continue;
+      if (friendly(c.owner) || at(c.gx, c.gz)) view.add(cs); else view.remove(cs);
+    }
+    const sync = (simArr, mapSchema, key) => {
+      for (const s of simArr) {
+        const ss = mapSchema.get(String(s.id)); if (!ss) continue;
+        if (friendly(s.owner) || at(s.x, s.z)) view.add(ss); else view.remove(ss);
+      }
+    };
+    sync(sim.squads, this.state.squads);
+    sync(sim.ships, this.state.ships);
+    sync(sim.planes, this.state.planes);
+  }
+  _updateViews() {
+    for (const cl of this.clients) {
+      const f = this.factionOf(cl); if (f === null || !cl.view) continue;
+      this._updateViewFor(cl, f);
+    }
+  }
+
   _allowCommand(cl) {
     const now = Date.now() / 1000;
     const b = this.cmdBuckets[cl.sessionId] || (this.cmdBuckets[cl.sessionId] = { tokens: CMD_RATE.burst, ts: now });
@@ -176,6 +210,8 @@ class GameRoom extends Room {
     else { f = 0; while (f < this.sim.factions && taken.has(f)) f++; if (f >= this.sim.factions) f = 0; }
     this.assigned[cl.sessionId] = f;
     this.identities[cl.sessionId] = cl.auth || { guest: true, username: 'Гость' };
+    cl.view = new StateView();                 // 🌫 туман войны: приватные поля/сущности — только через view
+    this._updateViewFor(cl, f);                // сразу, не дожидаясь тика — игрок мгновенно видит своё
     cl.send('assigned', { faction: f, you: this.identities[cl.sessionId] });
     // активный баланс комнаты клиенту: глобальные правила (политика/техи) + СВОЯ фракция (без асимметрии врагов)
     const B = this.sim.B;
@@ -237,6 +273,7 @@ class GameRoom extends Room {
     this.state.tick++;
     this._techN = this._techN || [];                     // «версии» завершённых техов на фракцию (растут)
     projectState(this.sim, this.state, this._techN);     // sim → схема (cities/movers/diplomacy/tech/clock) — см. schema-project.js
+    this._updateViews();                                 // 🌫 туман войны: view per-client ПОСЛЕ проекции (новые SquadState уже в схеме)
     if ((this.state.tick & 1) === 0) this._sendEcon();   // экономика per-client (own+allies) ~7.5 Гц — без утечки чужой голды
   }
 }

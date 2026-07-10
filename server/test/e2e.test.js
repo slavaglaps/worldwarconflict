@@ -50,7 +50,7 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
     assert(bal1.tech.nodes.m1 && bal1.tech.nodes.m1.g > 0, 'узел m1 дерева с ценой пришёл');
   });
 
-  await testAsync('ветки upg через сеть: только экономика и оборона', async () => {
+  await testAsync('ветки upg через сеть: экономика, оборона и атака', async () => {
     const [k] = myCity(r1, f1);
     r1.send('upg', { city: Number(k), track: 'prod' });
     await sleep(250);
@@ -59,7 +59,7 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
     r1.send('upg', { city: Number(k), track: 'atk' });
     await sleep(500);
     const c = r1.state.cities.get(k);
-    eq(c.prodTier, 1); eq(c.defTier, 1); eq(c.atkTier, 0);
+    eq(c.prodTier, 1); eq(c.defTier, 1); eq(c.atkTier, 1);
   });
 
   await testAsync('buy через сеть → производство → гарнизон растёт', async () => {
@@ -90,13 +90,15 @@ const ePolit = (r, f) => (r.__econ && r.__econ[f] ? r.__econ[f][2] : 0);
     lt(ePolit(r1, f1), p0);
   });
 
-  await testAsync('осада через сеть (в войне): гарнизон врага падает + виден ОБОИМ клиентам', async () => {
+  await testAsync('осада через сеть (в войне) + 🌫 туман: атакующий видит гарнизон, третий — нет', async () => {
     const [ck] = myCity(r1, f1);
-    const e0 = r1.state.cities.get(enemyKey).units;
+    // 🌫 до атаки чужой гарнизон СКРЫТ (view-приватное поле) — это и есть туман войны
+    eq(r1.state.cities.get(enemyKey).units, undefined, 'до похода гарнизон врага скрыт');
     r1.send('send', { from: Number(ck), to: Number(enemyKey), pct: 0.9 });
-    await sleep(1500);
-    lt(r1.state.cities.get(enemyKey).units, e0);
-    eq(r2.state.cities.get(enemyKey).units, r1.state.cities.get(enemyKey).units);  // кросс-клиентский синк
+    await sleep(1500);                                     // отряд дошёл → город в вижене атакующего
+    const seen = r1.state.cities.get(enemyKey).units;
+    assert(typeof seen === 'number', 'разведка боем: у города — гарнизон виден атакующему');
+    if (f2 !== enemyFid) eq(r2.state.cities.get(enemyKey).units, undefined, 'третьей стороне гарнизон не виден');
   });
 
   await testAsync('мир через сеть: relations → нейтрал (ключ снят)', async () => {

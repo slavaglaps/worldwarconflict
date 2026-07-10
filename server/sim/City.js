@@ -91,8 +91,8 @@ class City {
     this.atkTier = spec === 'atk' ? tier : 0;
   }
 
-  get capacity()    { let c = this.K.CITY_CAP_BASE + this.size * this.K.CITY_CAP_PER_SIZE; c *= 1 + this.K.CITY_DEF_CAP_PER_TIER * this.branchTier('def'); if (this.boosted) c *= this.K.CITY_BOOST_CAP; return c * this.tv(this.owner, 'cc'); }
-  get goldInterval(){ let g = this.K.CITY_GOLD_INTERVAL; g *= Math.pow(this.K.CITY_PROD_GOLD_DECAY, this.branchTier('prod')); if (this.boosted) g *= this.K.CITY_BOOST_GOLD; return g / this.tm(this.owner, 'eco'); }
+  get capacity()    { let c = this.K.CITY_CAP_BASE + this.size * this.K.CITY_CAP_PER_SIZE; c *= 1 + this.K.CITY_DEF_CAP_PER_TIER * this.branchTier('prod'); if (this.boosted) c *= this.K.CITY_BOOST_CAP; return c * this.tv(this.owner, 'cc'); }
+  get goldInterval(){ let g = this.K.CITY_GOLD_INTERVAL; if (this.boosted) g *= this.K.CITY_BOOST_GOLD; return g / this.tm(this.owner, 'eco'); }
   get trainPer()    { let t = this.K.CITY_TRAIN_BASE - this.size * this.K.CITY_TRAIN_PER_SIZE; if (this.boosted) t *= this.K.CITY_BOOST_TRAIN; return t / this.tm(this.owner, 'prod'); }
   get queued()      { return this.batches.reduce((s, b) => s + b.count, 0); }
   get defMult()     { return (1 + this.K.CITY_DEF_MULT_PER_TIER * this.branchTier('def')) * this.tm(this.owner, 'def'); }

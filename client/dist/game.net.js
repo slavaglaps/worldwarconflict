@@ -22,7 +22,7 @@
   // действия гостя (MP.cmd) → команды Colyseus
   MP.cmd = (o)=>{ if(!room) return;
     try{ switch(o.cmd){
-      case 'buy':    room.send('buy',   {city:o.c, spec:String(o.spec)}); break;
+      case 'buy':    room.send('buy',   {city:o.c, spec:String(o.spec), unit:o.unit}); break;
       case 'upg':    room.send('upg',   {city:o.c, track:o.track}); break;
       case 'army':   room.send('send',  {from:o.a, to:o.b, pct:(o.pct||50)/100}); break;
       case 'war': case 'ally': case 'break': case 'sup':
@@ -172,9 +172,10 @@
         if(par&&typeof addEdgeRuntime==='function'){try{addEdgeRuntime(idx,par.idx);}catch(e){}}
       }
     });
+    const parseQueue=s=>String(s||'').split(';').filter(Boolean).slice(0,6).map(part=>{const a=part.split(',');return [(+a[0]||0),(+a[1]||0),(+a[2]||0),a[3]||'inf'];});
     const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0, cc.prodTier|0, cc.defTier|0, cc.atkTier|0,
       cc.compInf!=null?cc.compInf:null, cc.compArc!=null?cc.compArc:null, cc.compCav!=null?cc.compCav:null,
-      cc.occFrom==null?255:cc.occFrom]));
+      cc.occFrom==null?255:cc.occFrom, parseQueue(cc.recruitQueue)]));
     const rel=[]; state.relations.forEach((v,k)=> rel.push([k, v===1?'war':'ally']));
     const ws=[]; if(state.warStart) state.warStart.forEach((v,k)=> ws.push([k, v]));   // время начала каждой войны → отсчёт мобилизации (60с)
     onMsg({ data: JSON.stringify({ t:'snap', time:+state.clock||0, over:0, c, rel, ws }) });   // экономика идёт отдельным сообщением 'econ' (приватно)

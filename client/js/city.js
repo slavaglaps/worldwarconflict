@@ -107,8 +107,8 @@ class City{
   get totalTier(){return this.branchTier('prod')+this.branchTier('def')+this.branchTier('atk');}
   get visualTier(){return Math.max(this.branchTier('prod'),this.branchTier('def'),this.branchTier('atk'));}
   syncLegacyTier(track){this.spec=track;this.tier=this.visualTier;}
-  get capacity(){let c=CITY_CAP_BASE+this.size*CITY_CAP_PER_SIZE;c*=1+CITY_DEF_CAP_PER_TIER*this.branchTier('def');if(this.boosted)c*=CITY_BOOST_CAP;return c*techVal(this.owner,'cc');}
-  get goldInterval(){let g=CITY_GOLD_INTERVAL;g*=Math.pow(CITY_PROD_GOLD_DECAY,this.branchTier('prod'));if(this.boosted)g*=CITY_BOOST_GOLD;return g/techMul(this.owner,'eco');}
+  get capacity(){let c=CITY_CAP_BASE+this.size*CITY_CAP_PER_SIZE;c*=1+CITY_DEF_CAP_PER_TIER*this.branchTier('prod');if(this.boosted)c*=CITY_BOOST_CAP;return c*techVal(this.owner,'cc');}
+  get goldInterval(){let g=CITY_GOLD_INTERVAL;if(this.boosted)g*=CITY_BOOST_GOLD;return g/techMul(this.owner,'eco');}
   get goldRate(){return this.size/this.goldInterval;}
   get defMult(){return (1+CITY_DEF_MULT_PER_TIER*this.branchTier('def'))*techMul(this.owner,'def');}
   get atkMult(){return (1+CITY_ATK_MULT_PER_TIER*this.branchTier('atk'))*techMul(this.owner,'atk');}

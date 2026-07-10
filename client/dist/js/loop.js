@@ -296,11 +296,18 @@ function loop(now){
   const ci=i=>byIdx.get(i);
 
   /* ── хост: стратегический снапшот (дельта городов + дипломатия по изменению) ── */
+  const recruitQueueTuple=c=>(c.batches||[]).slice(0,6).map(b=>[
+    Math.round(b.count||0),
+    Math.round((b.time||0)*10),
+    Math.round((b.elapsed||0)*10),
+    b.type||c.recruitType||'inf',
+  ]);
   const cityTuple=c=>[c.idx,c.owner,Math.min(8191,Math.round(c.units)),SPEC2ID[c.spec]||0,c.tier,c.occ?1:0,
-    undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,
-    c.branchTier('prod'),c.branchTier('def'),c.branchTier('atk'),undefined,undefined,undefined,c.occ&&c.occFrom!=null?c.occFrom:255];
+    Math.round(c.queued||0),undefined,undefined,undefined,undefined,undefined,undefined,undefined,undefined,
+    c.branchTier('prod'),c.branchTier('def'),c.branchTier('atk'),undefined,undefined,undefined,c.occ&&c.occFrom!=null?c.occFrom:255,recruitQueueTuple(c)];
   const packCity=c=>[c.owner|0,Math.min(8191,Math.round(c.units)),SPEC2ID[c.spec]||0,c.tier|0,c.occ?1:0,
-    c.branchTier('prod'),c.branchTier('def'),c.branchTier('atk'),c.occ&&c.occFrom!=null?c.occFrom:255].join(':');
+    c.branchTier('prod'),c.branchTier('def'),c.branchTier('atk'),c.occ&&c.occFrom!=null?c.occFrom:255,
+    JSON.stringify(recruitQueueTuple(c))].join(':');
   function buildSnap(now){
     ensureIndex();
     const msg={t:'snap',time:gameTime,over:gameOver?1:0,
@@ -328,7 +335,7 @@ function loop(now){
   }
 
   /* ── гость: применить состояние одного города ── */
-  function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner,prodTime,prodElapsed,shipQ,shipT,planeQ,planeT,prodTier,defTier,atkTier,compI,compA,compC,occFrom){
+  function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner,prodTime,prodElapsed,shipQ,shipT,planeQ,planeT,prodTier,defTier,atkTier,compI,compA,compC,occFrom,queueList){
     const spec=ID2SPEC[specId]||null, prevOwner=c.owner;
     const nextProd=prodTier==null?(spec==='prod'?tier:0):prodTier;
     const nextDef=defTier==null?(spec==='def'?tier:0):defTier;
@@ -336,8 +343,11 @@ function loop(now){
     const specChanged=c.spec!==spec||c.tier!==tier||c.prodTier!==nextProd||c.defTier!==nextDef||c.atkTier!==nextAtk;
     c.owner=owner; c.units=units; c.spec=spec; c.tier=tier; c.prodTier=nextProd; c.defTier=nextDef; c.atkTier=nextAtk; c.occ=!!occ;
     c.occFrom = c.occ ? (occFrom!=null && occFrom!==255 ? occFrom : c.occFrom) : null;
-    if(queued!=null)   // ⏳ найм: реальные время/прогресс партии с сервера (дс→с) → кольцо и прогресс-бар идут
-      c.batches = queued>0 ? [{count:queued, time:Math.max(0.1,(prodTime||10)/10), elapsed:Math.min((prodTime||10)/10,(prodElapsed||0)/10)}] : [];
+    if(Array.isArray(queueList)){
+      c.batches = queueList.slice(0,6).filter(q=>(q&&q[0]>0)).map(q=>({count:q[0],time:Math.max(0.1,(q[1]||10)/10),elapsed:Math.min(Math.max(0.1,(q[1]||10)/10),(q[2]||0)/10),type:q[3]||'inf'}));
+    } else if(queued!=null) {  // ⏳ fallback: старый сервер отдаёт только агрегат очереди
+      c.batches = queued>0 ? [{count:queued, time:Math.max(0.1,(prodTime||10)/10), elapsed:Math.min((prodTime||10)/10,(prodElapsed||0)/10), type:c.recruitType||'inf'}] : [];
+    }
     if(shipQ!=null){ c.shipQueue=shipQ|0; c.shipTimer=(shipT||0)/10; }                            // ⚓ верфь: очередь + таймер
     if(planeQ!=null){ c.planeQueue=planeQ|0; c.planeTimer=(planeT||0)/10; }                       // ✈ аэродром: очередь + таймер
     c.aa=0;                                                        // legacy ПВО больше не отображаем, даже если старый сервер прислал aa
@@ -380,7 +390,7 @@ function loop(now){
     MP._lastTime=m.time; gameTime=m.time;
     const list=m.c||m.dc;
     if(m.c)MP._synced=true;   // получили полный keyframe → можно судить о победе/поражении
-    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15],d[16],d[17],d[18],d[19],d[20],d[21]); } regionsDirty=true; }
+    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15],d[16],d[17],d[18],d[19],d[20],d[21],d[22]); } regionsDirty=true; }
     if(m.g){ const g=m.g; for(let i=0;i<g.length;i++){gold[i]=g[i];politPts[i]=m.p[i];manpower[i]=m.m[i];} }  // в cs-режиме экономика идёт через 'econ'; в relay — здесь
     if(m.rel){ relations={}; for(const [k,v] of m.rel)relations[k]=v; warSince={}; for(const [k,v] of m.ws)warSince[k]=+v; warNotify(); allyNotify(); }
     // победа/поражение — только после keyframe И если видели партию ИДУЩЕЙ (не врываемся в уже оконченную)
@@ -1227,7 +1237,7 @@ function loop(now){
     ensureIndex();
     const c=m.c!=null?ci(m.c):null;
     if(m.cmd==='army'){ const a=ci(m.a),b=ci(m.b); if(a&&b&&a.owner===fid)sendUnits(a,b,(m.pct||50)/100); }
-    else if(m.cmd==='buy'){ if(c&&c.owner===fid&&!c.occ){ const amt=buyAmount(c,m.spec); if(amt>0){gold[fid]-=amt*SOLDIER_PRICE;manpower[fid]-=amt;c.batches.push({count:amt,time:amt*c.trainPer,elapsed:0});} } }
+    else if(m.cmd==='buy'){ if(c&&c.owner===fid&&!c.occ){ const amt=buyAmount(c,m.spec); if(amt>0){gold[fid]-=amt*SOLDIER_PRICE;manpower[fid]-=amt;c.batches.push({count:amt,time:amt*c.trainPer,elapsed:0,type:m.unit||c.recruitType||'inf'});} } }
     else if(m.cmd==='upg'){ if(c&&c.owner===fid&&!c.occ&&CITY_UPGRADE_TRACKS.includes(m.track)){ const tier=c.branchTier(m.track); const cost=upgradeCost(tier); if(tier<MAX_TIER&&gold[fid]>=cost){gold[fid]-=cost;c[m.track+'Tier']=tier+1;c.syncLegacyTier(m.track);c.buildMeshes();markRegions();} } }
     else if(m.cmd==='war'){ if(fid!==m.tg&&!atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_WAR){ politPts[fid]-=POLIT_WAR; setWar(fid,m.tg); try{dragAlliesIntoWar(fid,m.tg);}catch(e){} } }
     else if(m.cmd==='ally'){ if(fid!==m.tg&&!atWar(fid,m.tg)&&(politPts[fid]||0)>=POLIT_ALLY){ politPts[fid]-=POLIT_ALLY; setRelation(fid,m.tg,'ally'); } }
@@ -1319,7 +1329,12 @@ function focusStartCameraOnCountry(country){
 function buildCountryPick(){
   const list=document.getElementById('countryList'); if(!list)return; list.innerHTML='';
   const playable=Array.isArray(PLAYABLE_COUNTRIES)&&PLAYABLE_COUNTRIES.length?PLAYABLE_COUNTRIES:FACTIONS.map(f=>f.country);
-  countryPickChoice=playable.includes(PLAYER_COUNTRY)?PLAYER_COUNTRY:playable[0];
+  const taken=(window.MP_TAKEN instanceof Set)?window.MP_TAKEN:new Set();   // 🔒 занятые другими игроками страны (MP)
+  const isTaken=(c)=>taken.has(c)&&c!==PLAYER_COUNTRY;
+  const free=playable.filter(c=>!isTaken(c));
+  // сохранить текущий выбор, если он ещё валиден и свободен; иначе — своя страна / первая свободная
+  if(!countryPickChoice||!free.includes(countryPickChoice))
+    countryPickChoice=(playable.includes(PLAYER_COUNTRY)&&!isTaken(PLAYER_COUNTRY))?PLAYER_COUNTRY:(free[0]||playable[0]);
   const start=document.getElementById('countryStart');
   const render=()=>{
     list.innerHTML='';
@@ -1327,22 +1342,27 @@ function buildCountryPick(){
       const cityCount=countryCityCount(c);
       const col='#'+(FACTION_COLOR[c]||0x9aa6b2).toString(16).padStart(6,'0');
       const art=(COUNTRY_CARD_ART&&COUNTRY_CARD_ART[c])||'';
+      const tk=isTaken(c);
       const el=document.createElement('button');
       el.type='button';
       const cDisp=countryDisp(c);
-      el.className='cpick'+(c===countryPickChoice?' sel':'')+(cDisp.length>12?' long':'');
+      el.className='cpick'+(c===countryPickChoice?' sel':'')+(cDisp.length>12?' long':'')+(tk?' taken':'');
       el.dataset.country=c;
+      el.disabled=tk;
       el.style.setProperty('--ccol',col);
       el.style.setProperty('--art',art?`url("${art}")`:'linear-gradient(180deg,#1a2733,#101a24)');
       el.setAttribute('aria-pressed',c===countryPickChoice?'true':'false');
+      if(tk)el.setAttribute('aria-disabled','true');
       const flag=typeof flagHexSVG==='function'?flagHexSVG(c,60):`<span>${flagOf(c)}</span>`;
       el.innerHTML=`<div class="cflag">${flag}</div>`+
-        `<div class="cbody"><div class="cnm">${cDisp}</div><div class="cmeta">${cityCount} ${cityWord(cityCount)}</div></div>`;
-      el.addEventListener('click',()=>{countryPickChoice=c;render();});
+        `<div class="cbody"><div class="cnm">${cDisp}</div><div class="cmeta">${tk?t('net.countryTaken'):cityCount+' '+cityWord(cityCount)}</div></div>`+
+        (tk?`<div class="cLock">🔒</div>`:'');
+      if(!tk)el.addEventListener('click',()=>{countryPickChoice=c;render();});
       list.appendChild(el);
     });
+    if(start)start.disabled=isTaken(countryPickChoice);
   };
-  if(start)start.onclick=()=>selectCountry(countryPickChoice||playable[0]);
+  if(start)start.onclick=()=>{ if(isTaken(countryPickChoice))return; selectCountry(countryPickChoice||free[0]||playable[0]); };
   render();
 }
 function openCountryPick(){

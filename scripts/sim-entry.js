@@ -5,9 +5,10 @@ const { Sim } = require('../server/sim/Sim.js');
 const B = require('../server/sim/balance.js');
 const water = require('../server/sim/water.js');
 const tech = require('../server/sim/tech.js');
+const vision = require('../server/sim/vision.js');   // 🌫 туман войны: одна математика видимости на сервер/клиент
 window.__WWCSim = {
   Sim,
   makeBalance: B.makeBalance, makeConstants: B.makeConstants,
   factionBal: B.factionBal, deepMerge: B.deepMerge,
-  water, tech,
+  water, tech, vision,
 };

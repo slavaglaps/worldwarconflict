@@ -55,8 +55,10 @@ const PLAYABLE_COUNTRIES=[
   'Австро-Венгерская империя',
   'Турция',
   'Британия',
+  'Иберия',
   'Франция',
   'Италия',
+  'Греция',
   'Германия',
   'Польша',
   'Северная империя',
@@ -67,8 +69,10 @@ const COUNTRY_CARD_ART={
   'Австро-Венгерская империя':'assets/countries/country-austro-hungary.jpg',
   'Турция':'assets/countries/country-turkey.jpg',
   'Британия':'assets/countries/country-britain.jpg',
+  'Иберия':'assets/countries/country-spain-empire.jpg',
   'Франция':'assets/countries/country-france.jpg',
   'Италия':'assets/countries/country-italy.jpg',
+  'Греция':'assets/countries/country-greece.jpg',
   'Германия':'assets/countries/country-germany.jpg',
   'Польша':'assets/countries/country-poland.jpg',
   'Северная империя':'assets/countries/country-northern-empire.jpg',
@@ -136,11 +140,11 @@ const CITY_SCALE=2;   // визуальный масштаб построек г
 // TOWER_* + CITY_BOMBARD_RANGE (обстрел из atk-города) — все из _rules.gen.js (server/sim/constants.js)
 let manpower=[];
 const SPEC={
-  prod:{letter:'Э',icon:'💰',name:'Экономика',color:'#7bdc6a'},
+  prod:{letter:'Г',icon:'♜',name:'Гарнизон',color:'#caa64a'},
   def :{letter:'О',icon:'🛡',name:'Оборона',  color:'#4fd4d4'},
   atk :{letter:'А',icon:'⚔',name:'Атака',    color:'#ff9a4a'},
 };
-const CITY_UPGRADE_TRACKS=['prod','def'];
+const CITY_UPGRADE_TRACKS=['prod','def','atk'];
 const upgradeCost=t=>UPGRADE_COST_BASE+t*UPGRADE_COST_STEP;   // *_BASE/_STEP — из _rules.gen.js; голда: 50 / 100 / 150
 const rand=(a,b)=>a+Math.random()*(b-a);
 

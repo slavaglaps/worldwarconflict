@@ -13,13 +13,19 @@ function projectLocalSim(sim, onMsg) {
     const b0 = cc.batches && cc.batches[0];
     let su = 0, so = 0;
     if (cc.siege) for (const o in cc.siege) if (cc.siege[o].units > su) { su = cc.siege[o].units; so = +o; }
+    const q = (cc.batches || []).slice(0, 6).map(b => [
+      Math.round(b.count || 0),
+      Math.round((b.time || 0) * 10),
+      Math.round((b.elapsed || 0) * 10),
+      b.type || cc.recruitType || 'inf',
+    ]);
     c.push([cc.idx, cc.owner, Math.round(cc.units), (_SOLO_SPEC2ID[cc.spec] || 0), cc.tier, cc.occ ? 1 : 0,
       Math.round(cc.queued || 0), Math.round(su), so,
       b0 ? Math.round(b0.time * 10) : 0, b0 ? Math.round(b0.elapsed * 10) : 0,
       cc.shipQueue | 0, Math.round((cc.shipTimer || 0) * 10), cc.planeQueue | 0, Math.round((cc.planeTimer || 0) * 10),
       cc.branchTier('prod'), cc.branchTier('def'), cc.branchTier('atk'),
       cc.comp ? Math.round(cc.comp.inf) : Math.round(cc.units), cc.comp ? Math.round(cc.comp.arc) : 0, cc.comp ? Math.round(cc.comp.cav) : 0,
-      cc.occ && cc.occFrom != null ? cc.occFrom : 255]);   // [18..20] 👥 состав, [21] occFrom
+      cc.occ && cc.occFrom != null ? cc.occFrom : 255, q]);   // [18..20] 👥 состав, [21] occFrom, [22] queue
   }
   const rel = []; for (const k in sim.relations) rel.push([k, sim.relations[k]]);             // 'war'|'ally'
   const ws = []; for (const k in sim.warSince) if (sim.relations[k] === 'war') ws.push([k, sim.warSince[k]]);
@@ -155,7 +161,7 @@ function localSimStep(gdt) {                              // вызываетс�
   syncLocalEcon(LOCALSIM);                               // голда/манпауэр/политочки/техи
 }
 
-var _LS_TRACK = { 1: 'prod', 2: 'def', prod: 'prod', def: 'def' };
+var _LS_TRACK = { 1: 'prod', 2: 'def', 3: 'atk', prod: 'prod', def: 'def', atk: 'atk' };
 var _LS_I = (v) => (v == null ? null : v | 0);
 function localSimCmd(o) {                                 // MP.cmd в режиме ?ls → методы серверного Sim (как GameRoom)
   const s = LOCALSIM, f = PLAYER; if (!s) { _lsPendingCmds.push({ ...o }); if (_lsPendingCmds.length > 40) _lsPendingCmds.shift(); return; }

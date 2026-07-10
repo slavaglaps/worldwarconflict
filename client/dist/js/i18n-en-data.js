@@ -255,7 +255,7 @@ Object.assign(I18N.en, {
   'country:Греция':'Greece',
   'country:Грузия':'Georgia',
   'country:Дания':'Denmark',
-  'country:Иберия':'Iberia',
+  'country:Иберия':'Spain Empire',
   'country:Испания':'Spain',
   'country:Италия':'Italy',
   'country:Кипр':'Cyprus',
@@ -331,6 +331,7 @@ Object.assign(I18N.en, {
   'unit:Конница':'Cavalry',
   // ── city specializations ──
   'spec:Экономика':'Economy',
+  'spec:Гарнизон':'Garrison',
   'spec:Оборона':'Defense',
   'spec:Атака':'Attack',
   // ── tech branches ──

@@ -77,6 +77,7 @@ Object.assign(I18N.ru, {
   'net.supDone':'💰 Поддержка {amt}💰 → {country}',
   'net.proposePeace':'Предложить мир ({cost}🏛)',
   'net.pill':'🌐 {room} · {country} · 👥 {players}',
+  'net.countryTaken':'Занята',
   'net.defaultRoom':'Игра',
   'build.name_tower':'Башня',
   'build.name_shipyard':'Верфь',

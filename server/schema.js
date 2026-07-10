@@ -1,7 +1,7 @@
 // Состояние матча (синхронизируется Colyseus автоматически бинарными дельтами).
 // Статичные поля города (gx/gz/size/country/capital) ставятся один раз → 0 трафика/тик.
 // Динамика города сериализуется только при изменении.
-const { Schema, MapSchema, ArraySchema, defineTypes, Encoder } = require('@colyseus/schema');
+const { Schema, MapSchema, ArraySchema, defineTypes, Encoder, view } = require('@colyseus/schema');
 
 Encoder.BUFFER_SIZE = Number(process.env.COLYSEUS_SCHEMA_BUFFER_SIZE || 64 * 1024);
 
@@ -25,6 +25,7 @@ defineTypes(CityState, {
   compArc: 'uint16',
   compCav: 'uint16',
   queued: 'uint16', // ⏳ солдат в очереди производства
+  recruitQueue: 'string', // до 6 партий: count,timeDs,elapsedDs,type;...
   siegeUnits: 'uint16', // осаждающая армия (сильнейший пул)
   siegeOwner: 'uint8',  // чья осада
   // ── таймеры (дс = десятые доли секунды; клиент рисует кольца/прогресс-бары) ──
@@ -98,4 +99,18 @@ defineTypes(GameState, {
   tech:      { map: 'string' },
 });
 
-module.exports = { CityState, SquadState, ShipState, PlaneState, GameState, POS_Q };
+// ── 🌫 туман войны: view-теги (@colyseus/schema StateView) ──────────────────
+// Приватные поля города видит только клиент, у которого город в client.view
+// (GameRoom._updateViews добавляет по маске видимости). Публичны: позиция,
+// размер, страна, владелец, оккупация — «оболочка» города, чтобы направить войска.
+const CITY_PRIVATE = ['units', 'spec', 'tier', 'prodTier', 'defTier', 'atkTier', 'aa',
+  'compInf', 'compArc', 'compCav', 'queued', 'recruitQueue', 'siegeUnits', 'siegeOwner',
+  'prodTime', 'prodElapsed', 'shipQ', 'shipT', 'planeQ', 'planeT', 'shipyard', 'airport'];
+for (const f of CITY_PRIVATE) view()(CityState.prototype, f);
+// Движущиеся сущности скрыты целиком: коллекция view-тегнута → элемент приходит
+// только клиентам, добавившим его в view (свои/союзные всегда, чужие — в вижене).
+view()(GameState.prototype, 'squads');
+view()(GameState.prototype, 'ships');
+view()(GameState.prototype, 'planes');
+
+module.exports = { CityState, SquadState, ShipState, PlaneState, GameState, POS_Q, CITY_PRIVATE };

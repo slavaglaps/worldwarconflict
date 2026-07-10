@@ -205,9 +205,9 @@ const relKey = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
   });
 
   await testAsync('ОСАДА синкается клиенту (siegeUnits/owner для визуала)', async () => {
-    // у какого-то города Германии под осадой Франции должно быть siegeUnits>0 (из теста атаки) — или проверим поле есть
-    let anySiege = false; rFR.state.cities.forEach(c => { if (c.siegeUnits > 0) anySiege = true; });
-    assert(typeof rFR.state.cities.get(String(own(DE)[0])).siegeUnits === 'number', 'поле siegeUnits синкается');
+    // 🌫 туман войны: siegeUnits приватен — виден только в вижене. Проверяем на СВОЁМ городе
+    // (всегда в вижене); вражеский город без своего отряда рядом легально скрыт.
+    assert(typeof rFR.state.cities.get(String(own(FR)[0])).siegeUnits === 'number', 'поле siegeUnits синкается');
   });
 
   await testAsync('ТАЙМЕРЫ синкаются клиенту (найм/прогресс + clock + warStart + tech)', async () => {

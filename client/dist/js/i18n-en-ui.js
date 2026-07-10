@@ -77,6 +77,7 @@ Object.assign(I18N.en, {
   'net.supDone':'💰 Support {amt}💰 → {country}',
   'net.proposePeace':'Propose peace ({cost}🏛)',
   'net.pill':'🌐 {room} · {country} · 👥 {players}',
+  'net.countryTaken':'Taken',
   'net.defaultRoom':'Game',
   'build.name_tower':'Tower',
   'build.name_shipyard':'Shipyard',

@@ -1,4 +1,20 @@
 /* ── City ───────────────────────────────────────────────────── */
+// Тор с tubular-major порядком индексов: строим ОДИН раз (полное кольцо), а прогресс
+// рисуем через setDrawRange (без пересоздания геометрии каждый кадр → без лагов/GC).
+// Возвращает {geo, idxPerSeg, tub}. Плоскость XY, тюб по Z — как у THREE.TorusGeometry.
+function _makeArcTorus(R, tube, radial, tubular){
+  const pos=[], idx=[], rw=radial+1;
+  for(let i=0;i<=tubular;i++){ const u=i/tubular*Math.PI*2, cu=Math.cos(u), su=Math.sin(u);
+    for(let j=0;j<=radial;j++){ const v=j/radial*Math.PI*2, r=R+tube*Math.cos(v);
+      pos.push(r*cu, r*su, tube*Math.sin(v)); } }
+  for(let i=0;i<tubular;i++){ for(let j=0;j<radial;j++){        // сегмент i — непрерывный блок индексов (растёт по дуге)
+    const a=i*rw+j, b=(i+1)*rw+j, c=(i+1)*rw+j+1, d=i*rw+j+1;
+    idx.push(a,b,d, b,c,d); } }
+  const geo=new T3.BufferGeometry();
+  geo.setAttribute('position', new T3.Float32BufferAttribute(pos,3));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  return { geo, idxPerSeg: radial*6, tub: tubular };
+}
 // общие dummy для роя осаждающих юнитов (тот же приём, что ghostUnitDummy в loop.js)
 const _siegeDummy=new T3.Object3D(); _siegeDummy.rotation.order='YXZ';
 const _siegeMat=new T3.Matrix4();
@@ -67,10 +83,12 @@ class City{
     this.rangeRing.userData.perfGroup='city-ui';
     this.rangeRing.rotation.x=Math.PI/2; this.rangeRing.position.set(this.gx,this.baseY+0.1,this.gz);
     this.rangeRing.visible=false; this._ringR=0; scene.add(this.rangeRing);
-    // production ring
-    this.pring=new T3.Mesh(new T3.TorusGeometry(0.7*CITY_SCALE,0.05*CITY_SCALE,8,32,0.001),
-      new T3.MeshBasicMaterial({color:0xff9a4a}));
+    // production ring — полное кольцо один раз, прогресс через setDrawRange
+    const _pat=_makeArcTorus(0.7*CITY_SCALE,0.05*CITY_SCALE,8,48);
+    this._pringIdxPerSeg=_pat.idxPerSeg; this._pringTub=_pat.tub; this._pringSeg=-1;
+    this.pring=new T3.Mesh(_pat.geo, new T3.MeshBasicMaterial({color:0xff9a4a}));
     this.pring.userData.perfGroup='city-ui';
+    this.pring.geometry.setDrawRange(0,0);
     this.pring.rotation.x=Math.PI/2; this.pring.position.set(this.gx,this.baseY+0.05,this.gz); this.pring.visible=false;
     scene.add(this.pring);
     // battle ring (осада)
@@ -89,8 +107,8 @@ class City{
   get totalTier(){return this.branchTier('prod')+this.branchTier('def')+this.branchTier('atk');}
   get visualTier(){return Math.max(this.branchTier('prod'),this.branchTier('def'),this.branchTier('atk'));}
   syncLegacyTier(track){this.spec=track;this.tier=this.visualTier;}
-  get capacity(){let c=CITY_CAP_BASE+this.size*CITY_CAP_PER_SIZE;c*=1+CITY_DEF_CAP_PER_TIER*this.branchTier('def');if(this.boosted)c*=CITY_BOOST_CAP;return c*techVal(this.owner,'cc');}
-  get goldInterval(){let g=CITY_GOLD_INTERVAL;g*=Math.pow(CITY_PROD_GOLD_DECAY,this.branchTier('prod'));if(this.boosted)g*=CITY_BOOST_GOLD;return g/techMul(this.owner,'eco');}
+  get capacity(){let c=CITY_CAP_BASE+this.size*CITY_CAP_PER_SIZE;c*=1+CITY_DEF_CAP_PER_TIER*this.branchTier('prod');if(this.boosted)c*=CITY_BOOST_CAP;return c*techVal(this.owner,'cc');}
+  get goldInterval(){let g=CITY_GOLD_INTERVAL;if(this.boosted)g*=CITY_BOOST_GOLD;return g/techMul(this.owner,'eco');}
   get goldRate(){return this.size/this.goldInterval;}
   get defMult(){return (1+CITY_DEF_MULT_PER_TIER*this.branchTier('def'))*techMul(this.owner,'def');}
   get atkMult(){return (1+CITY_ATK_MULT_PER_TIER*this.branchTier('atk'))*techMul(this.owner,'atk');}
@@ -385,10 +403,10 @@ class City{
     else if(this.isAirport&&this.planeQueue>0&&typeof PLANE_BUILD_TIME!=='undefined'){ frac=Math.min(1,this.planeTimer/PLANE_BUILD_TIME); }   // ✈ постройка самолёта
     if(frac!==null){
       this.pring.visible=true;
-      this.pring.geometry.dispose();
-      this.pring.geometry=new T3.TorusGeometry(0.7*CITY_SCALE,0.05*CITY_SCALE,8,32,Math.max(0.001,frac*Math.PI*2));
+      const seg=Math.max(1,Math.round(frac*this._pringTub));                 // сколько сегментов дуги показать
+      if(seg!==this._pringSeg){ this._pringSeg=seg; this.pring.geometry.setDrawRange(0,seg*this._pringIdxPerSeg); }
       this.pring.position.y=(this._visualY==null?this.baseY:this._visualY)+this.topY*CITY_SCALE+0.35;
-    } else this.pring.visible=false;
+    } else if(this.pring.visible){ this.pring.visible=false; this._pringSeg=-1; }
   }
   updateLabel(){
     const v=new T3.Vector3(this._visualGX==null?this.gx:this._visualGX,(this._visualY==null?this.baseY:this._visualY)+this.topY*CITY_SCALE+0.7,this._visualGZ==null?this.gz:this._visualGZ).project(camera);

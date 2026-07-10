@@ -254,7 +254,7 @@ Object.assign(I18N.ru, {
   'country:Греция':'Греция',
   'country:Грузия':'Грузия',
   'country:Дания':'Дания',
-  'country:Иберия':'Иберия',
+  'country:Иберия':'Spain Empire',
   'country:Испания':'Испания',
   'country:Италия':'Италия',
   'country:Кипр':'Кипр',
@@ -330,6 +330,7 @@ Object.assign(I18N.ru, {
   'unit:Конница':'Конница',
   // ── city specializations ──
   'spec:Экономика':'Экономика',
+  'spec:Гарнизон':'Гарнизон',
   'spec:Оборона':'Оборона',
   'spec:Атака':'Атака',
   // ── tech branches ──

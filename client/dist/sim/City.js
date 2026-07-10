@@ -153,6 +153,7 @@ class City {
         this.batches.shift();
       }
     }
+    // 👥 переполнение гарнизона (units>capacity) дренажится в Sim (нужен сид-rng для выбора типа) — см. Sim._drainOvercap.
     return income;
   }
 }

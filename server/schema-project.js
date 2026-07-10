@@ -36,6 +36,12 @@ function projectState(sim, state, techN) {
     s.compArc = QCOUNT(c.comp ? c.comp.arc : 0);
     s.compCav = QCOUNT(c.comp ? c.comp.cav : 0);
     s.queued = Math.min(65535, Math.round(c.queued));
+    s.recruitQueue = (c.batches || []).slice(0, 6).map((b) => [
+      QCOUNT(b.count),
+      Math.min(65535, Math.round((b.time || 0) * 10)),
+      Math.min(65535, Math.round((b.elapsed || 0) * 10)),
+      (b.type || c.recruitType || 'inf'),
+    ].join(',')).join(';');
     let su = 0, so = 0;                                                       // сильнейший осаждающий пул
     if (c.siege) for (const o in c.siege) if (c.siege[o].units > su) { su = c.siege[o].units; so = +o; }
     s.siegeUnits = Math.min(65535, Math.round(su)); s.siegeOwner = so;
