@@ -1,35 +1,30 @@
-/* ── 🌫 fog.js — визуальный тёмный туман (WC3-look) ───────────────────────────
-   Весь мир вне вижена затемнён и обесцвечен («ночь»); вижен = своя+союзная
-   территория + свои отряды/корабли/самолёты (маска — та же математика, что на
-   сервере: sim/vision.js через __WWCSim.vision, поверх КЛИЕНТСКОГО состояния —
-   города/призраки, т.е. только легально видимых данных).
-   Реализация: DataTexture GRID×GRID + инъекция в шейдеры материалов сцены
-   (onBeforeCompile, r128: точка входа — dithering_fragment). Плавный лерп маски
-   ~0.3с — мягкое «прожигание» тумана при движении армий. */
+/* ── 🌫 fog.js — туман войны, пост-процесс (WC3-look) ─────────────────────────
+   Вариант A: сцена рендерится в RenderTarget (+depth), затем один fullscreen-pass
+   по depth-буферу восстанавливает мировую XZ каждого пикселя, сэмплит vision-
+   текстуру и затемняет/обесцвечивает всё вне вижена РАВНОМЕРНО (террейн, декор,
+   горы, города, вода — нечему «выпадать», в отличие от пер-материальных патчей).
+   Маска — та же математика, что на сервере (sim/vision.js через __WWCSim.vision),
+   поверх ТОЛЬКО легально видимого клиентом состояния (города + свои призраки).
+   Плавный лерп маски ~0.3с — мягкое «прожигание»; шум по времени — «клубление». */
 (function () {
   const T = (typeof T3 !== 'undefined') ? T3 : THREE;
   const G = (typeof GRID !== 'undefined') ? GRID : 256;
   const N = G * G;
   const LERP_T = 0.3;            // сек до полного проявления/затухания
   const CALC_EVERY = 0.4;        // период пересчёта целевой маски
-  const PATCH_EVERY = 2.0;       // период до-патча новых материалов сцены
-  let tex = null, cur = null, target = null, calcT = 0, patchT = 0, started = false;
-  const uFog = { value: null }, uFogOn = { value: 0 };
+  let tex = null, cur = null, target = null, calcT = 0, started = false;
 
   function ensureTex() {
     if (tex) return;
-    cur = new Float32Array(N);            // текущее (лерпается)
-    target = new Uint8Array(N);           // целевая маска 0/1
-    const data = new Uint8Array(N);       // байтовый буфер текстуры
-    tex = new T.DataTexture(data, G, G, T.LuminanceFormat !== undefined ? T.LuminanceFormat : T.RedFormat, T.UnsignedByteType);
+    cur = new Float32Array(N);
+    target = new Uint8Array(N);
+    tex = new T.DataTexture(new Uint8Array(N), G, G, T.LuminanceFormat !== undefined ? T.LuminanceFormat : T.RedFormat, T.UnsignedByteType);
     tex.magFilter = T.LinearFilter; tex.minFilter = T.LinearFilter;
     tex.wrapS = T.ClampToEdgeWrapping; tex.wrapT = T.ClampToEdgeWrapping;
     tex.needsUpdate = true;
-    uFog.value = tex;
   }
 
   // sim-подобный шим над клиентским состоянием: города + собственные призраки.
-  // Данные только легально видимые → маску нельзя «расширить» читом дальше сервера.
   const shim = {
     K: null, time: 0, factions: 0, cities: null, squads: [], ships: [], planes: [],
     allied(a, b) { const k = a < b ? a + '_' + b : b + '_' + a; return (typeof relations !== 'undefined' && relations[k] === 'ally'); },
@@ -55,58 +50,18 @@
         else shim.squads.push(src);
       }
     }
-    // и классические клиентские сущности (соло-легаси: ships/planes массивы)
     if (typeof ships !== 'undefined') for (const s of ships) if (s && s.pos) shim.ships.push({ owner: s.owner, x: s.pos.x, z: s.pos.z });
     if (typeof planes !== 'undefined') for (const p of planes) if (p && p.pos) shim.planes.push({ owner: p.owner, x: p.pos.x, z: p.pos.z });
-    shim._voronoiN = shim._voronoiN;                     // вороной кэшируется внутри vision по числу городов
     V.computeVision(shim, PLAYER, target);
     return true;
   }
 
-  // ── шейдер-инъекция: затемнение по маске (r128: dithering_fragment есть у всех) ──
-  function patchMaterial(mat) {
-    if (!mat || mat.userData && mat.userData.__fog) return;
-    mat.userData = mat.userData || {};
-    if (mat.userData.noFog) return;
-    mat.userData.__fog = true;
-    const prev = mat.onBeforeCompile;
-    mat.onBeforeCompile = (sh, r) => {
-      if (prev) prev(sh, r);
-      sh.uniforms.uFogTex = uFog; sh.uniforms.uFogOn = uFogOn;
-      sh.vertexShader = 'varying vec2 vFogW;\n' + sh.vertexShader.replace('#include <project_vertex>',
-        `#include <project_vertex>
-        { vec4 _fw = vec4( transformed, 1.0 );
-          #ifdef USE_INSTANCING
-            _fw = instanceMatrix * _fw;
-          #endif
-          _fw = modelMatrix * _fw; vFogW = _fw.xz; }`);
-      sh.fragmentShader = 'uniform sampler2D uFogTex; uniform float uFogOn; varying vec2 vFogW;\n'
-        + sh.fragmentShader.replace('#include <dithering_fragment>',
-        `#include <dithering_fragment>
-        { float _fv = texture2D( uFogTex, ( vec2( vFogW.y, vFogW.x ) + 0.5 ) / ${G.toFixed(1)} ).r;   /* маска x-major → текстура (v=x,u=z) */
-          _fv = mix( 1.0, smoothstep( 0.05, 0.85, _fv ), uFogOn );
-          gl_FragColor.rgb = mix( gl_FragColor.rgb * vec3( 0.30, 0.34, 0.45 ), gl_FragColor.rgb, _fv ); }`);
-    };
-    mat.needsUpdate = true;
-  }
-  function patchScene() {
-    if (typeof scene === 'undefined' || !scene) return;
-    if (typeof cloudList !== 'undefined') for (const c of cloudList) c.traverse((o) => { o.userData.noFog = true; });   // ☁ облака не тонируем
-    scene.traverse((o) => {
-      if (!o.isMesh && !o.isInstancedMesh) return;
-      if (o.userData && o.userData.noFog) return;
-      const m = o.material; if (!m) return;
-      if (Array.isArray(m)) m.forEach(patchMaterial); else patchMaterial(m);
-    });
-  }
-
-  // главный тик: целевая маска (0.4с) + лерп текстуры (каждый кадр) + до-патч сцены (2с)
+  // обновление маски + лерп текстуры (зовётся из loop каждый кадр)
   function fogUpdate(dt) {
-    if (typeof scene === 'undefined' || typeof cities === 'undefined' || !cities.length) return;
+    if (typeof cities === 'undefined' || !cities.length) return;
     ensureTex();
-    calcT -= dt; patchT -= dt;
-    if (calcT <= 0) { if (computeTarget()) { calcT = CALC_EVERY; if (!started) { started = true; cur.set(target); uFogOn.value = 1; } } }
-    if (patchT <= 0) { patchScene(); patchT = PATCH_EVERY; }
+    calcT -= dt;
+    if (calcT <= 0) { if (computeTarget()) { calcT = CALC_EVERY; if (!started) { started = true; cur.set(target); } } }
     if (!started) return;
     const k = Math.min(1, (dt || 0.016) / LERP_T);
     const data = tex.image.data;
@@ -120,6 +75,76 @@
     if (dirty) tex.needsUpdate = true;
   }
 
+  // ── пост-процесс: сцена → RT(+depth) → fullscreen-затемнение по vision ──
+  let rt = null, postScene = null, postCam = null, postMat = null, _w = 0, _h = 0;
+  const _invPV = new T.Matrix4(), _pv = new T.Matrix4();
+  function ensurePost(renderer) {
+    const size = renderer.getDrawingBufferSize(new T.Vector2());
+    if (rt && size.x === _w && size.y === _h) return true;
+    _w = size.x; _h = size.y;
+    if (rt) { rt.dispose(); }
+    if (!_w || !_h) return false;
+    rt = new T.WebGLRenderTarget(_w, _h, { minFilter: T.LinearFilter, magFilter: T.LinearFilter });
+    rt.depthTexture = new T.DepthTexture(_w, _h);
+    rt.depthTexture.type = T.UnsignedIntType;
+    if (!postMat) {
+      postMat = new T.ShaderMaterial({
+        uniforms: {
+          tDiffuse: { value: null }, tDepth: { value: null }, uFog: { value: null },
+          uInvPV: { value: _invPV }, uTime: { value: 0 },
+        },
+        depthTest: false, depthWrite: false,
+        vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+        fragmentShader: `
+          uniform sampler2D tDiffuse, tDepth, uFog;
+          uniform mat4 uInvPV; uniform float uTime;
+          varying vec2 vUv;
+          float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+            return mix( mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y ); }
+          void main(){
+            vec4 c = texture2D(tDiffuse, vUv);
+            float d = texture2D(tDepth, vUv).x;
+            if (d >= 0.99999) { gl_FragColor = c; return; }              // небо/фон не тонируем
+            vec4 ndc = vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+            vec4 wp = uInvPV * ndc; wp /= wp.w;                          // мировая позиция пикселя
+            float v = texture2D(uFog, (vec2(wp.z, wp.x) + 0.5) / ${G.toFixed(1)}).r;   // маска x-major → (v=x,u=z)
+            v = smoothstep(0.10, 0.90, v);
+            // 🌫 «клубление»: медленный шум приглушает туман неравномерно (только в тёмной зоне)
+            float n = vnoise(wp.xz * 0.14 + vec2(uTime * 0.05, uTime * 0.037)) * 0.5
+                    + vnoise(wp.xz * 0.05 - vec2(uTime * 0.021, uTime * 0.03));
+            float dim = 0.50 + 0.08 * (n - 0.75);                        // база ~50% ±небольшая рябь
+            // WC3-ночь: полудесатурация + затемнение + холодный сдвиг
+            float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+            vec3 night = mix(vec3(luma), c.rgb, 0.45) * dim * vec3(0.80, 0.90, 1.18);
+            gl_FragColor = vec4(mix(night, c.rgb, v), c.a);
+          }`,
+      });
+      postScene = new T.Scene();
+      postCam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      const quad = new T.Mesh(new T.PlaneBufferGeometry(2, 2), postMat);
+      quad.frustumCulled = false;
+      postScene.add(quad);
+    }
+    return true;
+  }
+
+  function fogRender(renderer, scene, camera) {
+    if (!started || !tex || !ensurePost(renderer)) { renderer.render(scene, camera); return; }
+    renderer.setRenderTarget(rt);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    _invPV.copy(_pv).invert();   // r128: Matrix4.invert есть с r123
+    postMat.uniforms.tDiffuse.value = rt.texture;
+    postMat.uniforms.tDepth.value = rt.depthTexture;
+    postMat.uniforms.uFog.value = tex;
+    postMat.uniforms.uInvPV.value = _invPV;
+    postMat.uniforms.uTime.value = performance.now() / 1000;
+    renderer.render(postScene, postCam);
+  }
+
   window.fogUpdate = fogUpdate;
-  window.FOG = { get tex() { return tex; }, uFogOn, patchScene, computeTarget, _shim: shim };
+  window.fogRender = fogRender;
+  window.FOG = { get tex() { return tex; }, computeTarget, _shim: shim, get started() { return started; } };
 })();

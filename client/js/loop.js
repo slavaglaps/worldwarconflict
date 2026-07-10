@@ -248,7 +248,8 @@ function loop(now){
   if(typeof window.rebuildCityBatchesIfDirty==='function')window.rebuildCityBatchesIfDirty();
   if(window._shadowWarmUntil&&now<window._shadowWarmUntil)renderer.shadowMap.needsUpdate=true;   // прогрев теней после загрузки карты (страховка от async-геометрии)
   if(typeof bakeDynShadowIfDirty==='function')bakeDynShadowIfDirty();   // 🌗 динамическая карта теней (города/постройки): перепечь только при изменениях, события кадра коалесятся
-  renderer.render(scene,camera);
+  if(typeof fogRender==='function')fogRender(renderer,scene,camera);    // 🌫 туман войны: пост-процесс (сцена → RT → затемнение вне вижена)
+  else renderer.render(scene,camera);
   updatePerfOverlay(now);
   requestAnimationFrame(loop);
 }
