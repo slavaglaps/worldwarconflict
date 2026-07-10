@@ -194,6 +194,7 @@ function loop(now){
     c.position.x+=c.userData.speed*dt;
     if(c.position.x>GRID+12)c.position.x=-12;
   }
+  if(typeof fogUpdate==='function')fogUpdate(dt);   // 🌫 туман войны: маска + лерп текстуры + патч материалов
   const gdt=dt*gameSpeed; // игровое время с учётом паузы/ускорения
   if(MP.localSim){   // 🧪 соло на ЛОКАЛЬНОМ серверном Sim: тик Sim → проекция в guest-рендер, визуал как у гостя
     if(typeof localSimStep==='function')localSimStep(gdt);
