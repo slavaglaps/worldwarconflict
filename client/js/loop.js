@@ -195,6 +195,7 @@ function loop(now){
     if(c.position.x>GRID+12)c.position.x=-12;
   }
   if(typeof fogUpdate==='function')fogUpdate(dt);   // 🌫 туман войны: маска + лерп текстуры + патч материалов
+  if(typeof minimapUpdate==='function')minimapUpdate(dt);   // 🗺 миникарта: территория × туман + города/армии/вьюпорт
   const gdt=dt*gameSpeed; // игровое время с учётом паузы/ускорения
   if(MP.localSim){   // 🧪 соло на ЛОКАЛЬНОМ серверном Sim: тик Sim → проекция в guest-рендер, визуал как у гостя
     if(typeof localSimStep==='function')localSimStep(gdt);
@@ -272,7 +273,7 @@ function loop(now){
 
   /* ── UI: статус-плашка + баннер ожидания ── */
   const pill=document.createElement('div');
-  pill.style.cssText='position:fixed;bottom:12px;right:12px;z-index:30;background:rgba(8,16,26,.85);color:#cfe0f0;'+
+  pill.style.cssText='position:fixed;bottom:12px;right:204px;z-index:30;background:rgba(8,16,26,.85);color:#cfe0f0;'+   /* 🗺 сдвиг влево от миникарты */
     'font-size:12px;font-weight:700;padding:8px 12px;border-radius:9px;user-select:none;border:1px solid rgba(120,150,180,.22);';
   pill.textContent=t('toast.mpConnecting'); document.body.appendChild(pill);
   const waitBanner=document.createElement('div');
