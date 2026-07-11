@@ -16,7 +16,7 @@ const MODS = [
   'js/sim-loader.js', 'js/solo-sim.js',
   'js/data.js', 'js/world.js', 'js/heroes.js', 'js/decor.js', 'js/roads.js',
   'js/city.js', 'js/units.js', 'js/logic.js', 'js/ui.js', 'js/input.js',
-  'js/hud.js', 'js/build.js', 'js/loop.js', 'js/fog.js', 'js/minimap.js', 'game.net.js',
+  'js/hud.js', 'js/build.js', 'js/loop.js', 'js/fog.js', 'js/minimap.js', 'js/dbg-sea.js', 'game.net.js',
 ];
 
 const sha = (files) => { const h = crypto.createHash('sha256'); for (const p of files) h.update(fs.readFileSync(p)); return h.digest('hex').slice(0, 16); };

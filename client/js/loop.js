@@ -937,7 +937,8 @@ function loop(now){
       if(gh.mode===2)ud._seaUntil=now+1500;
       if(smp&&(gh.mode===2||now<(ud._seaUntil||0))&&typeof isWaterAt==='function'){
         const wet=isWaterAt(smp.x,smp.z);
-        u.seaT=Math.max(0,Math.min(0.35,(u.seaT||0)+(wet?dt*3:-dt*0.85)));   // посадка быстрая (~0.12с), высадка неспешная (~0.4с)
+        const bk=(typeof window!=='undefined'&&window.SEA_BOARD_K)||1, uk=(typeof window!=='undefined'&&window.SEA_UNBOARD_K)||1;   // 🎚 dbg-sea: живые множители
+        u.seaT=Math.max(0,Math.min(0.35,(u.seaT||0)+(wet?dt*3*bk:-dt*0.85*uk)));   // посадка быстрая (~0.12с), высадка неспешная (~0.4с)
         if(u.seaT>0)fadeK*=1-u.seaT/0.35;
       } else if(u.seaT)u.seaT=0;
       if(!smp||(s<=0.001&&!st.prev)||fadeK<=0.02){                        // ещё в здании-источнике / уже втянулся / на борту
