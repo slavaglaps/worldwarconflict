@@ -497,7 +497,7 @@ class Sim {
       for (const c of mine) for (const n of (this.adj.get(c.idx) || [])) { const o = this.cities[n.to].owner; if (o !== fid) nb.add(o); }
       let target = null, ts = 1e9;
       for (const o of nb) { if (this.relation(fid, o) !== 'neutral' || this.truceLeft(fid, o) > 0 || this.warList(o).length >= (A.maxWarsTarget || 3)) continue; const st = this.factionStrength(o); if (st < ts) { ts = st; target = o; } }   // анти-нагиб: не пилим того, на ком уже ≥3 войны
-      if (target != null && myStr > ts * A.warStrengthRatio) { this.setWar(fid, target); this.dragAlliesIntoWar(fid, target); }
+      if (target != null && myStr > ts * A.warStrengthRatio) this.cmdWar(fid, target);   // ИИ платит политочки как игрок (раньше setWar напрямую → войны с 1-й секунды бесплатно)
     }
     // союз с соседом против общего врага (НИКОГДА не втягиваем людей — союз только по их согласию через cmdAlly)
     if (this.allyList(fid).length < A.allyCap && rng() < A.allyProb) {
