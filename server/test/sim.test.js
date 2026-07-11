@@ -340,7 +340,15 @@ test('cmdSend отклоняет невалидный pct', () => {
   eq(s.cities[own[0]].units, u0); eq(s.squads.length, 0);
 });
 test('отряд доходит и подкрепляет свой город', () => { const s = new Sim({ map }); const own = s.cities.filter(c => c.owner === 0).map(c => c.idx); const tgt = own[1]; const before = s.cities[tgt].units; s.cmdSend(0, own[0], tgt, 0.5); for (let i = 0; i < 400 && s.squads.length; i++) s.tick(0.1); eq(s.squads.length, 0); gt(s.cities[tgt].units, before); });
-test('отряд осаждает вражеский город (в войне)', () => { const s = new Sim({ map, warPrep: 0 }); const from = 177, to = 50; const eo = s.cities[to].owner; assert(eo !== 0, 'город-цель вражеский'); s.setWar(0, eo); assert(s.cmdSend(0, from, to, 0.9)); for (let i = 0; i < 600 && s.squads.length; i++) s.tick(0.1); assert((s.cities[to].siege && s.cities[to].siege[0]) || s.cities[to].owner === 0, 'осада началась или город взят'); });
+test('отряд осаждает вражеский город (в войне)', () => { const s = new Sim({ map, warPrep: 0 });
+  // пара выбирается динамически (раньше был хардкод 177→50, опиравшийся на ошибочную страну Катовице)
+  let from = -1, to = -1;
+  outer: for (const c of s.cities) { if (c.owner !== 0) continue;
+    for (const n of (s.adj.get(c.idx) || [])) if (s.cities[n.to].owner !== 0) { from = c.idx; to = n.to; break outer; } }
+  assert(from >= 0, 'есть свой город с вражеским соседом');
+  const eo = s.cities[to].owner; s.setWar(0, eo); assert(s.cmdSend(0, from, to, 0.9));
+  for (let i = 0; i < 600 && s.squads.length; i++) s.tick(0.1);
+  assert((s.cities[to].siege && s.cities[to].siege[0]) || s.cities[to].owner === 0, 'осада началась или город взят'); });
 test('нет пути через чужую территорию без войны/союза → отказ', () => { const s = new Sim({ map }); const far = s.cities.findIndex(c => c.owner !== 0 && !(s.adj.get(c.idx) || []).some(n => s.cities[n.to].owner === 0)); assert(far >= 0, 'найден удалённый город'); eq(s.findPath(0, far, 0), null); });
 test('полевой бой: сцепка ТОЛЬКО впритык на одной дороге (FIELD_CONTACT)', () => {
   const s = new Sim({ map }); s.setWar(0, 1);
