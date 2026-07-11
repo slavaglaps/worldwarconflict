@@ -41,7 +41,7 @@
   ];
 
   const models = {};            // key → THREE.Group (нормализованный, origin у основания)
-  let ready = false, loading = false;
+  let ready = false, loading = false, modelLoadPromise = null;
   let selected = null;          // выбранный каталог-итем (режим размещения)
   let placedGroup = null;       // контейнер для поставленных зданий
   const placedBuildings = [];    // {item,obj,key,owner,gx,gz,y,cd}
@@ -188,7 +188,7 @@
   }
   function loadOne(item) {
     if (item.parts) {
-      return Promise.all(item.parts.map((p) => loadGltf(p.path).catch(() => null))).then((roots) => {
+      return Promise.all(item.parts.map((p) => loadGltf(p.path).catch((e) => { console.warn('[build] model failed', p.path, e); return null; }))).then((roots) => {
         const holder = new T.Group();
         let fp = 1;
         roots.forEach((root, i) => {
@@ -205,15 +205,22 @@
       new T.GLTFLoader().load(BASE + item.file + '.gltf', (g) => {
         models[item.key] = normalizeModel(g.scene, playerId());   // низ модели → y=0, центр по XZ
         res();
-      }, undefined, () => { res(); });   // ошибку глотаем — здание просто будет недоступно
+      }, undefined, (e) => { console.warn('[build] model failed', item.key, e); res(); });
     });
   }
-  async function ensureModels() {
-    if (ready || loading) return;
+  function ensureModels() {
+    if (modelLoadPromise) return modelLoadPromise;
     loading = true;
-    await Promise.all(CATALOG.map(loadOne));
-    ready = true; loading = false;
-    buildThumbs();
+    const available = CATALOG.filter((item) => !item.locked);
+    const locked = CATALOG.filter((item) => item.locked);
+    modelLoadPromise = Promise.all(available.map(loadOne)).then(() => {
+      ready = true; loading = false;
+      buildThumbs();
+      if (selected && models[selected.key]) makeGhost();
+      // Заблокированные модели нужны только для превью, поэтому не задерживают строительство.
+      return Promise.all(locked.map(loadOne)).then(() => { buildThumbs(); });
+    });
+    return modelLoadPromise;
   }
 
   // масштаб модели, чтобы основание совпало с хексом
@@ -228,6 +235,7 @@
   function buildThumbs() {
     try {
       const S = 76;
+      if (thumbRenderer) thumbRenderer.dispose();
       thumbRenderer = new T.WebGLRenderer({ antialias: true, alpha: true });
       thumbRenderer.setSize(S, S); thumbRenderer.setPixelRatio(1);
       if (T.sRGBEncoding) thumbRenderer.outputEncoding = T.sRGBEncoding;
@@ -324,6 +332,7 @@
     selected = item;
     if (btn) btn.classList.add('sel');
     enterPlacing();
+    if (!models[item.key]) ensureModels().then(() => { if (selected === item && models[item.key]) makeGhost(); });
     setHint(t('build.hint_selected', { name: item.name, stats: itemStats(item) }));
   }
 
@@ -577,7 +586,9 @@
   }
 
   function place(item, h) {
-    const hb = window.HEXBUILD; if (!hb || !models[item.key]) return;
+    const hb = window.HEXBUILD;
+    if (!hb) return;
+    if (!models[item.key]) { ensureModels().then(() => { if (selected === item && models[item.key]) makeGhost(); }); return; }
     if (isOccupiedBuildHex(h)) { setHint(t('build.hint_occupied')); return; }
     if (!isValidHexForItem(item, h)) return;
     const owner = playerId();
@@ -744,6 +755,7 @@
     const cv = (typeof renderer !== 'undefined' && renderer && renderer.domElement) ? renderer.domElement : window;
     cv.addEventListener('pointermove', onMove, { passive: true });
     cv.addEventListener('click', onClickCapture, true);   // capture → перехват до игрового клика
+    ensureModels();                                      // превью и размещение готовы до открытия меню
   }
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', init); else init();
 })();

@@ -195,6 +195,8 @@ function loop(now){
     c.position.x+=c.userData.speed*dt;
     if(c.position.x>GRID+12)c.position.x=-12;
   }
+  if(typeof fogUpdate==='function')fogUpdate(dt);   // 🌫 туман войны: маска + лерп текстуры + патч материалов
+  if(typeof minimapUpdate==='function')minimapUpdate(dt);   // 🗺 миникарта: территория × туман + города/армии/вьюпорт
   const gdt=dt*gameSpeed; // игровое время с учётом паузы/ускорения
   if(MP.localSim){   // 🧪 соло на ЛОКАЛЬНОМ серверном Sim: тик Sim → проекция в guest-рендер, визуал как у гостя
     if(typeof localSimStep==='function')localSimStep(gdt);
@@ -252,7 +254,8 @@ function loop(now){
   if(typeof window.rebuildCityBatchesIfDirty==='function')window.rebuildCityBatchesIfDirty();
   if(window._shadowWarmUntil&&now<window._shadowWarmUntil)renderer.shadowMap.needsUpdate=true;   // прогрев теней после загрузки карты (страховка от async-геометрии)
   if(typeof bakeDynShadowIfDirty==='function')bakeDynShadowIfDirty();   // 🌗 динамическая карта теней (города/постройки): перепечь только при изменениях, события кадра коалесятся
-  renderer.render(scene,camera);
+  if(typeof fogRender==='function')fogRender(renderer,scene,camera);    // 🌫 туман войны: пост-процесс (сцена → RT → затемнение вне вижена)
+  else renderer.render(scene,camera);
   updatePerfOverlay(now);
   requestAnimationFrame(loop);
 }
@@ -275,7 +278,7 @@ function loop(now){
 
   /* ── UI: статус-плашка + баннер ожидания ── */
   const pill=document.createElement('div');
-  pill.style.cssText='position:fixed;bottom:12px;right:12px;z-index:30;background:rgba(8,16,26,.85);color:#cfe0f0;'+
+  pill.style.cssText='position:fixed;bottom:12px;right:216px;z-index:30;background:rgba(8,16,26,.85);color:#cfe0f0;'+   /* 🗺 сдвиг влево от миникарты */
     'font-size:12px;font-weight:700;padding:8px 12px;border-radius:9px;user-select:none;border:1px solid rgba(120,150,180,.22);';
   pill.textContent=t('toast.mpConnecting'); document.body.appendChild(pill);
   const waitBanner=document.createElement('div');
@@ -341,6 +344,17 @@ function loop(now){
 
   /* ── гость: применить состояние одного города ── */
   function applyCity(c,owner,units,specId,tier,occ,queued,siegeUnits,siegeOwner,prodTime,prodElapsed,shipQ,shipT,planeQ,planeT,prodTier,defTier,atkTier,compI,compA,compC,occFrom,queueList){
+    // 🌫 туман войны: units===null → город вне вижена. Обновляем только публичную «оболочку»
+    //    (владелец/оккупация); приватное замораживаем как last-seen (units/comp/очереди/осада).
+    if(units==null){
+      const pOwner=c.owner;
+      c.owner=owner; c.occ=!!occ;
+      c.occFrom = c.occ ? (occFrom!=null && occFrom!==255 ? occFrom : c.occFrom) : null;
+      if(!c._fog){ c._fog=true; c._seenUnits=(typeof c.units==='number'&&c._everSeen)?Math.round(c.units):null; }
+      if(pOwner!==owner){ try{c.recolor&&c.recolor();}catch(e){} if(typeof markRegions==='function')markRegions(); }
+      return;
+    }
+    if(c._fog||!c._everSeen){ c._fog=false; c._everSeen=true; }
     const spec=ID2SPEC[specId]||null, prevOwner=c.owner;
     const nextProd=prodTier==null?(spec==='prod'?tier:0):prodTier;
     const nextDef=defTier==null?(spec==='def'?tier:0):defTier;
@@ -666,12 +680,16 @@ function loop(now){
     //    освобождает только instanceMatrix/instanceColor. gh.mat — per-ghost MeshLambertMaterial (kind 0/2) / клон материала корабля.
     const ud=gh.group.userData;
     if(ud&&ud.tm){ for(const b of ud.tm){ if(b.mesh&&b.mesh.dispose)b.mesh.dispose(); if(b.acc&&b.acc.dispose)b.acc.dispose(); b.mesh=null; b.acc=null; } ud.tm=null; }
+    if(ud&&ud.shadow){ gh.group.remove(ud.shadow); if(ud.shadow.dispose)ud.shadow.dispose(); ud.shadow=null; }
     if(gh.mat&&gh.mat.dispose)gh.mat.dispose();
   }
   // рой отряда-призрака: n мини-юнитов по диску (золотой угол) — зеркало солошного Squad._buildCluster
   const ghostUnitDummy=new T3.Object3D();
   ghostUnitDummy.rotation.order='YXZ';                                   // yaw (курс) → pitch (наклон в беге)
   const ghostUnitMatrix=new T3.Matrix4();
+  const ghostShadowDummy=new T3.Object3D();
+  const GHOST_SHADOW_GEO=new T3.CircleGeometry(1,12); GHOST_SHADOW_GEO.rotateX(-Math.PI/2);
+  const GHOST_SHADOW_MAT=new T3.MeshBasicMaterial({color:0x07100d,transparent:true,opacity:0.3,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
   const unitGroundY=(x,z)=>((typeof getTerrainHeight==='function'?getTerrainHeight(x,z):0)+0.2);
   // ⚔ темпы для анимации павших (без аллокаций в кадре)
   const _cm=new T3.Matrix4(), _cv=new T3.Vector3(), _cq=new T3.Quaternion(), _cs=new T3.Vector3();
@@ -770,7 +788,7 @@ function loop(now){
       if(rank>=visRanks || fadeK<=0.02){                                   // ещё в здании (не вышел) / уже полностью втянулся → скрыт
         ghostUnitDummy.position.set(0,-999,0); ghostUnitDummy.scale.set(0,0,0); ghostUnitDummy.updateMatrix();
         if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
-        ud.putUnitMatrix(i,ghostUnitMatrix); continue; }
+        ud.putUnitMatrix(i,ghostUnitMatrix); ud.putUnitShadow(i,0,-999,0,0); continue; }
       const cx=c[0], cz=c[1], dx2=d[0], dz2=d[1];                         // ряд стоит ТОЧНО на следе (дороге) — без прямых блендов
       const rowHead=-Math.atan2(dz2,dx2);
       let acOff=((file-(W-1)/2)+(u.lj||0))*fileSp*(funnelR[rank]||1);   // поперёк ряда — ровно по центру оси; воронка СВОЕГО ряда
@@ -809,6 +827,7 @@ function loop(now){
       ghostUnitDummy.scale.set(sxz,sy,sxz); ghostUnitDummy.updateMatrix();
       if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
       ud.putUnitMatrix(i,ghostUnitMatrix);
+      ud.putUnitShadow(i,fwx-p.x,u.ey-p.y-0.18,fwz-p.z,sc*(ud.bucketOf(i).t==='cav'?0.24:0.16)*fadeK);
     }
     // ⚔ ПАВШИЕ: заваливаются на месте гибели, лежат и тают (слоты n..n+cN-1 того же InstancedMesh; кап ёмкости orbCap)
     let cN=0;
@@ -942,7 +961,7 @@ function loop(now){
       if(!smp||(s<=0.001&&!st.prev)||fadeK<=0.02){                        // ещё в здании-источнике / уже втянулся / на борту
         ghostUnitDummy.position.set(0,-999,0); ghostUnitDummy.scale.set(0,0,0); ghostUnitDummy.updateMatrix();
         if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
-        ud.putUnitMatrix(i,ghostUnitMatrix); continue; }
+        ud.putUnitMatrix(i,ghostUnitMatrix); ud.putUnitShadow(i,0,-999,0,0); continue; }
       const smp2=rowSmp2[row]||smp;                                      // fallback для старого sampler; новый уже отдаёт tangent
       let txv=smp.tx||1,tzv=smp.tz||0; { const l0=Math.hypot(txv,tzv); if(l0>1e-4){txv/=l0;tzv/=l0;} else { const ddx=smp2.x-smp.x,ddz=smp2.z-smp.z,l=Math.hypot(ddx,ddz); if(l>1e-4){txv=ddx/l;tzv=ddz/l;} } }
       const isCav=ud.bucketOf(i).t==='cav';
@@ -1005,6 +1024,7 @@ function loop(now){
       ghostUnitDummy.scale.set(sxz,sy2,sxz); ghostUnitDummy.updateMatrix();
       if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
       ud.putUnitMatrix(i,ghostUnitMatrix);
+      ud.putUnitShadow(i,fwx-p.x,eyR-p.y-0.03,fwz-p.z,sc*(isCav?0.24:0.16)*fadeK);
     }
     st.tailS=tailS;
     // ⚔ искры/пыль в линии соприкосновения двух армий
@@ -1101,15 +1121,25 @@ function loop(now){
       }
     }
     ud._qKey=qKey;
+    if(!ud.shadow||ud._shadowCap<n){
+      if(ud.shadow){gh.group.remove(ud.shadow);if(ud.shadow.dispose)ud.shadow.dispose();}
+      ud._shadowCap=Math.max(18,Math.ceil(n*1.3));
+      ud.shadow=new T3.InstancedMesh(GHOST_SHADOW_GEO,GHOST_SHADOW_MAT,ud._shadowCap);
+      ud.shadow.count=0;ud.shadow.castShadow=false;ud.shadow.receiveShadow=false;ud.shadow.frustumCulled=false;ud.shadow.renderOrder=1;ud.shadow.userData.perfGroup='unit-blob-shadows';
+      gh.group.add(ud.shadow);
+    }
     // helpers: глобальный индекс юнита → бакет по типу
     ud.bucketOf=(i)=>{ for(const b of ud.tm){ if(i<b.off+b.n)return b; } return ud.tm[0]; };
     ud.putUnitMatrix=(i,m4)=>{ const b=ud.bucketOf(i); const j=i-b.off;
       if(b.mesh&&j<b.cap){ b.mesh.setMatrixAt(j,m4); if(b.acc)b.acc.setMatrixAt(j,m4); } };
+    ud.putUnitShadow=(i,x,y,z,size)=>{ if(!ud.shadow||i>=ud._shadowCap)return;
+      ghostShadowDummy.position.set(x,y,z);ghostShadowDummy.rotation.set(0,0,0);ghostShadowDummy.scale.set(size,size,size);ghostShadowDummy.updateMatrix();ud.shadow.setMatrixAt(i,ghostShadowDummy.matrix); };
     ud.getUnitMatrix=(i,out)=>{ const b=ud.bucketOf(i); if(!b.mesh||i-b.off>=b.cap)return false; b.mesh.getMatrixAt(i-b.off,out); return true; };
     ud.finalizeUnits=(cN)=>{ for(const b of ud.tm){ if(!b.mesh)continue;
       b.mesh.count=Math.min(b.cap,b.n+(b.t==='inf'?(cN||0):0));
       b.mesh.instanceMatrix.needsUpdate=true;
-      if(b.acc){ b.acc.count=Math.min(b.cap,b.n); b.acc.instanceMatrix.needsUpdate=true; } } };
+      if(b.acc){ b.acc.count=Math.min(b.cap,b.n); b.acc.instanceMatrix.needsUpdate=true; } }
+      if(ud.shadow){ud.shadow.count=Math.min(n,ud._shadowCap);ud.shadow.instanceMatrix.needsUpdate=true;} };
     ud.corpseSlot=(j)=>(ud.tmInf||ud.tm[0]).n+j;                                // трупы — в хвосте бакета ПЕХОТЫ (не первого: порядок tm теперь cav→inf→arc)
     // СТАБИЛЬНЫЙ рой: позиция по индексу (золотая спираль, не зависит от n) → при убыли армии
     // лишние фигурки просто прячутся с краю, остальные не «перетасовываются».

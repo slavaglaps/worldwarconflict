@@ -160,10 +160,11 @@ window.scheduleCityShadowRefresh=function scheduleCityShadowRefresh(city){  // b
   queueMicrotask(()=>{ try{ if(city&&city.buildGroup)window.attachDynShadowCaster(city.buildGroup); }catch(e){} });
 };
 // инъекция сэмплинга динамической карты в материал-приёмник (земля/дороги/мосты)
-window.installDynShadowReceiver=function installDynShadowReceiver(mat){
+window.installDynShadowReceiver=function installDynShadowReceiver(mat,opts){
   if(!mat||(mat.userData&&mat.userData.dynShadowReceiver))return mat;
   initDynShadow();
-  mat.userData=mat.userData||{}; mat.userData.dynShadowReceiver=true;
+  const shadowBias=opts&&Number.isFinite(opts.bias)?opts.bias:0.00065;
+  mat.userData=mat.userData||{}; mat.userData.dynShadowReceiver=true; mat.userData.dynShadowBias=shadowBias;
   const prev=mat.onBeforeCompile;                                       // композиция с biome-шейдером (он ставит свой onBeforeCompile)
   const prevKeyFn=mat.customProgramCacheKey;
   mat.onBeforeCompile=(shader,rnd)=>{
@@ -195,7 +196,7 @@ float getDynShadow(){
     vec2 o=vec2(float(dx),float(dy));
     float w=1.0/(1.0+dot(o,o)*0.35);
     float d=dynUnpackDepth(texture2D(uDynShadowMap, dsc.xy+o*px));
-    sh+=step(dsc.z-0.00065, d)*w; tw+=w;
+    sh+=step(dsc.z-${shadowBias.toFixed(7)}, d)*w; tw+=w;
   }
   return sh/tw;
 }`;
@@ -209,7 +210,7 @@ float getDynShadow(){
       shader.fragmentShader=shader.fragmentShader.replace(/getShadowMask\(\)/g,'( getShadowMask() * getDynShadow() )');
     }
   };
-  mat.customProgramCacheKey=function(){ return (prevKeyFn?prevKeyFn.call(this):'') + '|dyn-shadow-soft-v2'; };
+  mat.customProgramCacheKey=function(){ return (prevKeyFn?prevKeyFn.call(this):'') + '|dyn-shadow-soft-v2|b${shadowBias.toFixed(7)}'; };
   mat.needsUpdate=true;
   return mat;
 };

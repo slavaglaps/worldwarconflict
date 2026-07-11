@@ -1343,6 +1343,7 @@
       }
     }
     for (const b of buckets.values()) {
+      if (typeof installDynShadowReceiver === 'function') installDynShadowReceiver(b.mat, { bias: 0.0011 });
       const im = new T.InstancedMesh(b.model.geo, b.mat, b.matrices.length);
       // 🌗 города — ДИНАМИЧЕСКИЕ кастеры: из статичной карты исключены (castShadow=false),
       //    тень рисуют через отдельную карту (слой DYN_SHADOW_LAYER) — апгрейд перепекает только её

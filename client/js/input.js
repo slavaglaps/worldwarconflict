@@ -274,8 +274,12 @@ function updateCameraKeys(dt){
   if(!dx&&!dz&&!rot)return;
   if(rot){orbit.theta+=rot*1.8*dt;}
   if(dx||dz){
+    const moveLen=Math.hypot(dx,dz); dx/=moveLen; dz/=moveLen;
     const sp=orbit.r*0.9*dt;
-    const {fwd,right}=camAxes();
+    // Направления берём из уже обновлённого theta: при WASD + Q/E движение
+    // не отстаёт от поворота камеры на один кадр.
+    const fwd={x:-Math.cos(orbit.theta),z:-Math.sin(orbit.theta)};
+    const right={x:Math.sin(orbit.theta),z:-Math.cos(orbit.theta)};
     target.x+=(dx*right.x+dz*fwd.x)*sp;
     target.z+=(dx*right.z+dz*fwd.z)*sp;
     clampTarget();
