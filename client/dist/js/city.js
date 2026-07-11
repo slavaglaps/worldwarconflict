@@ -411,15 +411,17 @@ class City{
   updateLabel(){
     const v=new T3.Vector3(this._visualGX==null?this.gx:this._visualGX,(this._visualY==null?this.baseY:this._visualY)+this.topY*CITY_SCALE+0.7,this._visualGZ==null?this.gz:this._visualGZ).project(camera);
     if(v.z>1){showLab(this.lab,false);return;}
+    const sx=(v.x*0.5+0.5)*innerWidth,sy=(-v.y*0.5+0.5)*innerHeight;
+    if(sx<-90||sx>innerWidth+90||sy<-55||sy>innerHeight+55){showLab(this.lab,false);return;}
     const zoomR=typeof orbit!=='undefined'?orbit.r:100;
     const isSelected=typeof selected!=='undefined'&&selected===this;
     const isFriendly=this.owner===PLAYER||(typeof allied==='function'&&allied(this.owner,PLAYER));
-    if(zoomR>105&&!isFriendly){showLab(this.lab,false);return;}
+    if(zoomR>60&&!isFriendly){showLab(this.lab,false);return;}
     showLab(this.lab,true);
     const labelScale=zoomR<=120?1:zoomR<=210?.84:zoomR<=320?.68:.58;
     this.lab.style.setProperty('--city-label-scale',labelScale);
     this.lab.classList.toggle('cityLabFar',zoomR>210&&!isSelected);
-    posLab(this.lab,(v.x*0.5+0.5)*innerWidth,(-v.y*0.5+0.5)*innerHeight);
+    posLab(this.lab,sx,sy);
     const q=this.queued;
     const ownerCountry=(FACTIONS[this.owner]&&FACTIONS[this.owner].country)||this.country;
     const cap=Math.round(this.capacity), units=Math.round(this.units);

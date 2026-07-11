@@ -127,8 +127,13 @@
           float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
           float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
             return mix( mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y ); }
+          // RT хранит ЛИНЕЙНЫЙ цвет (r128 не применяет outputEncoding при рендере в таргет) —
+          // конвертируем в sRGB сами, той же кусочной формулой, что three encodings_fragment,
+          // иначе финальная картинка темнее оригинала («свет поехал» после ввода пост-процесса)
+          vec3 lin2srgb(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(vec3(0.0031308), c)); }
           void main(){
             vec4 c = texture2D(tDiffuse, vUv);
+            c.rgb = lin2srgb(max(c.rgb, 0.0));                           // → как выглядело ДО пост-процесса
             float d = texture2D(tDepth, vUv).x;
             if (d >= 0.99999) { gl_FragColor = c; return; }              // небо/фон не тонируем
             vec4 ndc = vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);

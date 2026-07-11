@@ -180,7 +180,8 @@ function applyPerfStressOnce(){
   console.info('[perf-stress] max visual load applied',{cities:cities.length,squads:squadsMax,ships:shipsMax,planes:planesMax});
 }
 
-let last=performance.now(), panelTick=0;
+let last=performance.now(), panelTick=0, cityLabelTick=0;
+const cityLabelCamPos=new T3.Vector3().copy(camera.position),cityLabelCamQuat=new T3.Quaternion().copy(camera.quaternion);
 function loop(now){
   const dt=Math.min((now-last)/1000,.05); last=now;
   updateCameraKeys(dt);
@@ -215,7 +216,11 @@ function loop(now){
   if(!gameOver&&gdt>0&&typeof window.updateMapBuildings==='function')window.updateMapBuildings(gdt);
   // во время поворота камеры (Q/E или мышь) прячем DOM-подписи целиком — иначе они дрожат
   const _rot=camRotating; document.getElementById('labels').style.visibility=_rot?'hidden':'visible';
-  for(const c of cities){if(!_rot)c.updateLabel();c.updateSiegeViz(now);}
+  const cityLabelCamMoved=cityLabelCamPos.distanceToSquared(camera.position)>1e-6||1-Math.abs(cityLabelCamQuat.dot(camera.quaternion))>1e-7;
+  if(cityLabelCamMoved){cityLabelCamPos.copy(camera.position);cityLabelCamQuat.copy(camera.quaternion);}
+  const updateCityLabels=!_rot&&(cityLabelCamMoved||now>=cityLabelTick);
+  if(updateCityLabels)cityLabelTick=now+33;
+  for(const c of cities){if(updateCityLabels)c.updateLabel();c.updateSiegeViz(now);}
   if(!_rot)for(const s of squads)s.updateLabel();
   const tintUnit=s=>{const m=s.tintMat;if(m&&m.emissive)m.emissive.setHex(s.foe?0x6b1a12:(selectedUnits.has(s)?0x1f6fc0:0x000000));};
   for(const s of ships){if(!_rot)s.updateLabel();tintUnit(s);
