@@ -931,7 +931,16 @@ function loop(now){
       if(gh._dying){ const over=s-(st.len-0.3); if(over>0)fadeK=Math.max(0,1-over/0.45); }  // у здания-цели тает
       if(gh._perish) fadeK*=Math.max(0,1-(now-gh._perish)/750);           // ⚔ погиб в бою → тает на месте
       const smp=rowData&&rowData.smp;
-      if(!smp||(s<=0.001&&!st.prev)||fadeK<=0.02){                        // ещё в здании-источнике / уже втянулся
+      // 🚢 ПОСАДКА/ВЫСАДКА: ряд над открытой водой плавно «поднимается на борт» (тает+тонет, ~0.35с).
+      //    Ряды достигают воды по очереди → волна исчезновения идёт от ПЕРВОГО ряда к последним;
+      //    на высадке зеркально проявляются. Гейт по морскому режиму отряда — мосты не трогает.
+      if(gh.mode===2)ud._seaUntil=now+1500;
+      if(smp&&(gh.mode===2||now<(ud._seaUntil||0))&&typeof isWaterAt==='function'){
+        const wet=isWaterAt(smp.x,smp.z);
+        u.seaT=Math.max(0,Math.min(0.35,(u.seaT||0)+(wet?dt:-dt*1.7)));
+        if(u.seaT>0)fadeK*=1-u.seaT/0.35;
+      } else if(u.seaT)u.seaT=0;
+      if(!smp||(s<=0.001&&!st.prev)||fadeK<=0.02){                        // ещё в здании-источнике / уже втянулся / на борту
         ghostUnitDummy.position.set(0,-999,0); ghostUnitDummy.scale.set(0,0,0); ghostUnitDummy.updateMatrix();
         if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
         ud.putUnitMatrix(i,ghostUnitMatrix); continue; }
