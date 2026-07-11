@@ -144,11 +144,7 @@ const COUNTRIES=[
 ];
 
 // политические цвета: нейтральные страны — свой цвет, игрок/враг — цвет владельца
-const COUNTRY_COLOR={
-  'Иберия':0xe0b23a, 'Италия':0x55b84a, 'Германия':0x8a93a0, 'Бельгия':0xe07b2e,
-  'Австро-Венгерская империя':0xb86fb0, 'Польша':0x7a5bc4, 'Скандинавия':0x3fb0c0, 'Северная империя':0x3fb0c0,
-  'Украина':0x9ab84a, 'Британия':0x2f7fd0, 'Франция':0x2f7fd0, 'Россия':0xd0463a, 'Турция':0xd0463a,
-};
+const COUNTRY_COLOR={...FACTION_COLOR,'Скандинавия':FACTION_COLOR['Северная империя']};
 const TERR_PLAYER=new T3.Color(0x2f7fd0), TERR_ENEMY=new T3.Color(0xd0463a), TERR_NEUTRAL=new T3.Color(0x9aa6b2);
 const TERR_WHITE=new T3.Color(0xeef1f4);
 

@@ -121,20 +121,27 @@
         ctxT.fillRect(p.x - 1, p.z - 1, 2, 2);
       }
     }
-    // рамка вьюпорта: лучи из углов экрана на плоскость y=0
+    // рамка вьюпорта: bounding-box трапеции обзора (лучи из углов экрана на плоскость y=0,
+    // затем описанный прямоугольник — аккуратнее визуально, чем сама трапеция)
     if (_rc && typeof camera !== 'undefined') {
-      ctxT.strokeStyle = 'rgba(232,206,138,.9)'; ctxT.lineWidth = 1.2;   // золото в тон уголков панелей
-      ctxT.beginPath();
-      let started = false;
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, n = 0;
       for (const [nx, ny] of _corners) {
         _v2.set(nx, ny); _rc.setFromCamera(_v2, camera);
         const o = _rc.ray.origin, dir = _rc.ray.direction;
         if (Math.abs(dir.y) < 1e-4) continue;
         const t = -o.y / dir.y; if (t <= 0) continue;
         const wx = o.x + dir.x * t, wz = o.z + dir.z * t;
-        if (!started) { ctxT.moveTo(wx, wz); started = true; } else ctxT.lineTo(wx, wz);
+        if (wx < minX) minX = wx; if (wx > maxX) maxX = wx;
+        if (wz < minZ) minZ = wz; if (wz > maxZ) maxZ = wz;
+        n++;
       }
-      if (started) { ctxT.closePath(); ctxT.stroke(); }
+      if (n === 4) {
+        // не даём боксу разъезжаться за карту (у горизонта дальние лучи улетают далеко)
+        minX = Math.max(-4, minX); minZ = Math.max(-4, minZ);
+        maxX = Math.min(G + 4, maxX); maxZ = Math.min(G + 4, maxZ);
+        ctxT.strokeStyle = 'rgba(232,206,138,.9)'; ctxT.lineWidth = 1.2;   // золото в тон уголков панелей
+        ctxT.strokeRect(minX, minZ, maxX - minX, maxZ - minZ);
+      }
     }
   }
 
