@@ -248,6 +248,14 @@
     return;
   }
 
+  // Нужен не только локальному Sim: сетевой клиент использует общий vision-модуль
+  // из bundle для построения визуальной маски тумана войны.
+  try {
+    await loadScript('dist/sim.bundle.js' + bust);
+  } catch (e) {
+    console.warn('[hex-loader] sim.bundle не загрузился — туман войны недоступен', e);
+  }
+
   // ── рантайм-склейка модулей (как в game.html) + hex-world.js перед loop.js ──
   const MODS = [
     'js/i18n.js',            // 🌍 ПЕРВЫМ: t()/tName() + таблица локализации (EN база)
