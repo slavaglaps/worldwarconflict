@@ -408,7 +408,9 @@ function dragAlliesIntoWar(aggressor,target){
   return allies;
 }
 function declareWar(t){
-  if(MP.guest){ markPlayerStartedWar(t); MP.cmd({cmd:'war',tg:t}); return; }
+  // после объявления войны диалог страны ЗАКРЫВАЕМ — иначе он тут же перерисуется
+  // с единственной кнопкой «Заключить мир», что читается как встречный попап
+  if(MP.guest){ markPlayerStartedWar(t); MP.cmd({cmd:'war',tg:t}); if(diploTarget===t)closeDiplo(); return; }
   const tl=truceLeft(PLAYER,t);
   if(tl>0){toast(t('polit.truceLeft',{name:countryDisp(FACTIONS[t].country),s:Math.ceil(tl)}));return;}
   if(!politEnough(POLIT_WAR))return;
@@ -418,7 +420,8 @@ function declareWar(t){
   toast(t('polit.warDeclared',{name:countryDisp(FACTIONS[t].country),prep:WAR_PREP,cost:POLIT_WAR}));
   if(dragged.length){ dragged.forEach(f=>{ if(f.id===PLAYER)return; if(diploTarget===f.id)refreshDiplo(); });
     toast(t('polit.alliesDragged',{list:dragged.map(f=>countryDisp(f.country)).join(', ')})); }
-  refreshDiplo(); if(polWinOpen)buildPolWindow();
+  if(diploTarget===t)closeDiplo(); else refreshDiplo();
+  if(polWinOpen)buildPolWindow();
 }
 function formAlliance(t){
   if(MP.guest){ MP.cmd({cmd:'ally',tg:t}); return; }

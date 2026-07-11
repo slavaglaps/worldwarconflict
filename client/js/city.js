@@ -414,7 +414,8 @@ class City{
     if(v.z>1){showLab(this.lab,false);return;}
     const zoomR=typeof orbit!=='undefined'?orbit.r:100;
     const isSelected=typeof selected!=='undefined'&&selected===this;
-    if(zoomR>360&&!this.capital&&!isSelected){showLab(this.lab,false);return;}
+    const isFriendly=this.owner===PLAYER||(typeof allied==='function'&&allied(this.owner,PLAYER));
+    if(zoomR>105&&!isFriendly){showLab(this.lab,false);return;}
     showLab(this.lab,true);
     const labelScale=zoomR<=120?1:zoomR<=210?.84:zoomR<=320?.68:.58;
     this.lab.style.setProperty('--city-label-scale',labelScale);
