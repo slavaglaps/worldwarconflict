@@ -407,6 +407,16 @@ function applyGhostTowerHit(g,dmg){
   const sid=+id.slice(2); const sq=LOCALSIM.squads.find(s=>s&&s.id===sid);
   if(sq)sq.fcount=Math.max(0,sq.fcount-dmg);
 }
+// ⚔ урон башни по ОСАДНОМУ пулу (армия, штурмующая город, живёт в city.siege, а не в squads)
+function applySiegeTowerHit(cityIdx,owner,dmg){
+  if(typeof LOCALSIM==='undefined'||!LOCALSIM||!LOCALSIM._clientTowerDmg)return;
+  const c=LOCALSIM.cities[cityIdx]; if(!c||!c.siege||!c.siege[owner])return;
+  const p=c.siege[owner];
+  p.units=Math.max(0,p.units-dmg);
+  if(p.comp){ const s=(p.comp.inf||0)+(p.comp.arc||0)+(p.comp.cav||0);
+    if(s>0){ const k=p.units/s; p.comp.inf*=k; p.comp.arc*=k; p.comp.cav*=k; } }
+  if(p.units<((LOCALSIM.K&&LOCALSIM.K.SIEGE_POOL_MIN)||0.4))delete c.siege[owner];   // добитый пул снимается (как в симе)
+}
 // ⚔ РАЗЛЁТ юнитов от попадания: N юнит-осколков (N=урон) вылетают из точки удара, летят по баллисте, кувыркаются и тают.
 const _scatter=[];
 function spawnUnitScatter(x,y,z,n,ownerCol,fromX,fromZ){
@@ -466,6 +476,13 @@ class TowerShot{
     if(t.kind==='squad'){ if(squads.includes(s)&&atWar(this.owner,s.owner))s.fcount-=t.dmg; }
     else if(t.kind==='ship'){ if(ships.includes(s)&&atWar(this.owner,s.owner))s.hp-=t.dmg; }
     else if(t.kind==='plane'){ if(planes.includes(s)&&atWar(this.owner,s.owner))s.hp-=t.dmg; }
+    else if(t.kind==='siege'){                                             // ⚔ штурмующая город армия (осадный пул)
+      if(s&&atWar(this.owner,s.owner)){
+        applySiegeTowerHit(s.cityIdx,s.owner,Math.max(1,Math.round(t.dmg||1)));
+        const col=(typeof OWNER_COL!=='undefined'&&OWNER_COL[s.owner]!=null)?OWNER_COL[s.owner]:0xcc4030;
+        spawnUnitScatter(this.tx,this.ty,this.tz,Math.max(1,Math.round(t.dmg||1)),col,this.sx,this.sz);
+      }
+    }
     else if(t.kind==='ghost'){                                            // 🎯 guest: попадание по гхост-отряду → урон в этот момент + разлёт N юнитов
       const g=s;
       if(g&&(g.count||0)>0&&atWar(this.owner,g.owner)){

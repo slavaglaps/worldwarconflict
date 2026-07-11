@@ -659,6 +659,14 @@
     const hostile = (o) => owner !== o && (typeof atWar !== 'function' || atWar(owner, o));
     const gy = (x, z) => (typeof getTerrainHeight === 'function') ? getTerrainHeight(x, z) : 0;
     const guest = (typeof MP !== 'undefined' && MP && MP.ghosts);
+    // ⚔ ОСАДНЫЕ ПУЛЫ: армия, штурмующая город, исчезает из отрядов (живёт в city.siege) —
+    //    без этого башня «стреляла, но не наносила урон» в главном защитном сценарии.
+    if (typeof cities !== 'undefined') for (const c of cities) {
+      if (!c || !c.siege) continue;
+      for (const o in c.siege) { const ow = +o;
+        if (!hostile(ow) || !(c.siege[o].units > 0)) continue;
+        out.push({ x: c.gx, z: c.gz, y: gy(c.gx, c.gz) + 0.4, ref: { cityIdx: c.idx, owner: ow }, kind: 'siege' }); }
+    }
     if (guest) {
       for (const g of MP.ghosts.values()) {
         if ((g.count || 0) < 0.5 || !hostile(g.owner)) continue;
