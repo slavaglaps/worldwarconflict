@@ -173,7 +173,7 @@ function buySoldiers(c,spec,unit){
 
 /* ── исследования: граф-дерево, слоты, время ─────────────────── */
 const TEFF_LBL={tr:t('tech.effTr'),td:t('tech.effTd'),sh:t('tech.effSh'),ph:t('tech.effPh'),sr:t('tech.effSr'),bd:t('tech.effBd'),cc:t('tech.effCc')};
-const TUNLOCK_LBL={ships:t('tech.unlockShips'),shipMissile:t('tech.unlockShipMissile'),planes:t('tech.unlockPlanes'),planeBomb:t('tech.unlockPlaneBomb'),towers:t('tech.unlockTowers')};
+const TUNLOCK_LBL={ships:t('tech.unlockShips'),shipMissile:t('tech.unlockShipMissile'),planes:t('tech.unlockPlanes'),planeBomb:t('tech.unlockPlaneBomb'),towers:t('tech.unlockTowers'),towerBuild:t('tech.unlockTowerBuild'),archers:t('tech.unlockArchers'),cavalry:t('tech.unlockCavalry'),farm:t('tech.unlockFarm'),village:t('tech.unlockVillage'),church:t('tech.unlockChurch')};
 function techEff(n){
   const p=[];
   if(n.a)p.push(t('tech.statAtk',{v:Math.round(n.a*100)}));

@@ -340,6 +340,12 @@ Object.assign(I18N.en, {
   'tech:ЗНАНИЕ':'KNOWLEDGE',
   'tech:ПРОМЫШЛЕННОСТЬ':'INDUSTRY',
   // ── tech nodes ──
+  'tech:Башня':'Tower',
+  'tech:Лучники':'Archers',
+  'tech:Конница':'Cavalry',
+  'tech:Ферма':'Farm',
+  'tech:Деревня':'Village',
+  'tech:Церковь':'Church',
   'tech:Атака I':'Attack I',
   'tech:Атака II':'Attack II',
   'tech:Атака III':'Attack III',

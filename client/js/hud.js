@@ -177,10 +177,10 @@ function buildPanelRows(){
     const btns=card.querySelector('.unitBtns');
     for(const spec of ['5','20']){
       const b=document.createElement('button'); b.type='button'; b.className='unitBuy'; b.dataset.unit=u.id; b.dataset.spec=spec; b.innerHTML=unitBuyHtml(spec);
-      b.addEventListener('click',ev=>{ev.stopPropagation(); if(!b.classList.contains('dis')&&panelCity){hireType=u.id;buySoldiers(panelCity,spec,u.id);updatePanel();}});
+      b.addEventListener('click',ev=>{ev.stopPropagation(); if(!b.classList.contains('dis')&&!unitTypeLocked(u.id)&&panelCity){hireType=u.id;buySoldiers(panelCity,spec,u.id);updatePanel();}});
       btns.appendChild(b); buyRows[u.id+'_'+spec]=b;
     }
-    card.addEventListener('click',()=>{hireType=u.id;updateHireTypeBtns();});
+    card.addEventListener('click',()=>{ if(unitTypeLocked(u.id))return; hireType=u.id;updateHireTypeBtns();});
     rg.appendChild(card); hireTypeBtns[u.id]=card;
   }
   { const card=document.createElement('div'); card.className='unitCard locked';
@@ -203,10 +203,19 @@ function buildPanelRows(){
 }
 let hireType='inf', hireTypeBtns=null;   // 👥 выбранный тип найма
 const HIRE_ICON={inf:'⚔',arc:'🏹',cav:'🐎'};
+const UNIT_TECH_FLAG={arc:'archers',cav:'cavalry'};   // 🔓 лучники/конница открываются исследованиями (m3/m4)
+function unitTypeLocked(id){ const f=UNIT_TECH_FLAG[id]; return !!(f&&typeof techFlag==='function'&&!techFlag(PLAYER,f)); }
 function updateHireTypeBtns(){
   if(!hireTypeBtns)return;
-  for(const t in hireTypeBtns){ const on=t===hireType;
-    hireTypeBtns[t].classList.toggle('sel',on); }
+  for(const tp in hireTypeBtns){ const card=hireTypeBtns[tp], lk=unitTypeLocked(tp);
+    card.classList.toggle('locked',lk);
+    card.classList.toggle('sel',tp===hireType&&!lk);
+    let badge=card.querySelector('.unitLock');
+    if(lk&&!badge){ badge=document.createElement('div'); badge.className='unitLock'; badge.textContent='Tech'; card.appendChild(badge); }
+    else if(!lk&&badge) badge.remove();
+    card.querySelectorAll('.unitBuy').forEach(b=>b.classList.toggle('dis',lk||b.classList.contains('disCost')));
+  }
+  if(unitTypeLocked(hireType))hireType='inf';   // выбранный тип закрылся → откат на пехоту
 }
 function updateCityPanelHeader(c){
   document.getElementById('pName').textContent=cityDisp(c.idx);

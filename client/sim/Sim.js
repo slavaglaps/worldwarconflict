@@ -825,6 +825,9 @@ class Sim {
   }
   cmdBuy(fid, idx, spec, unit) {
     const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ) return false;
+    // 🔓 лучники/конница открываются исследованиями (m3/m4)
+    if (unit === 'arc' && !this.techFlag(fid, 'archers')) return false;
+    if (unit === 'cav' && !this.techFlag(fid, 'cavalry')) return false;
     const amt = this.buyAmount(c, spec); if (amt <= 0) return false;
     this.gold[fid] -= amt * this.K.SOLDIER_PRICE; this.manpower[fid] -= amt * this.K.SOLDIER_MP;
     const type = (this.K.UNIT_TYPES || []).includes(unit) ? unit : null;   // 👥 какой тип нанимаем (null → recruitType города)

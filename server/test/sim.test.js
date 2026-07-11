@@ -325,9 +325,15 @@ test('нельзя без пререквизитов (m2 требует m1)', ()
 test('лимит слотов (1 активное за раз)', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1000; s.cmdResearch(0, 'm1'); eq(s.cmdResearch(0, 'p1'), false); });
 test('нельзя без голды', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 10; eq(s.cmdResearch(0, 'm1'), false); });
 test('unlock ships (узел i1)', () => { const s = new Sim({ factions: 2, cities: 2 }); learn(s, 0, 'i1'); assert(s.techFlag(0, 'ships')); });
-test('eco-узел p1 ускоряет доход города', () => { const s = new Sim({ factions: 2, cities: 2 }); const gi0 = s.cities[0].goldInterval; learn(s, 0, 'p1'); lt(s.cities[0].goldInterval, gi0); });
+test('🔓 найм лучников/конницы закрыт до исследований m3/m4', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1000; s.manpower[0] = 500;
+  eq(s.cmdBuy(0, 0, '5', 'arc'), false, 'лучники до m3 закрыты');
+  eq(s.cmdBuy(0, 0, '5', 'cav'), false, 'конница до m4 закрыта');
+  assert(s.cmdBuy(0, 0, '5', 'inf'), 'пехота доступна всегда');
+  learn(s, 0, 'm3'); assert(s.cmdBuy(0, 0, '5', 'arc'), 'после m3 лучники открыты');
+  learn(s, 0, 'm4'); assert(s.cmdBuy(0, 0, '5', 'cav'), 'после m4 конница открыта'); });
+test('eco-узел p5 ускоряет доход города', () => { const s = new Sim({ factions: 2, cities: 2 }); const gi0 = s.cities[0].goldInterval; learn(s, 0, 'p5'); lt(s.cities[0].goldInterval, gi0); });   // p1 теперь анлок Фермы (без стат-бонуса)
 test('лаборатория k4 даёт +1 слот', () => { const s = new Sim({ factions: 2, cities: 2 }); eq(s.slotCount(0), 1); learn(s, 0, 'k4'); eq(s.slotCount(0), 2); });
-test('prod-узел повышает потолок манпауэра', () => { const s = new Sim({ factions: 2, cities: 2 }); const cap0 = s.manpowerCap(0); learn(s, 0, 'p2'); gt(s.manpowerCap(0), cap0); });
+test('prod-узел повышает потолок манпауэра', () => { const s = new Sim({ factions: 2, cities: 2 }); const cap0 = s.manpowerCap(0); learn(s, 0, 'p6'); gt(s.manpowerCap(0), cap0); });   // p2 теперь анлок Деревни (без стат-бонуса)
 
 group('Реальная карта Европы + движение отрядов');
 test('карта грузится: 239 городов, 29 фракций, граф рёбер', () => { const s = new Sim({ map }); eq(s.cities.length, 239); eq(s.factions, 29); gt(s.edgeKey.size, 100); });
