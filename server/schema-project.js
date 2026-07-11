@@ -31,6 +31,7 @@ function projectState(sim, state, techN) {
     s.occ = c.occ ? 1 : 0;
     s.occFrom = c.occ && c.occFrom != null ? c.occFrom : 255;
     s.shipyard = c.isShipyard ? 1 : 0; s.airport = c.isAirport ? 1 : 0;
+    s.hasShipyard = c.hasShipyard ? 1 : 0; s.hasAirport = c.hasAirport ? 1 : 0;
     s.aa = 0;                                                               // legacy ПВО убрано из города
     s.compInf = QCOUNT(c.comp ? c.comp.inf : c.units);
     s.compArc = QCOUNT(c.comp ? c.comp.arc : 0);

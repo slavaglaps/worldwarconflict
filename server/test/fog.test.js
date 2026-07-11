@@ -2,6 +2,7 @@
 const { group, test, assert, eq, gt, summary } = require('./harness');
 const { Sim } = require('../sim/Sim');
 const { visionMask, computeVision, visibleAt, buildVoronoi } = require('../sim/vision');
+const { isWaterAt } = require('../sim/water');
 const { GameState, CityState, SquadState, CITY_PRIVATE } = require('../schema');
 const { projectState } = require('../schema-project');
 const { Encoder, Decoder, StateView } = require('@colyseus/schema');
@@ -24,6 +25,19 @@ test('своя столица и её округа видимы', () => {
 test('вся своя территория видима (все свои города)', () => {
   const m = visionMask(s, 0);
   for (const c of s.cities) if (c.owner === 0) eq(at(m, c.gx, c.gz), 1, 'город ' + c.idx);
+});
+
+test('океан у островной территории скрыт и открывается только кораблём', () => {
+  const x = 5, z = 110; // Атлантика западнее Британии: ближайшие города британские
+  assert(isWaterAt(x, z), 'контрольная точка находится в море');
+  const hidden = computeVision(s, 0);
+  eq(at(hidden, x, z), 0, 'Вороной территории не раскрывает океан');
+
+  s.ships.push({ owner: 0, x, z });
+  const revealed = computeVision(s, 0);
+  s.ships.pop();
+  eq(at(revealed, x, z), 1, 'свой корабль раскрывает море в своём радиусе');
+  eq(at(revealed, x, z + s.K.VISION_SHIP + 2), 0, 'за радиусом корабля море снова скрыто');
 });
 
 test('дальняя вражеская столица НЕ видима', () => {

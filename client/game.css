@@ -170,6 +170,8 @@
   .unitArt{height:48px;display:flex;align-items:center;justify-content:center;font-size:28px;background:radial-gradient(circle at 50% 35%,rgba(202,168,94,.16),transparent 55%);}
   .unitName{text-align:center;margin-top:-1px;font-family:'KnightsQuest',Georgia,serif;font-size:13px;text-transform:uppercase;color:#eadfc8;}
   .unitBtns{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:5px 5px 6px;}
+  .vehicleCard .unitBtns{grid-template-columns:1fr;}
+  .vehicleCard small{display:none;}
   .unitBuy{height:34px;border:1px solid rgba(216,180,104,.72);border-radius:3px;background:rgba(17,14,9,.82);color:#f1d9a9;font-family:'KnightsQuest',Georgia,serif;font-size:10px;line-height:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;white-space:nowrap;cursor:pointer;}
   .unitBuy b{font-size:12px;font-weight:500;color:#f3dfb8;}
   .unitBuy span{font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:11px;font-weight:900;color:#ead08e;}

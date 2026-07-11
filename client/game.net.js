@@ -198,7 +198,7 @@
     }
     // синк динамических верфей/аэродромов на локальные города (чтобы появился UI постройки)
     if(!push._by || push._n!==cities.length){ push._by={}; for(const cc of cities)push._by[cc.idx]=cc; push._n=cities.length; }
-    state.cities.forEach((cc,key)=>{ const lc=push._by[Number(key)]; if(lc){ lc.isShipyard=!!cc.shipyard; lc.isAirport=!!cc.airport; lc.aa=0; } });
+    state.cities.forEach((cc,key)=>{ const lc=push._by[Number(key)]; if(lc){ lc.isShipyard=!!cc.shipyard; lc.isAirport=!!cc.airport; lc.hasShipyard=!!cc.hasShipyard; lc.hasAirport=!!cc.hasAirport; lc.aa=0; } });
     const e=[], DQ=1/64;   // позиции пришли как fixed-point uint16 (×64 на сервере) — делим обратно
     state.squads.forEach((s,id)=>{ let x=s.x*DQ, z=s.z*DQ, hdg=(s.heading||0)*(2*Math.PI/256), m=s.mode|0;
       const ea=s.edgeA!=null&&s.edgeA!==65535?s.edgeA:null, eb=s.edgeB!=null&&s.edgeB!==65535?s.edgeB:null, ef=(s.frac||0)/65535;

@@ -18,6 +18,7 @@ const shipCity = (s, fid = 0) => {
   if (existing) return existing;
   const c = s.cities.find(x => x.owner === fid && !x.isShipyard && s._isCoastal(x));
   assert(c, 'есть прибрежный город');
+  if (!s.techFlag(fid, 'ships')) learn(s, fid, 'i1');
   assert(s.cmdBuildYard(fid, c.idx, 'ship'));
   return c;
 };
@@ -26,6 +27,7 @@ const airportCity = (s, fid = 0) => {
   if (existing) return existing;
   const c = s.cities.find(x => x.owner === fid && !x.isAirport && x.parent == null);
   assert(c, 'есть город под аэродром');
+  if (!s.techFlag(fid, 'planes')) learn(s, fid, 'i8');
   assert(s.cmdBuildYard(fid, c.idx, 'air'));
   return c;
 };
@@ -325,13 +327,14 @@ test('нельзя без пререквизитов (m2 требует m1)', ()
 test('лимит слотов (1 активное за раз)', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1000; s.cmdResearch(0, 'm1'); eq(s.cmdResearch(0, 'p1'), false); });
 test('нельзя без голды', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 10; eq(s.cmdResearch(0, 'm1'), false); });
 test('unlock ships (узел i1)', () => { const s = new Sim({ factions: 2, cities: 2 }); learn(s, 0, 'i1'); assert(s.techFlag(0, 'ships')); });
+test('p1 даёт +10% дохода ферм без unlock-флага', () => { const s = new Sim({ factions: 2, cities: 2 }); eq(s.techVal(0, 'farmIncome'), 1); learn(s, 0, 'p1'); near(s.techVal(0, 'farmIncome'), 1.10); eq(s.techFlag(0, 'farm'), false); });
 test('🔓 найм лучников/конницы закрыт до исследований m3/m4', () => { const s = new Sim({ factions: 2, cities: 2 }); s.gold[0] = 1000; s.manpower[0] = 500;
   eq(s.cmdBuy(0, 0, '5', 'arc'), false, 'лучники до m3 закрыты');
   eq(s.cmdBuy(0, 0, '5', 'cav'), false, 'конница до m4 закрыта');
   assert(s.cmdBuy(0, 0, '5', 'inf'), 'пехота доступна всегда');
   learn(s, 0, 'm3'); assert(s.cmdBuy(0, 0, '5', 'arc'), 'после m3 лучники открыты');
   learn(s, 0, 'm4'); assert(s.cmdBuy(0, 0, '5', 'cav'), 'после m4 конница открыта'); });
-test('eco-узел p5 ускоряет доход города', () => { const s = new Sim({ factions: 2, cities: 2 }); const gi0 = s.cities[0].goldInterval; learn(s, 0, 'p5'); lt(s.cities[0].goldInterval, gi0); });   // p1 теперь анлок Фермы (без стат-бонуса)
+test('eco-узел p5 ускоряет доход города', () => { const s = new Sim({ factions: 2, cities: 2 }); const gi0 = s.cities[0].goldInterval; learn(s, 0, 'p5'); lt(s.cities[0].goldInterval, gi0); });
 test('лаборатория k4 даёт +1 слот', () => { const s = new Sim({ factions: 2, cities: 2 }); eq(s.slotCount(0), 1); learn(s, 0, 'k4'); eq(s.slotCount(0), 2); });
 test('prod-узел повышает потолок манпауэра', () => { const s = new Sim({ factions: 2, cities: 2 }); const cap0 = s.manpowerCap(0); learn(s, 0, 'p6'); gt(s.manpowerCap(0), cap0); });   // p2 теперь анлок Деревни (без стат-бонуса)
 
@@ -377,6 +380,21 @@ test('полевой бой: сцепка ТОЛЬКО впритык на од�
 group('Флот + авиация (постройка, движение, spatial-grid бой)');
 test('верфь строит корабль (с tech ships)', () => { const s = new Sim({ map, goldStart: 1000 }); const y = shipCity(s); learn(s, y.owner, 'i1'); assert(s.cmdBuildShip(y.owner, y.idx)); for (let i = 0; i < 70 && !s.ships.length; i++) s.tick(0.1); eq(s.ships.length, 1); });
 test('аэропорт строит самолёт (с tech planes)', () => { const s = new Sim({ map, goldStart: 1000 }); const p = airportCity(s); learn(s, p.owner, 'i8'); assert(s.cmdBuildPlane(p.owner, p.idx)); for (let i = 0; i < 80 && !s.planes.length; i++) s.tick(0.1); eq(s.planes.length, 1); });
+test('корабль ждёт предыдущий найм в общей FIFO-очереди', () => {
+  const s = new Sim({ map, goldStart: 1000 }); const y = shipCity(s); learn(s, y.owner, 'i1');
+  y.batches.push({ count: 5, time: 2, elapsed: 0, type: 'inf' });
+  assert(s.cmdBuildShip(y.owner, y.idx)); eq(y.batches.length, 2); eq(y.batches[1].type, 'ship');
+  for (let i = 0; i < 19; i++) s.tick(0.1);
+  eq(s.ships.length, 0, 'корабль не обгоняет найм');
+  for (let i = 0; i < 80 && !s.ships.length; i++) s.tick(0.1);
+  eq(s.ships.length, 1);
+});
+test('техника занимает те же шесть слотов очереди города', () => {
+  const s = new Sim({ map, goldStart: 1e6 }); const y = shipCity(s); learn(s, y.owner, 'i1');
+  for (let i = 0; i < 6; i++) { s.manpower[y.owner] += 100; assert(s.cmdBuildShip(y.owner, y.idx)); }
+  s.manpower[y.owner] += 100;
+  eq(s.cmdBuildShip(y.owner, y.idx), false); eq(y.batches.length, 6);
+});
 test('без tech нельзя строить корабль', () => { const s = new Sim({ map, goldStart: 1000 }); const y = s.cities.find(x => x.owner === 0 && !x.isShipyard && s._isCoastal(x)); assert(y, 'есть прибрежный город'); y.hasShipyard = true; eq(s.cmdBuildShip(y.owner, y.idx), false); });
 test('нельзя строить корабль без верфи у города', () => { const s = new Sim({ map, goldStart: 1000 }); const c = s.cities.find(x => !x.isShipyard && !x.hasShipyard && x.owner === 0); learn(s, 0, 'i1'); eq(s.cmdBuildShip(0, c.idx), false); });
 test('корабль спавнится на воде', () => { const s = new Sim({ map, goldStart: 1000 }); const y = shipCity(s); learn(s, y.owner, 'i1'); s.cmdBuildShip(y.owner, y.idx); for (let i = 0; i < 70 && !s.ships.length; i++) s.tick(0.1); assert(s.ships.length); assert(isWaterAt(s.ships[0].x, s.ships[0].z), 'корабль на воде'); });
@@ -384,16 +402,17 @@ test('cmdShipMove двигает корабль по воде', () => { const s 
 test('морской бой (грид): вражеские корабли топят друг друга', () => { const s = new Sim({ map }); s.setWar(0, 1); s.ships.push(new Ship(0, 100, 100, s), new Ship(1, 100.5, 100, s)); for (let i = 0; i < 200 && s.ships.length === 2; i++) s.tick(0.1); lt(s.ships.length, 2); });
 test('воздушный бой (грид): вражеские самолёты сбивают друг друга', () => { const s = new Sim({ map, rng: () => 0.01 }); s.setWar(0, 1); s.planes.push(new Plane(0, 100, 100, s), new Plane(1, 100.5, 100, s)); for (let i = 0; i < 200 && s.planes.length === 2; i++) s.tick(0.1); lt(s.planes.length, 2); });
 test('союзные корабли не воюют', () => { const s = new Sim({ map }); s.setRelation(0, 1, 'ally'); s.ships.push(new Ship(0, 100, 100, s), new Ship(1, 100.5, 100, s)); for (let i = 0; i < 50; i++) s.tick(0.1); eq(s.ships.length, 2); });
-test('buildYard: верфь — возможность обычного города без отдельного гарнизона', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0 && !x.isShipyard && s._isCoastal(x)); assert(c, 'есть прибрежный город'); const n0 = s.cities.length; assert(s.cmdBuildYard(0, c.idx, 'ship')); eq(s.cities.length, n0, 'верфь не создаёт отдельный город'); assert(c.hasShipyard && !c.isShipyard, 'родитель стал городом с верфью'); assert(s.techFlag(0, 'ships')); assert(s.cmdBuildShip(0, c.idx)); });
-test('buildYard: аэропорт — возможность обычного города без отдельного гарнизона', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0 && !x.isAirport && x.parent == null); const n0 = s.cities.length; assert(s.cmdBuildYard(0, c.idx, 'air')); eq(s.cities.length, n0, 'аэропорт не создаёт отдельный город'); assert(c.hasAirport && !c.isAirport, 'родитель стал городом с аэропортом'); assert(s.techFlag(0, 'planes')); assert(s.cmdBuildPlane(0, c.idx)); });
+test('buildYard: верфь требует tech ships и не выдаёт её сама', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0 && !x.isShipyard && s._isCoastal(x)); assert(c, 'есть прибрежный город'); const n0 = s.cities.length, g0 = s.gold[0]; eq(s.cmdBuildYard(0, c.idx, 'ship'), false); eq(s.gold[0], g0, 'без tech золото не списано'); learn(s, 0, 'i1'); assert(s.cmdBuildYard(0, c.idx, 'ship')); eq(s.cities.length, n0, 'верфь не создаёт отдельный город'); assert(c.hasShipyard && !c.isShipyard, 'родитель стал городом с верфью'); assert(s.cmdBuildShip(0, c.idx)); });
+test('buildYard: аэропорт требует tech planes и не выдаёт её сам', () => { const s = new Sim({ map, goldStart: 500 }); const c = s.cities.find(x => x.owner === 0 && !x.isAirport && x.parent == null); const n0 = s.cities.length, g0 = s.gold[0]; eq(s.cmdBuildYard(0, c.idx, 'air'), false); eq(s.gold[0], g0, 'без tech золото не списано'); learn(s, 0, 'i8'); assert(s.cmdBuildYard(0, c.idx, 'air')); eq(s.cities.length, n0, 'аэропорт не создаёт отдельный город'); assert(c.hasAirport && !c.isAirport, 'родитель стал городом с аэропортом'); assert(s.cmdBuildPlane(0, c.idx)); });
 test('buildYard: верфь нельзя в неприбрежном городе', () => { const s = new Sim({ map, goldStart: 500 }); const inland = s.cities.find(x => !s._isCoastal(x) && !x.isShipyard); assert(inland, 'есть внутренний город'); eq(s.cmdBuildYard(inland.owner, inland.idx, 'ship'), false); });
 test('хард-кап флота: строит ровно до MAX_SHIPS, дальше отказ', () => {
   const s = new Sim({ map, goldStart: 1e6 });
   const c = s.cities.find(x => x.owner === 0 && !x.isShipyard && s._isCoastal(x)); assert(c, 'есть прибрежный город');
+  learn(s, 0, 'i1');
   assert(s.cmdBuildYard(0, c.idx, 'ship'));
-  let ok = 0;
-  for (let i = 0; i < C.MAX_SHIPS + 5; i++) { s.gold[0] += 1000; s.manpower[0] += 1000; if (s.cmdBuildShip(0, c.idx)) ok++; }
-  eq(ok, C.MAX_SHIPS, 'построено ровно до капа');
+  for (let i = 0; i < C.MAX_SHIPS - 1; i++) s.ships.push(new Ship(0, c.gx, c.gz, s));
+  s.manpower[0] += 1000;
+  assert(s.cmdBuildShip(0, c.idx), 'последнее место можно поставить в очередь');
   s.gold[0] += 1000; s.manpower[0] += 1000;
   eq(s.cmdBuildShip(0, c.idx), false, 'сверх капа — отказ');
 });

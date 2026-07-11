@@ -105,8 +105,8 @@ class City{
   }
   branchTier(track){const v=this[track+'Tier'];return v==null?(this.spec===track?this.tier:0):v;}
   get totalTier(){return this.branchTier('prod')+this.branchTier('def')+this.branchTier('atk');}
-  get visualTier(){return Math.max(this.branchTier('prod'),this.branchTier('def'),this.branchTier('atk'));}
-  syncLegacyTier(track){this.spec=track;this.tier=this.visualTier;}
+  get visualTier(){return Math.max(this.branchTier('prod'),this.branchTier('def'));}   // ⚔ atk не меняет облик города
+  syncLegacyTier(track){if(track!=='atk')this.spec=track;this.tier=this.visualTier;}   // atk-прокачка не переключает визуальную тему
   get capacity(){let c=CITY_CAP_BASE+this.size*CITY_CAP_PER_SIZE;c*=1+CITY_DEF_CAP_PER_TIER*this.branchTier('prod');if(this.boosted)c*=CITY_BOOST_CAP;return c*techVal(this.owner,'cc');}
   get goldInterval(){let g=CITY_GOLD_INTERVAL;if(this.boosted)g*=CITY_BOOST_GOLD;return g/techMul(this.owner,'eco');}
   get goldRate(){return this.size/this.goldInterval;}
@@ -398,6 +398,7 @@ class City{
   }
   drawProdRing(){
     let frac=null;
+    if(this._fog){ if(this.pring.visible){this.pring.visible=false;this._pringSeg=-1;} return; }   // 🌫 в тумане прогресс скрыт
     if(this.batches.length){ const b=this.batches[0]; frac=Math.min(1,b.elapsed/b.time); }                                                  // найм солдат
     else if(this.isShipyard&&this.shipQueue>0&&typeof SHIP_BUILD_TIME!=='undefined'){ frac=Math.min(1,this.shipTimer/SHIP_BUILD_TIME); }     // ⚓ постройка корабля
     else if(this.isAirport&&this.planeQueue>0&&typeof PLANE_BUILD_TIME!=='undefined'){ frac=Math.min(1,this.planeTimer/PLANE_BUILD_TIME); }   // ✈ постройка самолёта
@@ -422,11 +423,20 @@ class City{
     this.lab.style.setProperty('--city-label-scale',labelScale);
     this.lab.classList.toggle('cityLabFar',zoomR>210&&!isSelected);
     posLab(this.lab,sx,sy);
-    const q=this.queued;
     const ownerCountry=(FACTIONS[this.owner]&&FACTIONS[this.owner].country)||this.country;
     const cap=Math.round(this.capacity), units=Math.round(this.units);
     const capacity=`<span class="cityCapacity"><span class="cityCapacityCurrent${this.units>this.capacity?' over':''}">${units}</span><span class="cityCapacityDivider">/</span><span>${cap}</span></span>`;
     const head=`<span class="cityHead"><span class="cityFlag">${flagOf(ownerCountry)}</span><span class="nm">${cityDisp(this.idx)}</span>${capacity}</span>`;
+    // 🌫 туман войны: город вне вижена → last-seen серым (или «?», если ни разу не видели);
+    //    состав/очередь/осада скрыты — только застывшее число
+    if(this._fog){
+      const seen=this._seenUnits!=null?String(this._seenUnits):'?';
+      const fogHead=`<span class="cityHead"><span class="cityFlag">${flagOf(ownerCountry)}</span><span class="nm">${cityDisp(this.idx)}</span><span class="cityCapacity"><span class="fogSeen">${seen}</span><span class="cityCapacityDivider">/</span><span>${cap}</span></span></span>`;
+      setLabHTML(this.lab,fogHead);
+      setLabColor(this.lab,'#06121e');
+      return;
+    }
+    const q=this.queued;
     // гарнизон трясётся красным когда обороняется
     const def=this.siege?'<span style="color:#ff6a4a">🛡</span>':'';
     const occm=this.occ?`<span style="color:#${(OWNER_COL[this.occFrom]||0).toString(16).padStart(6,'0')};text-shadow:0 0 2px #000">⚑</span>`:''; // занят (флаг де-юре владельца)
@@ -448,7 +458,7 @@ class City{
     _updateSiegeFX(now);                                                   // пыль/осколки (раз в кадр)
     const orbs=this.siegeOrbs;
     const bx=this._visualGX==null?this.gx:this._visualGX, bz=this._visualGZ==null?this.gz:this._visualGZ, by=this._visualY==null?this.baseY:this._visualY;
-    if(!this.siege){
+    if(!this.siege||this._fog){                                            // 🌫 в тумане чужой бой не показываем
       for(const o in orbs){this._killSiegeOrb(orbs[o]);delete orbs[o];}    // старый рой (если остался) — убрать
       if(this._siegeLab)showLab(this._siegeLab,false);
       this.buildGroup.position.set(bx,by,bz);                              // снять тряску

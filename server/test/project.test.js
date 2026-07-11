@@ -31,6 +31,16 @@ test('город: occFrom сбрасывается в sentinel, когда ок�
   eq(st.cities.get('7').occFrom, 255);
 });
 
+test('город: построенные верфь и аэропорт синхронизируются отдельно от legacy-типа', () => {
+  const s = new Sim({ map, ai: false }), st = new GameState(), techN = [];
+  const c = s.cities.find((x) => !x.isShipyard && !x.isAirport);
+  c.hasShipyard = true; c.hasAirport = true;
+  projectState(s, st, techN);
+  const cs = st.cities.get(String(c.idx));
+  eq(cs.shipyard, 0); eq(cs.airport, 0);
+  eq(cs.hasShipyard, 1); eq(cs.hasAirport, 1);
+});
+
 test('осада: в схему идёт СИЛЬНЕЙШИЙ пул (units + owner)', () => {
   const s = new Sim({ map, ai: false }), st = new GameState(), techN = [];
   const c = s.cities.find((x) => x.idx === 7);

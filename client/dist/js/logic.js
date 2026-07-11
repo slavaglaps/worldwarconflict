@@ -172,8 +172,8 @@ function buySoldiers(c,spec,unit){
 }
 
 /* ── исследования: граф-дерево, слоты, время ─────────────────── */
-const TEFF_LBL={tr:t('tech.effTr'),td:t('tech.effTd'),sh:t('tech.effSh'),ph:t('tech.effPh'),sr:t('tech.effSr'),bd:t('tech.effBd'),cc:t('tech.effCc')};
-const TUNLOCK_LBL={ships:t('tech.unlockShips'),shipMissile:t('tech.unlockShipMissile'),planes:t('tech.unlockPlanes'),planeBomb:t('tech.unlockPlaneBomb'),towers:t('tech.unlockTowers')};
+const TEFF_LBL={tr:t('tech.effTr'),td:t('tech.effTd'),sh:t('tech.effSh'),ph:t('tech.effPh'),sr:t('tech.effSr'),bd:t('tech.effBd'),cc:t('tech.effCc'),farmIncome:t('tech.effFarmIncome')};
+const TUNLOCK_LBL={ships:t('tech.unlockShips'),shipMissile:t('tech.unlockShipMissile'),planes:t('tech.unlockPlanes'),planeBomb:t('tech.unlockPlaneBomb'),towers:t('tech.unlockTowers'),towerBuild:t('tech.unlockTowerBuild'),archers:t('tech.unlockArchers'),cavalry:t('tech.unlockCavalry'),farm:t('tech.unlockFarm'),village:t('tech.unlockVillage'),church:t('tech.unlockChurch')};
 function techEff(n){
   const p=[];
   if(n.a)p.push(t('tech.statAtk',{v:Math.round(n.a*100)}));
@@ -408,7 +408,9 @@ function dragAlliesIntoWar(aggressor,target){
   return allies;
 }
 function declareWar(t){
-  if(MP.guest){ markPlayerStartedWar(t); MP.cmd({cmd:'war',tg:t}); return; }
+  // после объявления войны диалог страны ЗАКРЫВАЕМ — иначе он тут же перерисуется
+  // с единственной кнопкой «Заключить мир», что читается как встречный попап
+  if(MP.guest){ markPlayerStartedWar(t); MP.cmd({cmd:'war',tg:t}); if(diploTarget===t)closeDiplo(); return; }
   const tl=truceLeft(PLAYER,t);
   if(tl>0){toast(t('polit.truceLeft',{name:countryDisp(FACTIONS[t].country),s:Math.ceil(tl)}));return;}
   if(!politEnough(POLIT_WAR))return;
@@ -418,7 +420,8 @@ function declareWar(t){
   toast(t('polit.warDeclared',{name:countryDisp(FACTIONS[t].country),prep:WAR_PREP,cost:POLIT_WAR}));
   if(dragged.length){ dragged.forEach(f=>{ if(f.id===PLAYER)return; if(diploTarget===f.id)refreshDiplo(); });
     toast(t('polit.alliesDragged',{list:dragged.map(f=>countryDisp(f.country)).join(', ')})); }
-  refreshDiplo(); if(polWinOpen)buildPolWindow();
+  if(diploTarget===t)closeDiplo(); else refreshDiplo();
+  if(polWinOpen)buildPolWindow();
 }
 function formAlliance(t){
   if(MP.guest){ MP.cmd({cmd:'ally',tg:t}); return; }

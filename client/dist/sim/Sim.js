@@ -301,14 +301,18 @@ class Sim {
     if (!c || c.owner !== fid || c.occ || !(c.isShipyard || c.hasShipyard) || !this.techFlag(fid, 'ships')) return false;
     if (this.gold[fid] < this.K.SHIP_COST || (this.manpower[fid] || 0) < this.K.SHIP_MP) return false;
     if (this._navalCount(fid) >= this.K.MAX_SHIPS) return false;   // хард-кап флота на фракцию
-    this.gold[fid] -= this.K.SHIP_COST; this.manpower[fid] -= this.K.SHIP_MP; c.shipQueue++; return true;
+    if (c.batches.length >= 6) return false;
+    this.gold[fid] -= this.K.SHIP_COST; this.manpower[fid] -= this.K.SHIP_MP;
+    c.batches.push({ count: 1, time: this.K.SHIP_BUILD_TIME, elapsed: 0, type: 'ship' }); return true;
   }
   cmdBuildPlane(fid, idx) {
     const c = this.cities[idx];
     if (!c || c.owner !== fid || c.occ || !(c.isAirport || c.hasAirport) || !this.techFlag(fid, 'planes')) return false;
     if (this.gold[fid] < this.K.PLANE_COST || (this.manpower[fid] || 0) < this.K.PLANE_MP) return false;
     if (this._airCount(fid) >= this.K.MAX_PLANES) return false;   // хард-кап авиации на фракцию
-    this.gold[fid] -= this.K.PLANE_COST; this.manpower[fid] -= this.K.PLANE_MP; c.planeQueue++; return true;
+    if (c.batches.length >= 6) return false;
+    this.gold[fid] -= this.K.PLANE_COST; this.manpower[fid] -= this.K.PLANE_MP;
+    c.batches.push({ count: 1, time: this.K.PLANE_BUILD_TIME, elapsed: 0, type: 'plane' }); return true;
   }
   cmdShipMove(fid, shipId, x, z) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
@@ -441,33 +445,19 @@ class Sim {
   // Аэродром пока остаётся legacy-подгородом.
   cmdBuildYard(fid, idx, kind) {
     const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ || c.parent != null) return false;
-    let gx, gz, tech;
     if (kind === 'ship') {
-      if (c.hasShipyard || !this._isCoastal(c) || this.gold[fid] < this.K.SHIPYARD_BUILD_COST) return false;
+      if (!this.techFlag(fid, 'ships') || c.hasShipyard || !this._isCoastal(c) || this.gold[fid] < this.K.SHIPYARD_BUILD_COST) return false;
       const w = nearestWaterPoint(c.gx, c.gz);                              // верфь — на берег, к воде
       c.shipyardGX = c.gx + (w.x - c.gx) * 0.55; c.shipyardGZ = c.gz + (w.z - c.gz) * 0.55;
       this.gold[fid] -= this.K.SHIPYARD_BUILD_COST;
       c.hasShipyard = true;
-      this.techDone[fid].add('i1'); this.techCache[fid] = recomputeTech(this.techDone[fid], this.techNode);
       return true;
     } else if (kind === 'air') {
-      if (c.hasAirport || this.gold[fid] < this.K.AIRPORT_BUILD_COST) return false;
+      if (!this.techFlag(fid, 'planes') || c.hasAirport || this.gold[fid] < this.K.AIRPORT_BUILD_COST) return false;
       this.gold[fid] -= this.K.AIRPORT_BUILD_COST;
       c.hasAirport = true;
-      this.techDone[fid].add('i8'); this.techCache[fid] = recomputeTech(this.techDone[fid], this.techNode);
       return true;
     } else return false;
-    this.techDone[fid].add(tech); this.techCache[fid] = recomputeTech(this.techDone[fid], this.techNode);
-    const yidx = this.cities.length;
-    const yard = new City({ idx: yidx, gx, gz, country: c.country, size: 1, owner: fid, capital: false, isShipyard: kind === 'ship', isAirport: kind === 'air', tm: c.tm, tv: c.tv, K: this.K });
-    yard.parent = idx; this.cities.push(yard);
-    const len = Math.hypot(gx - c.gx, gz - c.gz) || 1;                      // ребро к родителю — пути/осада/визуал
-    const edge = { a: idx, b: yidx, type: 'road', len, mult: 1 };
-    this.edgeKey.set(this._ek(idx, yidx), edge);
-    if (!this.adj.has(idx)) this.adj.set(idx, []);
-    if (!this.adj.has(yidx)) this.adj.set(yidx, []);
-    this.adj.get(idx).push({ to: yidx, edge }); this.adj.get(yidx).push({ to: idx, edge });
-    return true;
   }
 
   // ── ИИ: незанятые фракции «думают» раз в 4.5с (порт aiActFaction из game.html) ──
@@ -497,7 +487,7 @@ class Sim {
       for (const c of mine) for (const n of (this.adj.get(c.idx) || [])) { const o = this.cities[n.to].owner; if (o !== fid) nb.add(o); }
       let target = null, ts = 1e9;
       for (const o of nb) { if (this.relation(fid, o) !== 'neutral' || this.truceLeft(fid, o) > 0 || this.warList(o).length >= (A.maxWarsTarget || 3)) continue; const st = this.factionStrength(o); if (st < ts) { ts = st; target = o; } }   // анти-нагиб: не пилим того, на ком уже ≥3 войны
-      if (target != null && myStr > ts * A.warStrengthRatio) { this.setWar(fid, target); this.dragAlliesIntoWar(fid, target); }
+      if (target != null && myStr > ts * A.warStrengthRatio) this.cmdWar(fid, target);   // ИИ платит политочки как игрок (раньше setWar напрямую → войны с 1-й секунды бесплатно)
     }
     // союз с соседом против общего врага (НИКОГДА не втягиваем людей — союз только по их согласию через cmdAlly)
     if (this.allyList(fid).length < A.allyCap && rng() < A.allyProb) {
@@ -666,8 +656,8 @@ class Sim {
   factionStrength(fid) { let s = 0; for (const c of this.cities) if (c.owner === fid) s += c.units + this.K.FACTION_STR_CITY_BASE; return s; }
   validFaction(fid) { return Number.isInteger(fid) && fid >= 0 && fid < this.factions; }
   // счётчики сущностей фракции (existing + queued) — для хард-капов
-  _navalCount(fid) { let n = 0; for (const s of this.ships) if (s.owner === fid) n++; for (const c of this.cities) if (c.owner === fid) n += c.shipQueue; return n; }
-  _airCount(fid)   { let n = 0; for (const p of this.planes) if (p.owner === fid) n++; for (const c of this.cities) if (c.owner === fid) n += c.planeQueue; return n; }
+  _navalCount(fid) { let n = 0; for (const s of this.ships) if (s.owner === fid) n++; for (const c of this.cities) if (c.owner === fid) { n += c.shipQueue; n += c.batches.filter(b => b.type === 'ship').length; } return n; }
+  _airCount(fid)   { let n = 0; for (const p of this.planes) if (p.owner === fid) n++; for (const c of this.cities) if (c.owner === fid) { n += c.planeQueue; n += c.batches.filter(b => b.type === 'plane').length; } return n; }
   _squadCount(fid) { let n = 0; for (const s of this.squads) if (s.owner === fid) n++; return n; }
 
   // ── дипломатия ──
@@ -782,6 +772,11 @@ class Sim {
     for (const c of this.cities) {
       const income = c.update(dt);
       if (income) this.gold[c.owner] = (this.gold[c.owner] || 0) + income;
+      while (c.completedProduction.length) {
+        const type = c.completedProduction.shift();
+        if (type === 'ship') this.spawnShip(c);
+        else if (type === 'plane') this.spawnPlane(c);
+      }
       this._drainOvercap(c, dt);   // 👥 переполнение гарнизона: дискретный дренаж целых юнитов (рандомный тип)
       if (c._captured !== undefined) { const prev = c._captured; c._captured = undefined; captured = true; if (prev != null && !this.cities.some(x => x.owner === prev)) this.permanentAnnex(prev, c.owner); }
     }
@@ -825,6 +820,9 @@ class Sim {
   }
   cmdBuy(fid, idx, spec, unit) {
     const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ) return false;
+    // 🔓 лучники/конница открываются исследованиями (m3/m4)
+    if (unit === 'arc' && !this.techFlag(fid, 'archers')) return false;
+    if (unit === 'cav' && !this.techFlag(fid, 'cavalry')) return false;
     const amt = this.buyAmount(c, spec); if (amt <= 0) return false;
     this.gold[fid] -= amt * this.K.SOLDIER_PRICE; this.manpower[fid] -= amt * this.K.SOLDIER_MP;
     const type = (this.K.UNIT_TYPES || []).includes(unit) ? unit : null;   // 👥 какой тип нанимаем (null → recruitType города)
@@ -833,7 +831,7 @@ class Sim {
   }
   cmdUpgrade(fid, idx, track) {
     const c = this.cities[idx]; if (!c || c.owner !== fid || c.occ) return false;
-    if (!['prod', 'def'].includes(track)) return false;
+    if (!['prod', 'def', 'atk'].includes(track)) return false;
     c.migrateTiers();
     const tier = c.branchTier(track);
     if (tier >= this.K.MAX_TIER) return false;

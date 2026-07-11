@@ -26,6 +26,8 @@ const PANEL_UPG={
 };
 function panelSectionTitle(label){return `<div class="panelSectTitle">${label}</div>`;}
 function unitInfo(id){return PANEL_UNITS.find(u=>u.id===id)||PANEL_UNITS[0];}
+const VEHICLE_INFO={ship:{label:'Ship',icon:'⚓'},plane:{label:'Airship',icon:'✈'}};
+function queueUnitInfo(id){return VEHICLE_INFO[id]||unitInfo(id);}
 function panelFmtTime(sec){return sec>=10?Math.ceil(sec)+'s':Math.max(0,sec).toFixed(1)+'s';}
 function unitBuyHtml(spec){
   const n=+spec||0;
@@ -38,9 +40,11 @@ function buildShip(yard,actor){
   if(yard.occ){if(P)toast(t('hud.occ_no_ships'));return;}
   if(!yard.isShipyard&&!hasYardNear(yard,true)){if(P)toast(t('hud.need_shipyard_near'));return;}
   if(!techFlag(a,'ships')){if(P)toast(t('hud.research_shipyard_first'));return;}
+  if((yard.batches||[]).length>=6){if(P)toast(t('hud.queue_full'));return;}
   if(gold[a]<SHIP_COST){if(P)toast(t('hud.not_enough_gold_ship'));return;}
   if((manpower[a]||0)<SHIP_MP){if(P)toast(t('hud.not_enough_mp_need',{n:SHIP_MP}));return;}
-  gold[a]-=SHIP_COST; manpower[a]-=SHIP_MP; yard.shipQueue++; if(P)updatePanel();
+  gold[a]-=SHIP_COST; manpower[a]-=SHIP_MP;
+  (yard.batches||(yard.batches=[])).push({count:1,time:SHIP_BUILD_TIME,elapsed:0,type:'ship'}); if(P)updatePanel();
 }
 function buildPlane(port,actor){
   if(MP.guest){ MP.cmd({cmd:'bplane',c:port.idx}); return; }
@@ -49,9 +53,19 @@ function buildPlane(port,actor){
   if(port.occ){if(P)toast(t('hud.occ_no_planes'));return;}
   if(!port.isAirport&&!hasYardNear(port,false)){if(P)toast(t('hud.need_airport_near'));return;}
   if(!techFlag(a,'planes')){if(P)toast(t('hud.research_airfield_first'));return;}
+  if((port.batches||[]).length>=6){if(P)toast(t('hud.queue_full'));return;}
   if(gold[a]<PLANE_COST){if(P)toast(t('hud.not_enough_gold_plane'));return;}
   if((manpower[a]||0)<PLANE_MP){if(P)toast(t('hud.not_enough_mp_need',{n:PLANE_MP}));return;}
-  gold[a]-=PLANE_COST; manpower[a]-=PLANE_MP; port.planeQueue++; if(P)updatePanel();
+  gold[a]-=PLANE_COST; manpower[a]-=PLANE_MP;
+  (port.batches||(port.batches=[])).push({count:1,time:PLANE_BUILD_TIME,elapsed:0,type:'plane'}); if(P)updatePanel();
+}
+function vehicleQueueStatus(c,type){
+  let n=0,total=0,sec=0;
+  for(const b of c.batches||[]){
+    total+=Math.max(0,(b.time||0)-(b.elapsed||0));
+    if(b.type===type){n++;sec=total;}
+  }
+  return {n,sec};
 }
 /* ── постройка верфи/аэродрома как отдельного под-города рядом с городом ── */
 function isCoastal(c){ for(let r=1;r<=3;r++)for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++){
@@ -142,12 +156,12 @@ function buildPanelRows(){
   const ub=document.getElementById('upgTab'); ub.innerHTML='';
   const bb0=document.getElementById('buyRows'); bb0.innerHTML='';
   const uq=document.getElementById('unitQueue'); if(uq)uq.innerHTML='';
-  if(panelCity.isShipyard||panelCity.isAirport){ // верфь/аэропорт — одна кнопка постройки
+  if(panelCity.isShipyard||panelCity.isAirport){ // legacy-карты: та же карточка и общая очередь
     const air=panelCity.isAirport;
-    const row=document.createElement('div'); row.className='row'; panelRowAccent(row,air?'#7a6fd0':'#4a8fd0');
-    row.innerHTML=`<span>${air?t('hud.build_airship'):t('hud.build_ship')}</span><small></small>`;
-    row.addEventListener('click',()=>{ if(!row.classList.contains('dis')&&panelCity){air?buildPlane(panelCity):buildShip(panelCity);} });
-    bb0.appendChild(row); shipBuildRow=row;
+    const card=document.createElement('div'); card.className='unitCard vehicleCard';
+    card.innerHTML=`<div class="unitArt">${air?'✈':'⚓'}</div><div class="unitName">${air?'Airship':'Ship'}</div><div class="unitBtns"><button type="button" class="unitBuy"><b>x1</b><span>💰${air?PLANE_COST:SHIP_COST} 👥${air?PLANE_MP:SHIP_MP}</span></button></div><small></small>`;
+    card.querySelector('.unitBuy').addEventListener('click',()=>{ if(!card.classList.contains('dis')&&panelCity){air?buildPlane(panelCity):buildShip(panelCity);} });
+    bb0.appendChild(card); shipBuildRow=card;
     planeBuildRow=null; airRecallRow=null; yardShipRow=null; yardAirRow=null;
     return;
   }
@@ -177,10 +191,10 @@ function buildPanelRows(){
     const btns=card.querySelector('.unitBtns');
     for(const spec of ['5','20']){
       const b=document.createElement('button'); b.type='button'; b.className='unitBuy'; b.dataset.unit=u.id; b.dataset.spec=spec; b.innerHTML=unitBuyHtml(spec);
-      b.addEventListener('click',ev=>{ev.stopPropagation(); if(!b.classList.contains('dis')&&panelCity){hireType=u.id;buySoldiers(panelCity,spec,u.id);updatePanel();}});
+      b.addEventListener('click',ev=>{ev.stopPropagation(); if(!b.classList.contains('dis')&&!unitTypeLocked(u.id)&&panelCity){hireType=u.id;buySoldiers(panelCity,spec,u.id);updatePanel();}});
       btns.appendChild(b); buyRows[u.id+'_'+spec]=b;
     }
-    card.addEventListener('click',()=>{hireType=u.id;updateHireTypeBtns();});
+    card.addEventListener('click',()=>{ if(unitTypeLocked(u.id))return; hireType=u.id;updateHireTypeBtns();});
     rg.appendChild(card); hireTypeBtns[u.id]=card;
   }
   { const card=document.createElement('div'); card.className='unitCard locked';
@@ -188,32 +202,45 @@ function buildPanelRows(){
     rg.appendChild(card);
   }
   bb.appendChild(rg);
-  const yardBox=document.createElement('div'); yardBox.className='yardActions'; bb.appendChild(yardBox);
-  { const r=document.createElement('div'); r.className='row'; panelRowAccent(r,'#4a8fd0');
-    r.innerHTML=`<span>${t('hud.build_ship')}</span><small></small>`;
-    r.addEventListener('click',()=>{ if(!r.classList.contains('dis')&&panelCity)buildShip(panelCity); });
-    yardBox.appendChild(r); shipBuildRow=r;
+  { const card=document.createElement('div'); card.className='unitCard vehicleCard';
+    card.innerHTML=`<div class="unitArt">⚓</div><div class="unitName">Ship</div><div class="unitBtns"><button type="button" class="unitBuy"><b>x1</b><span>💰${SHIP_COST} 👥${SHIP_MP}</span></button></div><small></small>`;
+    card.querySelector('.unitBuy').addEventListener('click',ev=>{ev.stopPropagation();if(!card.classList.contains('dis')&&panelCity)buildShip(panelCity);});
+    rg.appendChild(card); shipBuildRow=card;
   }
-  { const r=document.createElement('div'); r.className='row'; panelRowAccent(r,'#7a6fd0');
-    r.innerHTML=`<span>${t('hud.build_airship')}</span><small></small>`;
-    r.addEventListener('click',()=>{ if(!r.classList.contains('dis')&&panelCity)buildPlane(panelCity); });
-    yardBox.appendChild(r); planeBuildRow=r;
+  { const card=document.createElement('div'); card.className='unitCard vehicleCard';
+    card.innerHTML=`<div class="unitArt">✈</div><div class="unitName">Airship</div><div class="unitBtns"><button type="button" class="unitBuy"><b>x1</b><span>💰${PLANE_COST} 👥${PLANE_MP}</span></button></div><small></small>`;
+    card.querySelector('.unitBuy').addEventListener('click',ev=>{ev.stopPropagation();if(!card.classList.contains('dis')&&panelCity)buildPlane(panelCity);});
+    rg.appendChild(card); planeBuildRow=card;
   }
   updateHireTypeBtns();
 }
 let hireType='inf', hireTypeBtns=null;   // 👥 выбранный тип найма
 const HIRE_ICON={inf:'⚔',arc:'🏹',cav:'🐎'};
+const UNIT_TECH_FLAG={arc:'archers',cav:'cavalry'};   // 🔓 лучники/конница открываются исследованиями (m3/m4)
+function unitTypeLocked(id){ const f=UNIT_TECH_FLAG[id]; return !!(f&&typeof techFlag==='function'&&!techFlag(PLAYER,f)); }
 function updateHireTypeBtns(){
   if(!hireTypeBtns)return;
-  for(const t in hireTypeBtns){ const on=t===hireType;
-    hireTypeBtns[t].classList.toggle('sel',on); }
+  for(const tp in hireTypeBtns){ const card=hireTypeBtns[tp], lk=unitTypeLocked(tp);
+    card.classList.toggle('locked',lk);
+    card.classList.toggle('sel',tp===hireType&&!lk);
+    let badge=card.querySelector('.unitLock');
+    if(lk&&!badge){ badge=document.createElement('div'); badge.className='unitLock'; badge.textContent='Tech'; card.appendChild(badge); }
+    else if(!lk&&badge) badge.remove();
+    card.querySelectorAll('.unitBuy').forEach(b=>b.classList.toggle('dis',lk||b.classList.contains('disCost')));
+  }
+  if(unitTypeLocked(hireType))hireType='inf';   // выбранный тип закрылся → откат на пехоту
 }
 function updateCityPanelHeader(c){
+  document.getElementById('pName').textContent=cityDisp(c.idx);
+  const meta=document.getElementById('pMeta');
+  if(c._fog){   // 🌫 город вне вижена: только last-seen число (или «?»), без уровней/состава
+    const seen=c._seenUnits!=null?c._seenUnits:'?';
+    if(meta)meta.innerHTML=`<span class="pGarrison">Garrison ${seen}</span>`;
+    return;
+  }
   const lvl=CITY_UPGRADE_TRACKS.map(tr=>`<span class="pLevelChip"><span>${SPEC[tr].icon}</span><b>${c.branchTier(tr)}</b></span>`).join('');
   const comp=c.comp||{inf:c.units,arc:0,cav:0};
   const unitChips=PANEL_UNITS.map(u=>`<span class="pUnitChip"><span>${u.icon}</span><b>${Math.round(comp[u.id]||0)}</b></span>`).join('');
-  document.getElementById('pName').textContent=cityDisp(c.idx);
-  const meta=document.getElementById('pMeta');
   if(meta)meta.innerHTML=lvl+`<span class="pGarrison">Garrison ${Math.round(c.units)}/${Math.round(c.capacity)}</span>`+unitChips;
 }
 function updateUnitQueue(c){
@@ -223,10 +250,10 @@ function updateUnitQueue(c){
   for(let i=0;i<6;i++){
     const b=c.batches&&c.batches[i];
     if(!b){html+=`<div class="qSlot empty"><div class="qNum">${i+1}</div></div>`;continue;}
-    const u=unitInfo(b.type||c.recruitType||'inf');
+    const type=b.type||c.recruitType||'inf', u=queueUnitInfo(type);
     const prog=Math.max(0,Math.min(100,((b.elapsed||0)/(b.time||1))*100));
     const remain=Math.max(0,(b.time||0)-(b.elapsed||0));
-    html+=`<div class="qSlot"><div class="qNum">${i+1}</div><div class="qArt">${u.icon}</div><div class="qQty">+${Math.round(b.count||0)}</div><div class="qTime">${panelFmtTime(remain)}</div><div class="qProg"><i style="width:${prog}%"></i></div></div>`;
+    html+=`<div class="qSlot"><div class="qNum">${i+1}</div><div class="qArt">${u.icon}</div><div class="qQty">${type==='ship'||type==='plane'?'x': '+'}${Math.round(b.count||0)}</div><div class="qTime">${panelFmtTime(remain)}</div><div class="qProg"><i style="width:${prog}%"></i></div></div>`;
   }
   html+='</div>';
   el.innerHTML=html;
@@ -259,18 +286,20 @@ function updatePanel(){
     document.getElementById('info').style.display='flex';
     const air=c.isAirport;
     const COST=air?PLANE_COST:SHIP_COST, BT=air?PLANE_BUILD_TIME:SHIP_BUILD_TIME;
-    const Q=air?c.planeQueue:c.shipQueue, TM=air?c.planeTimer:c.shipTimer;
+    const qs=vehicleQueueStatus(c,air?'plane':'ship'), Q=qs.n;
     const MPC=air?PLANE_MP:SHIP_MP;
     document.getElementById('info').textContent=air
       ? t('hud.airport_info',{cost:COST,mpc:MPC,mp:Math.floor(manpower[PLAYER]||0)})
       : t('hud.shipyard_info',{cost:COST,mpc:MPC,mp:Math.floor(manpower[PLAYER]||0)});
     const fill=document.getElementById('qfill'), qt=document.getElementById('qtext');
-    if(Q>0){fill.style.width=Math.min(100,TM/BT*100)+'%';
-      qt.textContent=t('hud.queue_wait',{n:Q,sec:Math.ceil(Q*BT-TM)});}
+    const active=(c.batches||[])[0], progress=active&&active.type===(air?'plane':'ship')?(active.elapsed||0):0;
+    if(Q>0){fill.style.width=Math.min(100,progress/BT*100)+'%';
+      qt.textContent=t('hud.queue_wait',{n:Q,sec:Math.ceil(qs.sec)});}
     else{fill.style.width='0';qt.textContent=t('hud.queue_empty');}
     const unlocked=techFlag(PLAYER,air?'planes':'ships');
-    if(shipBuildRow){const ok=!occ&&unlocked&&gold[PLAYER]>=COST&&(manpower[PLAYER]||0)>=MPC;shipBuildRow.classList.toggle('dis',!ok);
-      shipBuildRow.querySelector('small').textContent=occ?t('hud.small_occ'):!unlocked?t('hud.small_research'):(manpower[PLAYER]||0)<MPC?t('hud.small_mp_low',{n:MPC}):t('hud.small_cost_mp',{cost:COST,mp:MPC});}
+    if(shipBuildRow){const ok=!occ&&unlocked&&(c.batches||[]).length<6&&gold[PLAYER]>=COST&&(manpower[PLAYER]||0)>=MPC;shipBuildRow.classList.toggle('dis',!ok);
+      shipBuildRow.querySelector('.unitBuy')?.classList.toggle('dis',!ok);
+      shipBuildRow.querySelector('small').textContent=Q?t('hud.queue_wait',{n:Q,sec:Math.ceil(qs.sec)}):occ?t('hud.small_occ'):!unlocked?t('hud.small_research'):(c.batches||[]).length>=6?t('hud.queue_full'):(manpower[PLAYER]||0)<MPC?t('hud.small_mp_low',{n:MPC}):t('hud.small_cost_mp',{cost:COST,mp:MPC});}
     if(occ)document.getElementById('info').textContent=air
       ? t('hud.occ_airport_info')
       : t('hud.occ_shipyard_info');
@@ -316,17 +345,21 @@ function updatePanel(){
     : t('hud.garrison_info',{cur:c.units|0,cap:c.capacity|0,comp:compStr,yard:shipyardSeen?t('hud.garrison_yard_suffix'):'',price:SOLDIER_PRICE,mp:Math.floor(manpower[PLAYER]||0)});
   if(shipBuildRow){
     const tech=techFlag(PLAYER,'ships');
-    const enabled=!occ&&shipyardSeen&&tech&&gold[PLAYER]>=SHIP_COST&&(manpower[PLAYER]||0)>=SHIP_MP;
+    const q=vehicleQueueStatus(c,'ship');
+    const enabled=!occ&&shipyardSeen&&tech&&(c.batches||[]).length<6&&gold[PLAYER]>=SHIP_COST&&(manpower[PLAYER]||0)>=SHIP_MP;
     shipBuildRow.style.display=shipyardSeen?'':'none';
     shipBuildRow.classList.toggle('dis',!enabled);
-    shipBuildRow.querySelector('small').textContent=occ?t('hud.small_occ'):!shipyardSeen?t('hud.small_no_shipyard'):!tech?t('hud.small_research'):(manpower[PLAYER]||0)<SHIP_MP?t('hud.small_mp_low',{n:SHIP_MP}):t('hud.small_cost_mp',{cost:SHIP_COST,mp:SHIP_MP});
+    shipBuildRow.querySelector('.unitBuy')?.classList.toggle('dis',!enabled);
+    shipBuildRow.querySelector('small').textContent=q.n?t('hud.queue_wait',{n:q.n,sec:Math.ceil(q.sec)}):occ?t('hud.small_occ'):!shipyardSeen?t('hud.small_no_shipyard'):!tech?t('hud.small_research'):(c.batches||[]).length>=6?t('hud.queue_full'):(manpower[PLAYER]||0)<SHIP_MP?t('hud.small_mp_low',{n:SHIP_MP}):t('hud.small_cost_mp',{cost:SHIP_COST,mp:SHIP_MP});
   }
   if(planeBuildRow){
     const tech=techFlag(PLAYER,'planes');
-    const enabled=!occ&&airportSeen&&tech&&gold[PLAYER]>=PLANE_COST&&(manpower[PLAYER]||0)>=PLANE_MP;
+    const q=vehicleQueueStatus(c,'plane');
+    const enabled=!occ&&airportSeen&&tech&&(c.batches||[]).length<6&&gold[PLAYER]>=PLANE_COST&&(manpower[PLAYER]||0)>=PLANE_MP;
     planeBuildRow.style.display=airportSeen?'':'none';
     planeBuildRow.classList.toggle('dis',!enabled);
-    planeBuildRow.querySelector('small').textContent=occ?t('hud.small_occ'):!airportSeen?t('hud.small_no_airport'):!tech?t('hud.small_research'):(manpower[PLAYER]||0)<PLANE_MP?t('hud.small_mp_low',{n:PLANE_MP}):t('hud.small_cost_mp',{cost:PLANE_COST,mp:PLANE_MP});
+    planeBuildRow.querySelector('.unitBuy')?.classList.toggle('dis',!enabled);
+    planeBuildRow.querySelector('small').textContent=q.n?t('hud.queue_wait',{n:q.n,sec:Math.ceil(q.sec)}):occ?t('hud.small_occ'):!airportSeen?t('hud.small_no_airport'):!tech?t('hud.small_research'):(c.batches||[]).length>=6?t('hud.queue_full'):(manpower[PLAYER]||0)<PLANE_MP?t('hud.small_mp_low',{n:PLANE_MP}):t('hud.small_cost_mp',{cost:PLANE_COST,mp:PLANE_MP});
   }
   for(const u of PANEL_UNITS)for(const spec of ['5','20']){
     const btn=buyRows[u.id+'_'+spec]; if(!btn)continue;

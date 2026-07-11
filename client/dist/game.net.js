@@ -173,7 +173,9 @@
       }
     });
     const parseQueue=s=>String(s||'').split(';').filter(Boolean).slice(0,6).map(part=>{const a=part.split(',');return [(+a[0]||0),(+a[1]||0),(+a[2]||0),a[3]||'inf'];});
-    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0, cc.prodTier|0, cc.defTier|0, cc.atkTier|0,
+    // 🌫 туман войны: приватные поля города приходят ТОЛЬКО в вижене (view-теги схемы);
+    //    units===undefined → город в тумане → units:null (applyCity заморозит last-seen)
+    const c=[]; state.cities.forEach((cc,key)=> c.push([Number(key), cc.owner, cc.units!==undefined?cc.units:null, cc.spec, cc.tier, cc.occ, cc.queued|0, cc.siegeUnits|0, cc.siegeOwner|0, cc.prodTime|0, cc.prodElapsed|0, cc.shipQ|0, cc.shipT|0, cc.planeQ|0, cc.planeT|0, cc.prodTier|0, cc.defTier|0, cc.atkTier|0,
       cc.compInf!=null?cc.compInf:null, cc.compArc!=null?cc.compArc:null, cc.compCav!=null?cc.compCav:null,
       cc.occFrom==null?255:cc.occFrom, parseQueue(cc.recruitQueue)]));
     const rel=[]; state.relations.forEach((v,k)=> rel.push([k, v===1?'war':'ally']));
@@ -196,7 +198,7 @@
     }
     // синк динамических верфей/аэродромов на локальные города (чтобы появился UI постройки)
     if(!push._by || push._n!==cities.length){ push._by={}; for(const cc of cities)push._by[cc.idx]=cc; push._n=cities.length; }
-    state.cities.forEach((cc,key)=>{ const lc=push._by[Number(key)]; if(lc){ lc.isShipyard=!!cc.shipyard; lc.isAirport=!!cc.airport; lc.aa=0; } });
+    state.cities.forEach((cc,key)=>{ const lc=push._by[Number(key)]; if(lc){ lc.isShipyard=!!cc.shipyard; lc.isAirport=!!cc.airport; lc.hasShipyard=!!cc.hasShipyard; lc.hasAirport=!!cc.hasAirport; lc.aa=0; } });
     const e=[], DQ=1/64;   // позиции пришли как fixed-point uint16 (×64 на сервере) — делим обратно
     state.squads.forEach((s,id)=>{ let x=s.x*DQ, z=s.z*DQ, hdg=(s.heading||0)*(2*Math.PI/256), m=s.mode|0;
       const ea=s.edgeA!=null&&s.edgeA!==65535?s.edgeA:null, eb=s.edgeB!=null&&s.edgeB!==65535?s.edgeB:null, ef=(s.frac||0)/65535;

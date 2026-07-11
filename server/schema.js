@@ -10,6 +10,7 @@ defineTypes(CityState, {
   // статика
   gx: 'uint16', gz: 'uint16', size: 'uint8', country: 'uint8', capital: 'uint8',
   shipyard: 'uint8', airport: 'uint8',
+  hasShipyard: 'uint8', hasAirport: 'uint8',
   // динамика
   owner: 'uint8',
   units: 'uint16',
@@ -105,7 +106,7 @@ defineTypes(GameState, {
 // размер, страна, владелец, оккупация — «оболочка» города, чтобы направить войска.
 const CITY_PRIVATE = ['units', 'spec', 'tier', 'prodTier', 'defTier', 'atkTier', 'aa',
   'compInf', 'compArc', 'compCav', 'queued', 'recruitQueue', 'siegeUnits', 'siegeOwner',
-  'prodTime', 'prodElapsed', 'shipQ', 'shipT', 'planeQ', 'planeT', 'shipyard', 'airport'];
+  'prodTime', 'prodElapsed', 'shipQ', 'shipT', 'planeQ', 'planeT', 'shipyard', 'airport', 'hasShipyard', 'hasAirport'];
 for (const f of CITY_PRIVATE) view()(CityState.prototype, f);
 // Движущиеся сущности скрыты целиком: коллекция view-тегнута → элемент приходит
 // только клиентам, добавившим его в view (свои/союзные всегда, чужие — в вижене).

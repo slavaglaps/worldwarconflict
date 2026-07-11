@@ -66,6 +66,7 @@ class City {
     this.boosted = false;
     this.goldTimer = 0;
     this.batches = [];                  // очередь найма: {count,time,elapsed}
+    this.completedProduction = [];      // завершённые ship/plane забирает Sim после update()
     this.siege = null;                  // {ownerId: {units, atkMult}}
     this._captured = undefined;         // сигнал Sim при смене владельца
 
@@ -92,10 +93,10 @@ class City {
     this.atkTier = spec === 'atk' ? tier : 0;
   }
 
-  get capacity()    { let c = this.K.CITY_CAP_BASE + this.size * this.K.CITY_CAP_PER_SIZE; c *= 1 + this.K.CITY_DEF_CAP_PER_TIER * this.branchTier('def'); if (this.boosted) c *= this.K.CITY_BOOST_CAP; return c * this.tv(this.owner, 'cc'); }
-  get goldInterval(){ let g = this.K.CITY_GOLD_INTERVAL; g *= Math.pow(this.K.CITY_PROD_GOLD_DECAY, this.branchTier('prod')); if (this.boosted) g *= this.K.CITY_BOOST_GOLD; return g / this.tm(this.owner, 'eco'); }
+  get capacity()    { let c = this.K.CITY_CAP_BASE + this.size * this.K.CITY_CAP_PER_SIZE; c *= 1 + this.K.CITY_DEF_CAP_PER_TIER * this.branchTier('prod'); if (this.boosted) c *= this.K.CITY_BOOST_CAP; return c * this.tv(this.owner, 'cc'); }
+  get goldInterval(){ let g = this.K.CITY_GOLD_INTERVAL; if (this.boosted) g *= this.K.CITY_BOOST_GOLD; return g / this.tm(this.owner, 'eco'); }
   get trainPer()    { let t = this.K.CITY_TRAIN_BASE - this.size * this.K.CITY_TRAIN_PER_SIZE; if (this.boosted) t *= this.K.CITY_BOOST_TRAIN; return t / this.tm(this.owner, 'prod'); }
-  get queued()      { return this.batches.reduce((s, b) => s + b.count, 0); }
+  get queued()      { return this.batches.reduce((s, b) => s + (b.type === 'ship' || b.type === 'plane' ? 0 : b.count), 0); }
   get defMult()     { return (1 + this.K.CITY_DEF_MULT_PER_TIER * this.branchTier('def')) * this.tm(this.owner, 'def'); }
   get atkMult()     { return (1 + this.K.CITY_ATK_MULT_PER_TIER * this.branchTier('atk')) * this.tm(this.owner, 'atk'); }
   // ⚔ башня: atk-город бьёт по врагам в радиусе (радиус/урон растут с тиром и tech)
@@ -131,7 +132,7 @@ class City {
             if (this.occ && this.occFrom === bo) { this.occ = false; this.occFrom = null; } // вернул свой город
             else { this.occ = true; this.occFrom = prev; }                                  // оккупация
             delete this.siege[bo];
-            this.goldTimer = 0; this.batches = [];
+            this.goldTimer = 0; this.batches = []; this.completedProduction = [];
             this._captured = prev;                                                          // → Sim проверит аннексию
           } else this.units = this.K.GARRISON_FLOOR;                                        // взаимное истощение
         }
@@ -147,9 +148,12 @@ class City {
     if (this.batches.length) {
       const b = this.batches[0]; b.elapsed += dt;
       if (b.elapsed >= b.time) {
-        const add = Math.max(0, Math.min(this.capacity - this.units, b.count));   // 👥 рекруты идут в тип батча (или recruitType города)
-        this.units += add;
-        if (this.comp) this.comp[b.type || this.recruitType || 'inf'] += add;
+        if (b.type === 'ship' || b.type === 'plane') this.completedProduction.push(b.type);
+        else {
+          const add = Math.max(0, Math.min(this.capacity - this.units, b.count));   // 👥 рекруты идут в тип батча (или recruitType города)
+          this.units += add;
+          if (this.comp) this.comp[b.type || this.recruitType || 'inf'] += add;
+        }
         this.batches.shift();
       }
     }

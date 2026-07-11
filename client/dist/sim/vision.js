@@ -9,8 +9,6 @@
 //   • клиентом для отрисовки тёмного тумана (одна математика — ноль дрейфа).
 'use strict';
 
-const { isWaterAt } = require('./water');
-
 // Вороной: для каждого хекса — индекс ближайшего города. Считается один раз
 // (города не двигаются; динамические верфи/аэродромы рядом с родителем того же
 // владельца — сдвигом ячеек пренебрегаем). 65535 = городов нет.
@@ -75,9 +73,7 @@ function computeVision(sim, fid, out) {
   const friendly = new Uint8Array(sim.factions);
   for (let o = 0; o < sim.factions; o++) friendly[o] = (o === fid || sim.allied(fid, o)) ? 1 : 0;
 
-  // 1) территория: сухопутный хекс виден, если его ближайший город принадлежит своим.
-  // Океан нельзя открывать Вороной: на островах ближайший дружественный город иначе
-  // подсвечивает море до следующей страны. Воду раскрывают только источники ниже.
+  // 1) территория: хекс виден, если его ближайший город принадлежит своим
   if (!sim._voronoi || sim._voronoiN !== sim.cities.length) {
     sim._voronoi = buildVoronoi(sim.cities, GRID);
     sim._voronoiN = sim.cities.length;
@@ -85,10 +81,7 @@ function computeVision(sim, fid, out) {
   const vor = sim._voronoi, cities = sim.cities;
   const cityOwn = new Uint8Array(cities.length);
   for (let i = 0; i < cities.length; i++) cityOwn[i] = friendly[cities[i].owner] || 0;
-  for (let x = 0; x < GRID; x++) for (let z = 0; z < GRID; z++) {
-    const i = x * GRID + z, ci = vor[i];
-    if (ci !== 65535 && cityOwn[ci] && !isWaterAt(x, z)) mask[i] = 1;
-  }
+  for (let i = 0; i < N; i++) { const ci = vor[i]; if (ci !== 65535 && cityOwn[ci]) mask[i] = 1; }
 
   // 2) свои отряды/корабли/самолёты — «фонарики» (разведка боем)
   const K = sim.K;

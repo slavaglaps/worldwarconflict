@@ -10,11 +10,12 @@
   const T = (typeof T3 !== 'undefined') ? T3 : THREE;
   const BASE = 'assets/hex-kit/buildings/green/';
   const BLUE_BASE = 'assets/hex-kit/buildings/blue/';
+  const NEUTRAL_BASE = 'assets/hex-kit/buildings/neutral/';
   // Внешние постройки: пока один слой строительства за пределами городов.
   const CATALOG = [
     // ── Standard (доступно) ──
+    { key: 'windmill', file: 'building_windmill_green', groundDecor: NEUTRAL_BASE + 'building_grain', get name() { return t('build.name_farm'); }, cat: 'eco', sect: 'standard', role: 'farm', cost: 55, goldRate: 0.45, icon: '💰' },
     { key: 'home_A', file: 'building_home_A_green', get name() { return t('build.name_village'); }, cat: 'eco', sect: 'standard', role: 'village', cost: 45, manpowerRate: 0.35, icon: '👥', tech: 'village' },
-    { key: 'windmill', file: 'building_windmill_green', get name() { return t('build.name_farm'); }, cat: 'eco', sect: 'standard', role: 'farm', cost: 55, goldRate: 0.45, icon: '💰', tech: 'farm' },
     { key: 'church', file: 'building_church_green', get name() { return t('build.name_church'); }, cat: 'state', sect: 'standard', role: 'church', cost: 70, politRate: 0.08, icon: '🏛', tech: 'church' },
     // ── Standard (заблокировано, скоро) ──
     { key: 'home_B', file: 'building_home_B_green', get name() { return t('build.name_house2'); }, sect: 'standard', locked: true, icon: '🏠' },
@@ -26,9 +27,9 @@
     { key: 'mine', file: 'building_mine_green', get name() { return t('build.name_mine'); }, sect: 'standard', locked: true, icon: '⛏' },
     // ── Military (доступно) ──
     { key: 'tower_A', file: 'building_tower_A_green', get name() { return t('build.name_tower'); }, cat: 'def', sect: 'military', role: 'tower', cost: 85, range: 7.5, damage: 2, attackSpeed: 0.75, icon: '🛡', tech: 'towerBuild' },
-    { key: 'shipyard', get name() { return t('build.name_shipyard'); }, cat: 'def', sect: 'military', role: 'shipyard', cost: 90, icon: '⚓',
+    { key: 'shipyard', get name() { return t('build.name_shipyard'); }, cat: 'def', sect: 'military', role: 'shipyard', cost: 90, icon: '⚓', tech: 'ships',
       parts: [{ key: 'workshop', path: BLUE_BASE + 'building_shipyard_blue' }, { key: 'docks', path: BLUE_BASE + 'building_docks_blue' }] },
-    { key: 'airport', get name() { return t('build.name_airport'); }, cat: 'def', sect: 'military', role: 'airport', cost: 110, icon: '✈',
+    { key: 'airport', get name() { return t('build.name_airport'); }, cat: 'def', sect: 'military', role: 'airport', cost: 110, icon: '✈', tech: 'planes',
       parts: [{ key: 'workshop', path: BLUE_BASE + 'building_workshop_blue' }] },
     // ── Military (заблокировано) ──
     { key: 'barracks', file: 'building_barracks_green', get name() { return t('build.name_barracks'); }, sect: 'military', locked: true, icon: '⚔' },
@@ -155,7 +156,7 @@
     let r = 0;
     for (const b of placedBuildings) {
       if (!b || b.owner !== fid) continue;
-      if (key === 'gold') r += b.item.goldRate || 0;
+      if (key === 'gold') r += (b.item.goldRate || 0) * (b.item.role === 'farm' ? techVal(fid, 'farmIncome') : 1);
       else if (key === 'polit') r += b.item.politRate || 0;
       else if (key === 'manpower') r += b.item.manpowerRate || 0;
     }
@@ -203,8 +204,18 @@
     }
     return new Promise((res) => {
       new T.GLTFLoader().load(BASE + item.file + '.gltf', (g) => {
-        models[item.key] = normalizeModel(g.scene, playerId());   // низ модели → y=0, центр по XZ
-        res();
+        const holder = normalizeModel(g.scene, playerId());      // низ модели → y=0, центр по XZ
+        if (!item.groundDecor) { models[item.key] = holder; res(); return; }
+        loadGltf(item.groundDecor).then((groundRoot) => {
+          const ground = normalizeModel(groundRoot, playerId());
+          const mainFp = holder.userData.footprint || 1, groundFp = ground.userData.footprint || 1;
+          const groundScale = 1.6 * mainFp / groundFp;
+          ground.scale.set(groundScale, groundScale / 2, groundScale);
+          ground.userData.farmGroundDecor = true;
+          holder.add(ground);
+          models[item.key] = holder;
+          res();
+        }).catch((e) => { console.warn('[build] ground decor failed', item.key, e); models[item.key] = holder; res(); });
       }, undefined, (e) => { console.warn('[build] model failed', item.key, e); res(); });
     });
   }
@@ -267,7 +278,7 @@
 
   // ── меню ──
   // 🔓 здание закрыто исследованием? (item.tech → узел дерева; см. tech-data m2/p1/p2/p3)
-  const TECH_NODE_OF = { towerBuild: 'Башня', archers: 'Лучники', cavalry: 'Конница', farm: 'Ферма', village: 'Деревня', church: 'Церковь' };
+  const TECH_NODE_OF = { towerBuild: 'Башня', archers: 'Лучники', cavalry: 'Конница', farm: 'Ферма', village: 'Деревня', church: 'Церковь', ships: 'Верфь', planes: 'Аэродром' };
   function techLocked(item) {
     return !!(item.tech && typeof techFlag === 'function' && !techFlag(playerId(), item.tech));
   }
@@ -486,6 +497,7 @@
     parent.shipyardHexKey = h.key;
     parent.shipyardGX = h.gx;
     parent.shipyardGZ = h.gz;
+    if (typeof MP !== 'undefined' && MP.guest && !MP.localSim && typeof MP.cmd === 'function') MP.cmd({ cmd: 'yard', c: parent.idx, kind: 'ship' });
     if (typeof MP !== 'undefined' && MP.localSim && typeof LOCALSIM !== 'undefined' && LOCALSIM && LOCALSIM.cities && LOCALSIM.cities[parent.idx]) {
       LOCALSIM.cities[parent.idx].hasShipyard = true;
       LOCALSIM.cities[parent.idx].shipyardGX = h.gx;
@@ -502,6 +514,7 @@
     parent.airportHexKey = h.key;
     parent.airportGX = h.gx;
     parent.airportGZ = h.gz;
+    if (typeof MP !== 'undefined' && MP.guest && !MP.localSim && typeof MP.cmd === 'function') MP.cmd({ cmd: 'yard', c: parent.idx, kind: 'air' });
     if (typeof MP !== 'undefined' && MP.localSim && typeof LOCALSIM !== 'undefined' && LOCALSIM && LOCALSIM.cities && LOCALSIM.cities[parent.idx]) {
       LOCALSIM.cities[parent.idx].hasAirport = true;
       LOCALSIM.cities[parent.idx].airportGX = h.gx;
@@ -663,7 +676,9 @@
     // 🌗 здание — динамический кастер: тень из ОТДЕЛЬНОЙ карты (attachDynShadowCaster ниже), статику не трогаем
     if (!placedGroup) { placedGroup = new T.Group(); placedGroup.userData.perfGroup = 'buildings'; scene.add(placedGroup); }
     placedGroup.add(obj);
-    placedBuildings.push({ item, obj, key: h.key, owner, gx: h.gx, gz: h.gz, y, cd: 0, parentCity });
+    const windmillFan = item.role === 'farm' ? obj.getObjectByName('building_windmill_top_fan_green') : null;
+    if (windmillFan) windmillFan.rotation.z = Math.random() * Math.PI * 2;
+    placedBuildings.push({ item, obj, key: h.key, owner, gx: h.gx, gz: h.gz, y, cd: 0, parentCity, windmillFan });
     hb.occupied.add(h.key);
     if (typeof attachDynShadowCaster === 'function') attachDynShadowCaster(obj);   // 🌗 в динамическую карту теней + её перепечь (дёшево)
     rebuildHighlight();           // убрать занятый хекс из подсветки
@@ -733,9 +748,10 @@
     for (const b of placedBuildings) {
       syncBuildingOwner(b);
       const it = b.item;
+      if (b.windmillFan) b.windmillFan.rotation.z = (b.windmillFan.rotation.z + dt * 0.85) % (Math.PI * 2);
       if (it.role === 'tower') updateTower(b, dt);
       else {
-        addResource(b.owner, 'gold', (it.goldRate || 0) * dt);
+        addResource(b.owner, 'gold', (it.goldRate || 0) * (it.role === 'farm' ? techVal(b.owner, 'farmIncome') : 1) * dt);
         addResource(b.owner, 'polit', (it.politRate || 0) * dt);
         addResource(b.owner, 'manpower', (it.manpowerRate || 0) * dt);
       }

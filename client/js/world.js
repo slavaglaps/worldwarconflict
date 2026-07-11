@@ -153,7 +153,15 @@ window.bakeDynShadowIfDirty=function bakeDynShadowIfDirty(){            // зо�
 // город/здание → динамический слой теней (и исключение из статичной карты)
 window.attachDynShadowCaster=function attachDynShadowCaster(root){
   if(!root)return;
-  root.traverse(o=>{ if(o.isMesh)o.castShadow=false; o.layers.enable(DYN_SHADOW_LAYER); });
+  root.traverse(o=>{
+    if(o.isMesh){
+      o.castShadow=false;
+      o.receiveShadow=true;
+      const mats=Array.isArray(o.material)?o.material:[o.material];
+      for(const m of mats)if(m)window.installDynShadowReceiver(m,{bias:0.00012});
+    }
+    o.layers.enable(DYN_SHADOW_LAYER);
+  });
   DYN_SHADOW.dirty=true;
 };
 window.scheduleCityShadowRefresh=function scheduleCityShadowRefresh(city){  // buildMeshes зовёт ДО сборки детей → доделываем микротаском
@@ -163,7 +171,7 @@ window.scheduleCityShadowRefresh=function scheduleCityShadowRefresh(city){  // b
 window.installDynShadowReceiver=function installDynShadowReceiver(mat,opts){
   if(!mat||(mat.userData&&mat.userData.dynShadowReceiver))return mat;
   initDynShadow();
-  const shadowBias=opts&&Number.isFinite(opts.bias)?opts.bias:0.00065;
+  const shadowBias=opts&&Number.isFinite(opts.bias)?opts.bias:0.00012;
   mat.userData=mat.userData||{}; mat.userData.dynShadowReceiver=true; mat.userData.dynShadowBias=shadowBias;
   const prev=mat.onBeforeCompile;                                       // композиция с biome-шейдером (он ставит свой onBeforeCompile)
   const prevKeyFn=mat.customProgramCacheKey;
@@ -191,8 +199,8 @@ float dynUnpackDepth( const in vec4 v ){
 float getDynShadow(){
   vec3 dsc = vDynShadowCoord.xyz / vDynShadowCoord.w;
   if(dsc.x<0.0||dsc.x>1.0||dsc.y<0.0||dsc.y>1.0||dsc.z>1.0) return 1.0;
-  float sh=0.0; float tw=0.0; vec2 px=vec2(${(1.75/DYN_SHADOW.size).toFixed(8)});
-  for(int dx=-2;dx<=2;dx++)for(int dy=-2;dy<=2;dy++){
+  float sh=0.0; float tw=0.0; vec2 px=vec2(${(1.5/DYN_SHADOW.size).toFixed(8)});
+  for(int dx=-1;dx<=1;dx++)for(int dy=-1;dy<=1;dy++){
     vec2 o=vec2(float(dx),float(dy));
     float w=1.0/(1.0+dot(o,o)*0.35);
     float d=dynUnpackDepth(texture2D(uDynShadowMap, dsc.xy+o*px));
@@ -210,7 +218,7 @@ float getDynShadow(){
       shader.fragmentShader=shader.fragmentShader.replace(/getShadowMask\(\)/g,'( getShadowMask() * getDynShadow() )');
     }
   };
-  mat.customProgramCacheKey=function(){ return (prevKeyFn?prevKeyFn.call(this):'') + '|dyn-shadow-soft-v2|b${shadowBias.toFixed(7)}'; };
+  mat.customProgramCacheKey=function(){ return (prevKeyFn?prevKeyFn.call(this):'') + '|dyn-shadow-soft-v3|b' + shadowBias.toFixed(7); };
   mat.needsUpdate=true;
   return mat;
 };

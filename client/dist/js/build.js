@@ -10,12 +10,13 @@
   const T = (typeof T3 !== 'undefined') ? T3 : THREE;
   const BASE = 'assets/hex-kit/buildings/green/';
   const BLUE_BASE = 'assets/hex-kit/buildings/blue/';
+  const NEUTRAL_BASE = 'assets/hex-kit/buildings/neutral/';
   // Внешние постройки: пока один слой строительства за пределами городов.
   const CATALOG = [
     // ── Standard (доступно) ──
-    { key: 'home_A', file: 'building_home_A_green', get name() { return t('build.name_village'); }, cat: 'eco', sect: 'standard', role: 'village', cost: 45, manpowerRate: 0.35, icon: '👥' },
-    { key: 'windmill', file: 'building_windmill_green', get name() { return t('build.name_farm'); }, cat: 'eco', sect: 'standard', role: 'farm', cost: 55, goldRate: 0.45, icon: '💰' },
-    { key: 'church', file: 'building_church_green', get name() { return t('build.name_church'); }, cat: 'state', sect: 'standard', role: 'church', cost: 70, politRate: 0.08, icon: '🏛' },
+    { key: 'windmill', file: 'building_windmill_green', groundDecor: NEUTRAL_BASE + 'building_grain', get name() { return t('build.name_farm'); }, cat: 'eco', sect: 'standard', role: 'farm', cost: 55, goldRate: 0.45, icon: '💰' },
+    { key: 'home_A', file: 'building_home_A_green', get name() { return t('build.name_village'); }, cat: 'eco', sect: 'standard', role: 'village', cost: 45, manpowerRate: 0.35, icon: '👥', tech: 'village' },
+    { key: 'church', file: 'building_church_green', get name() { return t('build.name_church'); }, cat: 'state', sect: 'standard', role: 'church', cost: 70, politRate: 0.08, icon: '🏛', tech: 'church' },
     // ── Standard (заблокировано, скоро) ──
     { key: 'home_B', file: 'building_home_B_green', get name() { return t('build.name_house2'); }, sect: 'standard', locked: true, icon: '🏠' },
     { key: 'well', file: 'building_well_green', get name() { return t('build.name_well'); }, sect: 'standard', locked: true, icon: '⛲' },
@@ -25,10 +26,10 @@
     { key: 'lumbermill', file: 'building_lumbermill_green', get name() { return t('build.name_lumbermill'); }, sect: 'standard', locked: true, icon: '🪵' },
     { key: 'mine', file: 'building_mine_green', get name() { return t('build.name_mine'); }, sect: 'standard', locked: true, icon: '⛏' },
     // ── Military (доступно) ──
-    { key: 'tower_A', file: 'building_tower_A_green', get name() { return t('build.name_tower'); }, cat: 'def', sect: 'military', role: 'tower', cost: 85, range: 7.5, damage: 2, attackSpeed: 0.75, icon: '🛡' },
-    { key: 'shipyard', get name() { return t('build.name_shipyard'); }, cat: 'def', sect: 'military', role: 'shipyard', cost: 90, icon: '⚓',
+    { key: 'tower_A', file: 'building_tower_A_green', get name() { return t('build.name_tower'); }, cat: 'def', sect: 'military', role: 'tower', cost: 85, range: 7.5, damage: 2, attackSpeed: 0.75, icon: '🛡', tech: 'towerBuild' },
+    { key: 'shipyard', get name() { return t('build.name_shipyard'); }, cat: 'def', sect: 'military', role: 'shipyard', cost: 90, icon: '⚓', tech: 'ships',
       parts: [{ key: 'workshop', path: BLUE_BASE + 'building_shipyard_blue' }, { key: 'docks', path: BLUE_BASE + 'building_docks_blue' }] },
-    { key: 'airport', get name() { return t('build.name_airport'); }, cat: 'def', sect: 'military', role: 'airport', cost: 110, icon: '✈',
+    { key: 'airport', get name() { return t('build.name_airport'); }, cat: 'def', sect: 'military', role: 'airport', cost: 110, icon: '✈', tech: 'planes',
       parts: [{ key: 'workshop', path: BLUE_BASE + 'building_workshop_blue' }] },
     // ── Military (заблокировано) ──
     { key: 'barracks', file: 'building_barracks_green', get name() { return t('build.name_barracks'); }, sect: 'military', locked: true, icon: '⚔' },
@@ -155,7 +156,7 @@
     let r = 0;
     for (const b of placedBuildings) {
       if (!b || b.owner !== fid) continue;
-      if (key === 'gold') r += b.item.goldRate || 0;
+      if (key === 'gold') r += (b.item.goldRate || 0) * (b.item.role === 'farm' ? techVal(fid, 'farmIncome') : 1);
       else if (key === 'polit') r += b.item.politRate || 0;
       else if (key === 'manpower') r += b.item.manpowerRate || 0;
     }
@@ -203,8 +204,18 @@
     }
     return new Promise((res) => {
       new T.GLTFLoader().load(BASE + item.file + '.gltf', (g) => {
-        models[item.key] = normalizeModel(g.scene, playerId());   // низ модели → y=0, центр по XZ
-        res();
+        const holder = normalizeModel(g.scene, playerId());      // низ модели → y=0, центр по XZ
+        if (!item.groundDecor) { models[item.key] = holder; res(); return; }
+        loadGltf(item.groundDecor).then((groundRoot) => {
+          const ground = normalizeModel(groundRoot, playerId());
+          const mainFp = holder.userData.footprint || 1, groundFp = ground.userData.footprint || 1;
+          const groundScale = 1.6 * mainFp / groundFp;
+          ground.scale.set(groundScale, groundScale / 2, groundScale);
+          ground.userData.farmGroundDecor = true;
+          holder.add(ground);
+          models[item.key] = holder;
+          res();
+        }).catch((e) => { console.warn('[build] ground decor failed', item.key, e); models[item.key] = holder; res(); });
       }, undefined, (e) => { console.warn('[build] model failed', item.key, e); res(); });
     });
   }
@@ -266,6 +277,30 @@
   }
 
   // ── меню ──
+  // 🔓 здание закрыто исследованием? (item.tech → узел дерева; см. tech-data m2/p1/p2/p3)
+  const TECH_NODE_OF = { towerBuild: 'Башня', archers: 'Лучники', cavalry: 'Конница', farm: 'Ферма', village: 'Деревня', church: 'Церковь', ships: 'Верфь', planes: 'Аэродром' };
+  function techLocked(item) {
+    return !!(item.tech && typeof techFlag === 'function' && !techFlag(playerId(), item.tech));
+  }
+  function itemLockedNow(item) { return !!item.locked || techLocked(item); }
+  function lockHint(item) {
+    if (techLocked(item)) { const node = (typeof tName === 'function') ? tName('tech', TECH_NODE_OF[item.tech] || item.tech) : item.tech;
+      return t('build.hint_research', { name: node }); }
+    return '🔒 ' + item.name + ' — ' + t('build.locked');
+  }
+  // обновить локи плиток по текущим исследованиям (зовётся при каждом открытии меню и после техов)
+  function refreshTechLocks() {
+    if (!panelBody) return;
+    panelBody.querySelectorAll('button[data-key]').forEach((b) => {
+      const item = CATALOG.find((c) => c.key === b.dataset.key); if (!item || !item.tech) return;
+      const lk = itemLockedNow(item);
+      b.classList.toggle('locked', lk);
+      let badge = b.querySelector('.bpLock');
+      if (lk && !badge) { badge = document.createElement('span'); badge.className = 'bpLock'; badge.textContent = '🔒'; b.appendChild(badge); }
+      else if (!lk && badge) badge.remove();
+    });
+  }
+
   function buildPanel() {
     if (panelEl) return;
     panelEl = document.createElement('div');
@@ -284,17 +319,17 @@
       const grid = document.createElement('div'); grid.className = 'bpGrid';
       for (const item of items) {
         const b = document.createElement('button');
-        b.className = 'bpTile' + (item.locked ? ' locked' : '');
+        b.className = 'bpTile' + (itemLockedNow(item) ? ' locked' : '');
         b.dataset.key = item.key;
-        b.title = item.locked ? (item.name + ' — ' + t('build.locked')) : (item.name + ' · ' + itemStats(item));
+        b.title = itemLockedNow(item) ? (item.name + ' — ' + t('build.locked')) : (item.name + ' · ' + itemStats(item));
         if (item.thumb) b.style.backgroundImage = 'url(' + item.thumb + ')';
         else { const f = document.createElement('span'); f.className = 'bpIco'; f.textContent = item.icon || '🏚'; b.appendChild(f); }
-        if (item.locked) { const lk = document.createElement('span'); lk.className = 'bpLock'; lk.textContent = '🔒'; b.appendChild(lk); }
-        else { const c = document.createElement('span'); c.className = 'bpCost'; c.textContent = item.cost + '💰'; b.appendChild(c); }
-        b.onmouseenter = (ev) => { setHint(item.locked ? ('🔒 ' + item.name + ' — ' + t('build.locked')) : (item.name + ' · ' + itemStats(item))); showBuildTip(ev, item); };
+        if (itemLockedNow(item)) { const lk = document.createElement('span'); lk.className = 'bpLock'; lk.textContent = '🔒'; b.appendChild(lk); }
+        if (!item.locked) { const c = document.createElement('span'); c.className = 'bpCost'; c.textContent = item.cost + '💰'; b.appendChild(c); }
+        b.onmouseenter = (ev) => { setHint(itemLockedNow(item) ? lockHint(item) : (item.name + ' · ' + itemStats(item))); showBuildTip(ev, item); };
         b.onmousemove = (ev) => moveBuildTip(ev);
         b.onmouseleave = () => { if (!selected) setHint(t('build.hint_pick')); hideBuildTip(); };
-        b.onclick = () => { if (item.locked) { setHint('🔒 ' + item.name + ' — ' + t('build.locked')); return; } selectItem(item, b); };
+        b.onclick = () => { if (itemLockedNow(item)) { setHint(lockHint(item)); return; } selectItem(item, b); };
         grid.appendChild(b);
       }
       panelBody.appendChild(grid);
@@ -310,7 +345,7 @@
   // ── плашка-описание при наведении на здание ──
   function showBuildTip(ev, item) {
     if (!buildTipEl) { buildTipEl = document.createElement('div'); buildTipEl.id = 'buildTip'; document.body.appendChild(buildTipEl); }
-    const foot = item.locked ? ('<div class="btLock">🔒 ' + t('build.locked') + '</div>') : ('<div class="btStat">' + itemStats(item) + '</div>');
+    const foot = itemLockedNow(item) ? ('<div class="btLock">' + (techLocked(item) ? lockHint(item) : '🔒 ' + t('build.locked')) + '</div>') : ('<div class="btStat">' + itemStats(item) + '</div>');
     buildTipEl.innerHTML = '<b>' + item.name + '</b><div class="btDesc">' + itemDesc(item) + '</div>' + foot;
     buildTipEl.style.display = 'block'; moveBuildTip(ev);
   }
@@ -326,7 +361,7 @@
   function hideBuildTip() { if (buildTipEl) buildTipEl.style.display = 'none'; }
 
   function selectItem(item, btn) {
-    if (item.locked) return;
+    if (itemLockedNow(item)) return;
     clearSel();
     if (selected === item) { selected = null; exitPlacing(); setHint(t('build.hint_pick')); return; }
     selected = item;
@@ -462,6 +497,7 @@
     parent.shipyardHexKey = h.key;
     parent.shipyardGX = h.gx;
     parent.shipyardGZ = h.gz;
+    if (typeof MP !== 'undefined' && MP.guest && !MP.localSim && typeof MP.cmd === 'function') MP.cmd({ cmd: 'yard', c: parent.idx, kind: 'ship' });
     if (typeof MP !== 'undefined' && MP.localSim && typeof LOCALSIM !== 'undefined' && LOCALSIM && LOCALSIM.cities && LOCALSIM.cities[parent.idx]) {
       LOCALSIM.cities[parent.idx].hasShipyard = true;
       LOCALSIM.cities[parent.idx].shipyardGX = h.gx;
@@ -478,6 +514,7 @@
     parent.airportHexKey = h.key;
     parent.airportGX = h.gx;
     parent.airportGZ = h.gz;
+    if (typeof MP !== 'undefined' && MP.guest && !MP.localSim && typeof MP.cmd === 'function') MP.cmd({ cmd: 'yard', c: parent.idx, kind: 'air' });
     if (typeof MP !== 'undefined' && MP.localSim && typeof LOCALSIM !== 'undefined' && LOCALSIM && LOCALSIM.cities && LOCALSIM.cities[parent.idx]) {
       LOCALSIM.cities[parent.idx].hasAirport = true;
       LOCALSIM.cities[parent.idx].airportGX = h.gx;
@@ -588,6 +625,7 @@
   function place(item, h) {
     const hb = window.HEXBUILD;
     if (!hb) return;
+    if (itemLockedNow(item)) { setHint(lockHint(item)); return; }   // 🔓 гейт по исследованию
     if (!models[item.key]) { ensureModels().then(() => { if (selected === item && models[item.key]) makeGhost(); }); return; }
     if (isOccupiedBuildHex(h)) { setHint(t('build.hint_occupied')); return; }
     if (!isValidHexForItem(item, h)) return;
@@ -638,7 +676,9 @@
     // 🌗 здание — динамический кастер: тень из ОТДЕЛЬНОЙ карты (attachDynShadowCaster ниже), статику не трогаем
     if (!placedGroup) { placedGroup = new T.Group(); placedGroup.userData.perfGroup = 'buildings'; scene.add(placedGroup); }
     placedGroup.add(obj);
-    placedBuildings.push({ item, obj, key: h.key, owner, gx: h.gx, gz: h.gz, y, cd: 0, parentCity });
+    const windmillFan = item.role === 'farm' ? obj.getObjectByName('building_windmill_top_fan_green') : null;
+    if (windmillFan) windmillFan.rotation.z = Math.random() * Math.PI * 2;
+    placedBuildings.push({ item, obj, key: h.key, owner, gx: h.gx, gz: h.gz, y, cd: 0, parentCity, windmillFan });
     hb.occupied.add(h.key);
     if (typeof attachDynShadowCaster === 'function') attachDynShadowCaster(obj);   // 🌗 в динамическую карту теней + её перепечь (дёшево)
     rebuildHighlight();           // убрать занятый хекс из подсветки
@@ -659,6 +699,14 @@
     const hostile = (o) => owner !== o && (typeof atWar !== 'function' || atWar(owner, o));
     const gy = (x, z) => (typeof getTerrainHeight === 'function') ? getTerrainHeight(x, z) : 0;
     const guest = (typeof MP !== 'undefined' && MP && MP.ghosts);
+    // ⚔ ОСАДНЫЕ ПУЛЫ: армия, штурмующая город, исчезает из отрядов (живёт в city.siege) —
+    //    без этого башня «стреляла, но не наносила урон» в главном защитном сценарии.
+    if (typeof cities !== 'undefined') for (const c of cities) {
+      if (!c || !c.siege) continue;
+      for (const o in c.siege) { const ow = +o;
+        if (!hostile(ow) || !(c.siege[o].units > 0)) continue;
+        out.push({ x: c.gx, z: c.gz, y: gy(c.gx, c.gz) + 0.4, ref: { cityIdx: c.idx, owner: ow }, kind: 'siege' }); }
+    }
     if (guest) {
       for (const g of MP.ghosts.values()) {
         if ((g.count || 0) < 0.5 || !hostile(g.owner)) continue;
@@ -700,9 +748,10 @@
     for (const b of placedBuildings) {
       syncBuildingOwner(b);
       const it = b.item;
+      if (b.windmillFan) b.windmillFan.rotation.z = (b.windmillFan.rotation.z + dt * 0.85) % (Math.PI * 2);
       if (it.role === 'tower') updateTower(b, dt);
       else {
-        addResource(b.owner, 'gold', (it.goldRate || 0) * dt);
+        addResource(b.owner, 'gold', (it.goldRate || 0) * (it.role === 'farm' ? techVal(b.owner, 'farmIncome') : 1) * dt);
         addResource(b.owner, 'polit', (it.politRate || 0) * dt);
         addResource(b.owner, 'manpower', (it.manpowerRate || 0) * dt);
       }
@@ -740,7 +789,7 @@
     const show = on == null ? (panelEl.style.display === 'none') : on;
     panelEl.style.display = show ? 'block' : 'none';
     const sb = document.getElementById('sbBuild'); if (sb) sb.classList.toggle('active', show);
-    if (show) { ensureModels(); }
+    if (show) { ensureModels(); refreshTechLocks(); }
     else { selected = null; exitPlacing(); clearSel(); hideBuildTip(); }
   }
 

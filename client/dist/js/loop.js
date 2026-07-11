@@ -359,8 +359,12 @@ function loop(now){
     const nextProd=prodTier==null?(spec==='prod'?tier:0):prodTier;
     const nextDef=defTier==null?(spec==='def'?tier:0):defTier;
     const nextAtk=atkTier==null?(spec==='atk'?tier:0):atkTier;
-    const specChanged=c.spec!==spec||c.tier!==tier||c.prodTier!==nextProd||c.defTier!==nextDef||c.atkTier!==nextAtk;
-    c.owner=owner; c.units=units; c.spec=spec; c.tier=tier; c.prodTier=nextProd; c.defTier=nextDef; c.atkTier=nextAtk; c.occ=!!occ;
+    // ⚔ atk-прокачка НЕ меняет облик города: визуальная тема (spec) не переключается на 'atk',
+    //    визуальный тир считается только по prod/def (сим шлёт свой spec/tier — игнорируем atk-часть)
+    const specVis=spec==='atk'?c.spec:spec;
+    const visTier=Math.max(nextProd,nextDef);
+    const specChanged=c.spec!==specVis||c.tier!==visTier||c.prodTier!==nextProd||c.defTier!==nextDef;
+    c.owner=owner; c.units=units; c.spec=specVis; c.tier=visTier; c.prodTier=nextProd; c.defTier=nextDef; c.atkTier=nextAtk; c.occ=!!occ;
     c.occFrom = c.occ ? (occFrom!=null && occFrom!==255 ? occFrom : c.occFrom) : null;
     if(Array.isArray(queueList)){
       c.batches = queueList.slice(0,6).filter(q=>(q&&q[0]>0)).map(q=>({count:q[0],time:Math.max(0.1,(q[1]||10)/10),elapsed:Math.min(Math.max(0.1,(q[1]||10)/10),(q[2]||0)/10),type:q[3]||'inf'}));
