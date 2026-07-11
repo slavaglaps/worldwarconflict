@@ -907,6 +907,20 @@ function loop(now){
     //    (типы в колонне непрерывны: cav→inf→arc, тип ряда = тип его первого юнита).
     const CAV_ROW=1.85, CAV_LANE=2.0;
     const rowsN=Math.ceil(n/LANES), rowOff=ud._rowOff||(ud._rowOff=[]);
+    // 🚢 Единая временная волна для всей колонны. Снимок числа рядов и стартовое время
+    // фиксируются при смене режима, поэтому размер армии и движение по дороге не сбивают анимацию.
+    const seaMode=gh.mode===2;
+    if(ud._seaMode==null)ud._seaMode=false;
+    if(seaMode!==ud._seaMode){
+      ud._seaMode=seaMode;
+      ud._seaWaveT0=now;
+      ud._seaWaveRows=Math.max(1,rowsN);
+      ud._seaWaveKind=seaMode?'board':'land';
+    }
+    const seaWaveKind=ud._seaWaveKind||null;
+    const seaWaveBase=seaWaveKind==='board'?350:300;
+    const seaWaveP=seaWaveKind?Math.max(0,(now-(ud._seaWaveT0||now))/seaWaveBase):1;
+    if(seaWaveKind&&seaWaveP>=1&&seaWaveKind==='land')ud._seaWaveKind=null;
     { rowOff.length=rowsN; let accOff=0, prevCav=ud.bucketOf(0).t==='cav';
       rowOff[0]=0;
       for(let r=1;r<rowsN;r++){ const cav=ud.bucketOf(Math.min(n-1,r*LANES)).t==='cav';
@@ -931,16 +945,14 @@ function loop(now){
       if(gh._dying){ const over=s-(st.len-0.3); if(over>0)fadeK=Math.max(0,1-over/0.45); }  // у здания-цели тает
       if(gh._perish) fadeK*=Math.max(0,1-(now-gh._perish)/750);           // ⚔ погиб в бою → тает на месте
       const smp=rowData&&rowData.smp;
-      // 🚢 ПОСАДКА/ВЫСАДКА: ряд над открытой водой плавно «поднимается на борт» (тает+тонет, ~0.35с).
-      //    Ряды достигают воды по очереди → волна исчезновения идёт от ПЕРВОГО ряда к последним;
-      //    на высадке зеркально проявляются. Гейт по морскому режиму отряда — мосты не трогает.
-      if(gh.mode===2)ud._seaUntil=now+1500;
-      if(smp&&(gh.mode===2||now<(ud._seaUntil||0))&&typeof isWaterAt==='function'){
-        const wet=isWaterAt(smp.x,smp.z);
-        const bk=(typeof window!=='undefined'&&window.SEA_BOARD_K)||1, uk=(typeof window!=='undefined'&&window.SEA_UNBOARD_K)||1;   // 🎚 dbg-sea: живые множители
-        u.seaT=Math.max(0,Math.min(0.35,(u.seaT||0)+(wet?dt*3*bk:-dt*0.85*uk)));   // посадка быстрая (~0.12с), высадка неспешная (~0.4с)
-        if(u.seaT>0)fadeK*=1-u.seaT/0.35;
-      } else if(u.seaT)u.seaT=0;
+      // Первые 68% общего времени запускают ряды по очереди, последние 32% дают каждому ряду
+      // плавно исчезнуть. Вся посадка занимает 0.35 с, вся высадка — 0.30 с.
+      if(seaWaveKind){
+        const waveRows=Math.max(1,ud._seaWaveRows||rowsN), rowP=waveRows<=1?0:Math.min(1,row/(waveRows-1));
+        const localP=Math.max(0,Math.min(1,(seaWaveP-rowP*0.68)/0.32));
+        if(seaWaveKind==='board')fadeK*=1-localP;
+        else fadeK*=localP;
+      }
       if(!smp||(s<=0.001&&!st.prev)||fadeK<=0.02){                        // ещё в здании-источнике / уже втянулся / на борту
         ghostUnitDummy.position.set(0,-999,0); ghostUnitDummy.scale.set(0,0,0); ghostUnitDummy.updateMatrix();
         if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
