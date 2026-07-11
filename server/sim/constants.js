@@ -30,7 +30,7 @@ module.exports = {
   // 💣 бомбёжка городов авиацией (нужен tech planeBomb)
   PLANE_BOMB_DMG: 4, PLANE_BOMB_CD: 0.7, PLANE_BOMB_RANGE: 6,
   // ⚔ башни atk-городов (TOWER_* — точечная оборона; CITY_BOMBARD_RANGE — осадный обстрел вражеских городов, дотягивается до соседей: медиана дистанций ≈9)
-  TOWER_FIRE_CD: 3.3, TOWER_DMG_BASE: 1, TOWER_RANGE_BASE: 8, TOWER_RANGE_PER: 4, CITY_BOMBARD_RANGE: 13,
+  TOWER_FIRE_CD: 3.3, TOWER_DMG_BASE: 1, TOWER_RANGE_BASE: 5, TOWER_RANGE_PER: 2, CITY_BOMBARD_RANGE: 10,   // радиусы порезаны ~вдвое (были 8/4/13 — кольцо на t3 доставало на полкарты)
   // 🛡 ПВО городов
   AA_RANGE: 15, AA_CD: 0.9, AA_DMG: 3, AA_MAX: 8, AA_COST_BASE: 30, AA_COST_STEP: 10, AA_MP: 4,
   AA_INTERCEPT: 0.18,      // шанс ОДНОГО ствола сбить входящую бомбу/ракету (суммарно по числу зениток)

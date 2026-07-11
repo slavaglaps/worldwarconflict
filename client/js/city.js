@@ -105,8 +105,8 @@ class City{
   }
   branchTier(track){const v=this[track+'Tier'];return v==null?(this.spec===track?this.tier:0):v;}
   get totalTier(){return this.branchTier('prod')+this.branchTier('def')+this.branchTier('atk');}
-  get visualTier(){return Math.max(this.branchTier('prod'),this.branchTier('def'),this.branchTier('atk'));}
-  syncLegacyTier(track){this.spec=track;this.tier=this.visualTier;}
+  get visualTier(){return Math.max(this.branchTier('prod'),this.branchTier('def'));}   // ⚔ atk не меняет облик города
+  syncLegacyTier(track){if(track!=='atk')this.spec=track;this.tier=this.visualTier;}   // atk-прокачка не переключает визуальную тему
   get capacity(){let c=CITY_CAP_BASE+this.size*CITY_CAP_PER_SIZE;c*=1+CITY_DEF_CAP_PER_TIER*this.branchTier('prod');if(this.boosted)c*=CITY_BOOST_CAP;return c*techVal(this.owner,'cc');}
   get goldInterval(){let g=CITY_GOLD_INTERVAL;if(this.boosted)g*=CITY_BOOST_GOLD;return g/techMul(this.owner,'eco');}
   get goldRate(){return this.size/this.goldInterval;}
