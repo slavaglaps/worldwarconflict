@@ -100,7 +100,7 @@ class City{
     scene.add(this.bring);
     this.siegeOrbs={};  // ownerId → {mesh,lab} осаждающие армии (видимы как в бою)
     // dom label
-    this.lab=document.createElement('div'); this.lab.className='lab';
+    this.lab=document.createElement('div'); this.lab.className='lab cityLab';
     document.getElementById('labels').appendChild(this.lab);
   }
   branchTier(track){const v=this[track+'Tier'];return v==null?(this.spec===track?this.tier:0):v;}
@@ -412,14 +412,24 @@ class City{
   updateLabel(){
     const v=new T3.Vector3(this._visualGX==null?this.gx:this._visualGX,(this._visualY==null?this.baseY:this._visualY)+this.topY*CITY_SCALE+0.7,this._visualGZ==null?this.gz:this._visualGZ).project(camera);
     if(v.z>1){showLab(this.lab,false);return;}
+    const zoomR=typeof orbit!=='undefined'?orbit.r:100;
+    const isSelected=typeof selected!=='undefined'&&selected===this;
+    if(zoomR>360&&!this.capital&&!isSelected){showLab(this.lab,false);return;}
     showLab(this.lab,true);
+    const labelScale=zoomR<=120?1:zoomR<=210?.84:zoomR<=320?.68:.58;
+    this.lab.style.setProperty('--city-label-scale',labelScale);
+    this.lab.classList.toggle('cityLabFar',zoomR>210&&!isSelected);
     posLab(this.lab,(v.x*0.5+0.5)*innerWidth,(-v.y*0.5+0.5)*innerHeight);
-    const nm=`<span class="nm">${cityDisp(this.idx)}</span>`; // имя для ВСЕХ городов
+    const ownerCountry=(FACTIONS[this.owner]&&FACTIONS[this.owner].country)||this.country;
+    const cap=Math.round(this.capacity), units=Math.round(this.units);
+    const capacity=`<span class="cityCapacity"><span class="cityCapacityCurrent${this.units>this.capacity?' over':''}">${units}</span><span class="cityCapacityDivider">/</span><span>${cap}</span></span>`;
+    const head=`<span class="cityHead"><span class="cityFlag">${flagOf(ownerCountry)}</span><span class="nm">${cityDisp(this.idx)}</span>${capacity}</span>`;
     // 🌫 туман войны: город вне вижена → last-seen серым (или «?», если ни разу не видели);
     //    состав/очередь/осада скрыты — только застывшее число
     if(this._fog){
       const seen=this._seenUnits!=null?String(this._seenUnits):'?';
-      setLabHTML(this.lab,`<span class="fogSeen">${seen}</span>${nm}`);
+      const fogHead=`<span class="cityHead"><span class="cityFlag">${flagOf(ownerCountry)}</span><span class="nm">${cityDisp(this.idx)}</span><span class="cityCapacity"><span class="fogSeen">${seen}</span><span class="cityCapacityDivider">/</span><span>${cap}</span></span></span>`;
+      setLabHTML(this.lab,fogHead);
       setLabColor(this.lab,'#06121e');
       return;
     }
@@ -428,7 +438,7 @@ class City{
     const def=this.siege?'<span style="color:#ff6a4a">🛡</span>':'';
     const occm=this.occ?`<span style="color:#${(OWNER_COL[this.occFrom]||0).toString(16).padStart(6,'0')};text-shadow:0 0 2px #000">⚑</span>`:''; // занят (флаг де-юре владельца)
     // 👥 гарнизон по типам (⚔ пехота · 🏹 лучники · 🐎 конница); без comp — просто число
-    let garr=String(Math.round(this.units));
+    let garr='';
     const comp=this.comp||null;
     if(comp){ const parts=[];
       if(comp.inf>=0.5)parts.push('⚔'+Math.round(comp.inf));
@@ -436,7 +446,8 @@ class City{
       if(comp.cav>=0.5)parts.push('🐎'+Math.round(comp.cav));
       if(parts.length)garr=parts.join(' ');
     }
-    setLabHTML(this.lab,`${occm}${def}${garr}${q>0?`<span class="q">⏳${q}</span>`:''}${nm}`);
+    const status=`${occm}${def}${garr}${q>0?`<span class="q">⏳${q}</span>`:''}`;
+    setLabHTML(this.lab,`${head}<span class="cityStats"><span class="cityComposition">${status}</span></span>`);
     setLabColor(this.lab,'#06121e');
   }
   // осаждающие армии видны как сферы у города, дрожат и светятся красным (как полевой бой)

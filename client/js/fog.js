@@ -12,16 +12,40 @@
   const N = G * G;
   const LERP_T = 0.3;            // сек до полного проявления/затухания
   const CALC_EVERY = 0.4;        // период пересчёта целевой маски
-  let tex = null, cur = null, target = null, calcT = 0, started = false;
+  const BLUR_R = 2;              // радиус размытия маски (тайлы) — мягкая полутень на границе
+  const BLUR_PASSES = 2;         // 2 прохода box-blur ≈ гаусс — без «лесенки» по текселям
+  let tex = null, cur = null, target = null, raw = null, _tmpA = null, _tmpB = null, calcT = 0, started = false;
 
   function ensureTex() {
     if (tex) return;
     cur = new Float32Array(N);
-    target = new Uint8Array(N);
+    target = new Float32Array(N);    // размытая цель (0..1)
+    raw = new Uint8Array(N);         // бинарная маска из computeVision
+    _tmpA = new Float32Array(N); _tmpB = new Float32Array(N);
     tex = new T.DataTexture(new Uint8Array(N), G, G, T.LuminanceFormat !== undefined ? T.LuminanceFormat : T.RedFormat, T.UnsignedByteType);
     tex.magFilter = T.LinearFilter; tex.minFilter = T.LinearFilter;
     tex.wrapS = T.ClampToEdgeWrapping; tex.wrapT = T.ClampToEdgeWrapping;
     tex.needsUpdate = true;
+  }
+
+  // сепарабельный box-blur (окно 2R+1, скользящая сумма — O(N)); src/dst: Float32Array
+  function blurAxis(src, dst, horizontal) {
+    const R = BLUR_R, W = 2 * R + 1;
+    for (let a = 0; a < G; a++) {
+      let sum = 0;
+      const idx = (b) => horizontal ? (a * G + b) : (b * G + a);
+      for (let b = -R; b <= R; b++) sum += src[idx(Math.max(0, Math.min(G - 1, b)))];
+      for (let b = 0; b < G; b++) {
+        dst[idx(b)] = sum / W;
+        const add = Math.min(G - 1, b + R + 1), del = Math.max(0, b - R);
+        sum += src[idx(add)] - src[idx(del)];
+      }
+    }
+  }
+  function blurMask() {
+    for (let i = 0; i < N; i++) _tmpA[i] = raw[i];
+    for (let p = 0; p < BLUR_PASSES; p++) { blurAxis(_tmpA, _tmpB, true); blurAxis(_tmpB, _tmpA, false); }
+    target.set(_tmpA);
   }
 
   // sim-подобный шим над клиентским состоянием: города + собственные призраки.
@@ -52,7 +76,8 @@
     }
     if (typeof ships !== 'undefined') for (const s of ships) if (s && s.pos) shim.ships.push({ owner: s.owner, x: s.pos.x, z: s.pos.z });
     if (typeof planes !== 'undefined') for (const p of planes) if (p && p.pos) shim.planes.push({ owner: p.owner, x: p.pos.x, z: p.pos.z });
-    V.computeVision(shim, PLAYER, target);
+    V.computeVision(shim, PLAYER, raw);
+    blurMask();                                    // бинарная маска → мягкая полутень (без «лесенки»)
     return true;
   }
 
@@ -109,8 +134,14 @@
             vec4 ndc = vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
             vec4 wp = uInvPV * ndc; wp /= wp.w;                          // мировая позиция пикселя
             float v = texture2D(uFog, (vec2(wp.z, wp.x) + 0.5) / ${G.toFixed(1)}).r;   // маска x-major → (v=x,u=z)
-            v = smoothstep(0.10, 0.90, v);
-            // 🌫 «клубление»: медленный шум приглушает туман неравномерно (только в тёмной зоне)
+            // 🌫 органический край: порог гуляет по шуму → граница не ровная изолиния, а облачная
+            float n1 = vnoise(wp.xz * 0.30 + vec2(uTime * 0.020, -uTime * 0.015));
+            v = smoothstep(0.30, 0.70, v + (n1 - 0.5) * 0.18);
+            // клочья на границе: медленный крупный шум тянет «языки» тумана вдоль края
+            float edge = v * (1.0 - v) * 4.0;                            // 1 в центре перехода, 0 вдали
+            float n2 = vnoise(wp.xz * 0.09 - vec2(uTime * 0.030, uTime * 0.022));
+            v = clamp(v + edge * (n2 - 0.5) * 0.28, 0.0, 1.0);
+            // «клубление» внутри тьмы: медленный шум приглушает туман неравномерно
             float n = vnoise(wp.xz * 0.14 + vec2(uTime * 0.05, uTime * 0.037)) * 0.5
                     + vnoise(wp.xz * 0.05 - vec2(uTime * 0.021, uTime * 0.03));
             float dim = 0.50 + 0.08 * (n - 0.75);                        // база ~50% ±небольшая рябь
