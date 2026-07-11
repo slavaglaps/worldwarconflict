@@ -88,6 +88,9 @@ function computeVision(sim, fid, out) {
   for (const s of sim.squads) if (friendly[s.owner]) stampDisc(mask, GRID, s.x, s.z, rSquad);
   for (const s of sim.ships) if (friendly[s.owner]) stampDisc(mask, GRID, s.x, s.z, rShip);
   for (const p of sim.planes) if (friendly[p.owner]) stampDisc(mask, GRID, p.x, p.z, rPlane);
+  // 🗼 сторожевые вышки/башни (опционально: массив {owner,x,z} кладётся снаружи —
+  //    в соло/на клиенте из MAP_BUILDINGS; серверный сим построек пока не знает)
+  if (sim.towers) for (const t of sim.towers) if (friendly[t.owner]) stampDisc(mask, GRID, t.x, t.z, K.VISION_TOWER);
   // 3) свои осадные пулы: отряд при осаде исчезает из squads и живёт в city.siege —
   //    осаждающий продолжает видеть город и округу (иначе вижен гаснет в момент боя)
   for (const c of cities) {

@@ -9,6 +9,13 @@ var _SOLO_SPEC2ID = { prod: 1, def: 2, atk: 3 };   // = server SPEC_ID (SPEC2ID 
 function projectLocalSim(sim, onMsg) {
   // 🌫 туман войны в соло: та же математика видимости, что на сервере (sim/vision.js)
   const _V = (window.__WWCSim && window.__WWCSim.vision) || null;
+  // 🗼 башни из меню строительства дают обзор: постройки живут на клиенте — кладём их в sim.towers
+  if (_V) {
+    sim.towers = sim.towers || [];
+    sim.towers.length = 0;
+    if (window.MAP_BUILDINGS) for (const b of window.MAP_BUILDINGS)
+      if (b && b.item && b.item.role === 'tower') sim.towers.push({ owner: b.owner, x: b.gx, z: b.gz });
+  }
   const _mask = _V ? _V.visionMask(sim, PLAYER) : null;
   const _G = sim.K.GRID;
   const inVision = (x, z) => { if (!_mask) return true; const cx = Math.round(x), cz = Math.round(z);

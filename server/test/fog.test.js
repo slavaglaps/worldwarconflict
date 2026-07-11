@@ -66,6 +66,20 @@ test('осадный пул даёт вижен (отряд при осаде и
   eq(at(m, far.gx, far.gz), 1, 'осаждаемый город виден осаждающему');
 });
 
+test('🗼 башня (sim.towers) даёт обзор радиусом VISION_TOWER', () => {
+  const c0 = capOf(0);
+  let far = null, fd = -1;
+  for (const c of s.cities) { const dd = (c.gx - c0.gx) ** 2 + (c.gz - c0.gz) ** 2; if (c.owner !== 0 && dd > fd) { fd = dd; far = c; } }
+  s.towers = [{ owner: 0, x: far.gx, z: far.gz }];
+  const m = computeVision(s, 0);
+  s.towers = null;
+  eq(at(m, far.gx, far.gz), 1, 'вокруг башни видно');
+  const r = s.K.VISION_TOWER;
+  const dx = far.gx > GRID / 2 ? -(r + 2) : (r + 2);
+  const dz = far.gz > GRID / 2 ? -(r + 2) : (r + 2);
+  eq(at(m, far.gx + dx, far.gz + dz), 0, 'за радиусом башни — туман');
+});
+
 test('союзник делится виженом', () => {
   const cap1 = capOf(1);
   const before = computeVision(s, 0);

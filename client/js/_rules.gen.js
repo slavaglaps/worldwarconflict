@@ -14,6 +14,7 @@ var MAX_PLANES = 60;
 var VISION_SQUAD = 6;
 var VISION_SHIP = 8;
 var VISION_PLANE = 12;
+var VISION_TOWER = 9;
 var VISION_REFRESH = 0.4;
 var MP_BASE = 20;
 var MP_PER_SIZE = 12;

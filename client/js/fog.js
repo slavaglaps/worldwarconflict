@@ -50,7 +50,7 @@
 
   // sim-подобный шим над клиентским состоянием: города + собственные призраки.
   const shim = {
-    K: null, time: 0, factions: 0, cities: null, squads: [], ships: [], planes: [],
+    K: null, time: 0, factions: 0, cities: null, squads: [], ships: [], planes: [], towers: [],
     allied(a, b) { const k = a < b ? a + '_' + b : b + '_' + a; return (typeof relations !== 'undefined' && relations[k] === 'ally'); },
   };
   function computeTarget() {
@@ -61,10 +61,14 @@
       VISION_SQUAD: typeof VISION_SQUAD !== 'undefined' ? VISION_SQUAD : 6,
       VISION_SHIP: typeof VISION_SHIP !== 'undefined' ? VISION_SHIP : 8,
       VISION_PLANE: typeof VISION_PLANE !== 'undefined' ? VISION_PLANE : 12,
+      VISION_TOWER: typeof VISION_TOWER !== 'undefined' ? VISION_TOWER : 9,
     };
     shim.factions = (typeof FACTIONS !== 'undefined') ? FACTIONS.length : 32;
     shim.cities = cities;
-    shim.squads.length = 0; shim.ships.length = 0; shim.planes.length = 0;
+    shim.squads.length = 0; shim.ships.length = 0; shim.planes.length = 0; shim.towers.length = 0;
+    // 🗼 башни из меню строительства — «глаза» на границе
+    if (window.MAP_BUILDINGS) for (const b of window.MAP_BUILDINGS)
+      if (b && b.item && b.item.role === 'tower') shim.towers.push({ owner: b.owner, x: b.gx, z: b.gz });
     if (typeof MP !== 'undefined' && MP.ghosts) {
       for (const gh of MP.ghosts.values()) {
         if (!gh || gh.owner == null || !gh.group) continue;
