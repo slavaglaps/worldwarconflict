@@ -160,6 +160,7 @@ Object.assign(I18N.ru, {
   'hud.no_space_near':'✈ Нет свободного места рядом',
   'hud.build_airship':'✈ Построить дирижабль',
   'hud.build_ship':'⚓ Построить корабль',
+  'hud.minimap_title':'Европа',
   'hud.yard_ship':'Верфь {city}',
   'hud.yard_air':'Аэропорт {city}',
   'hud.ship_built':'⚓ Построена «{name}»',

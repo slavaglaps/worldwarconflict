@@ -20,9 +20,14 @@
     if (!document.body) return false;
     box = document.createElement('div');
     box.id = 'minimap';
+    const head = document.createElement('div'); head.className = 'mmHead';
+    head.innerHTML = '<span class="mmLine"></span><span class="mmTitle">' + ((typeof t === 'function') ? t('hud.minimap_title') : 'Europe') + '</span><span class="mmLine"></span>';
+    const view = document.createElement('div'); view.className = 'mmView';
     cvBase = document.createElement('canvas'); cvBase.width = G; cvBase.height = G;
     cvTop = document.createElement('canvas'); cvTop.width = G; cvTop.height = G;
-    box.appendChild(cvBase); box.appendChild(cvTop);
+    const vig = document.createElement('div'); vig.className = 'mmVig';
+    view.appendChild(cvBase); view.appendChild(cvTop); view.appendChild(vig);
+    box.appendChild(head); box.appendChild(view);
     document.body.appendChild(box);
     ctxB = cvBase.getContext('2d'); ctxT = cvTop.getContext('2d');
     img = ctxB.createImageData(G, G);
@@ -37,7 +42,7 @@
         applyCam();
       }
     };
-    box.addEventListener('pointerdown', (e) => { drag = true; move(e); e.preventDefault(); });
+    view.addEventListener('pointerdown', (e) => { drag = true; move(e); e.preventDefault(); });
     addEventListener('pointermove', (e) => { if (drag) move(e); });
     addEventListener('pointerup', () => { drag = false; });
     return true;
@@ -118,7 +123,7 @@
     }
     // рамка вьюпорта: лучи из углов экрана на плоскость y=0
     if (_rc && typeof camera !== 'undefined') {
-      ctxT.strokeStyle = 'rgba(255,255,255,.75)'; ctxT.lineWidth = 1;
+      ctxT.strokeStyle = 'rgba(232,206,138,.9)'; ctxT.lineWidth = 1.2;   // золото в тон уголков панелей
       ctxT.beginPath();
       let started = false;
       for (const [nx, ny] of _corners) {

@@ -273,7 +273,7 @@ function loop(now){
 
   /* ── UI: статус-плашка + баннер ожидания ── */
   const pill=document.createElement('div');
-  pill.style.cssText='position:fixed;bottom:12px;right:204px;z-index:30;background:rgba(8,16,26,.85);color:#cfe0f0;'+   /* 🗺 сдвиг влево от миникарты */
+  pill.style.cssText='position:fixed;bottom:12px;right:216px;z-index:30;background:rgba(8,16,26,.85);color:#cfe0f0;'+   /* 🗺 сдвиг влево от миникарты */
     'font-size:12px;font-weight:700;padding:8px 12px;border-radius:9px;user-select:none;border:1px solid rgba(120,150,180,.22);';
   pill.textContent=t('toast.mpConnecting'); document.body.appendChild(pill);
   const waitBanner=document.createElement('div');
