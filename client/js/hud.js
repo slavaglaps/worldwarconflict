@@ -191,10 +191,10 @@ function buildPanelRows(){
     const btns=card.querySelector('.unitBtns');
     for(const spec of ['5','20']){
       const b=document.createElement('button'); b.type='button'; b.className='unitBuy'; b.dataset.unit=u.id; b.dataset.spec=spec; b.innerHTML=unitBuyHtml(spec);
-      b.addEventListener('click',ev=>{ev.stopPropagation(); if(!b.classList.contains('dis')&&!unitTypeLocked(u.id)&&panelCity){hireType=u.id;buySoldiers(panelCity,spec,u.id);updatePanel();}});
+      b.addEventListener('click',ev=>{ev.stopPropagation(); if(!b.classList.contains('dis')&&!unitTypeLocked(u.id)&&panelCity&&!panelCity.occ){hireType=u.id;buySoldiers(panelCity,spec,u.id);updatePanel();}});
       btns.appendChild(b); buyRows[u.id+'_'+spec]=b;
     }
-    card.addEventListener('click',()=>{ if(unitTypeLocked(u.id))return; hireType=u.id;updateHireTypeBtns();});
+    card.addEventListener('click',()=>{ if((panelCity&&panelCity.occ)||unitTypeLocked(u.id))return; hireType=u.id;updateHireTypeBtns();});
     rg.appendChild(card); hireTypeBtns[u.id]=card;
   }
   { const card=document.createElement('div'); card.className='unitCard locked';
@@ -220,15 +220,17 @@ const UNIT_TECH_FLAG={arc:'archers',cav:'cavalry'};   // 🔓 лучники/к�
 function unitTypeLocked(id){ const f=UNIT_TECH_FLAG[id]; return !!(f&&typeof techFlag==='function'&&!techFlag(PLAYER,f)); }
 function updateHireTypeBtns(){
   if(!hireTypeBtns)return;
-  for(const tp in hireTypeBtns){ const card=hireTypeBtns[tp], lk=unitTypeLocked(tp);
-    card.classList.toggle('locked',lk);
-    card.classList.toggle('sel',tp===hireType&&!lk);
+  const occ=!!(panelCity&&panelCity.occ);
+  for(const tp in hireTypeBtns){ const card=hireTypeBtns[tp], lk=unitTypeLocked(tp), blocked=lk||occ;
+    card.classList.toggle('locked',blocked);
+    card.classList.toggle('occLocked',occ);
+    card.classList.toggle('sel',tp===hireType&&!blocked);
     let badge=card.querySelector('.unitLock');
-    if(lk&&!badge){ badge=document.createElement('div'); badge.className='unitLock'; badge.textContent='Tech'; card.appendChild(badge); }
-    else if(!lk&&badge) badge.remove();
-    card.querySelectorAll('.unitBuy').forEach(b=>b.classList.toggle('dis',lk||b.classList.contains('disCost')));
+    if(lk&&!occ&&!badge){ badge=document.createElement('div'); badge.className='unitLock'; badge.textContent='Tech'; card.appendChild(badge); }
+    else if((!lk||occ)&&badge) badge.remove();
+    card.querySelectorAll('.unitBuy').forEach(b=>b.classList.toggle('dis',blocked||b.classList.contains('disCost')));
   }
-  if(unitTypeLocked(hireType))hireType='inf';   // выбранный тип закрылся → откат на пехоту
+  if(occ||unitTypeLocked(hireType))hireType='inf';   // выбранный тип закрылся → откат на пехоту
 }
 function updateCityPanelHeader(c){
   document.getElementById('pName').textContent=cityDisp(c.idx);
@@ -303,7 +305,7 @@ function updatePanel(){
       qt.textContent=t('hud.queue_wait',{n:Q,sec:Math.ceil(qs.sec)});}
     else{fill.style.width='0';qt.textContent=t('hud.queue_empty');}
     const unlocked=techFlag(PLAYER,air?'planes':'ships');
-    if(shipBuildRow){const ok=!occ&&unlocked&&(c.batches||[]).length<6&&gold[PLAYER]>=COST&&(manpower[PLAYER]||0)>=MPC;shipBuildRow.classList.toggle('dis',!ok);
+    if(shipBuildRow){const ok=!occ&&unlocked&&(c.batches||[]).length<6&&gold[PLAYER]>=COST&&(manpower[PLAYER]||0)>=MPC;shipBuildRow.classList.toggle('dis',!ok);shipBuildRow.classList.toggle('locked',occ);
       shipBuildRow.querySelector('.unitBuy')?.classList.toggle('dis',!ok);
       shipBuildRow.querySelector('small').textContent=Q?t('hud.queue_wait',{n:Q,sec:Math.ceil(qs.sec)}):occ?t('hud.small_occ'):!unlocked?t('hud.small_research'):(c.batches||[]).length>=6?t('hud.queue_full'):(manpower[PLAYER]||0)<MPC?t('hud.small_mp_low',{n:MPC}):t('hud.small_cost_mp',{cost:COST,mp:MPC});}
     if(occ)document.getElementById('info').textContent=air
@@ -355,6 +357,7 @@ function updatePanel(){
     const enabled=!occ&&shipyardSeen&&tech&&(c.batches||[]).length<6&&gold[PLAYER]>=SHIP_COST&&(manpower[PLAYER]||0)>=SHIP_MP;
     shipBuildRow.style.display=shipyardSeen?'':'none';
     shipBuildRow.classList.toggle('dis',!enabled);
+    shipBuildRow.classList.toggle('locked',occ);
     shipBuildRow.querySelector('.unitBuy')?.classList.toggle('dis',!enabled);
     shipBuildRow.querySelector('small').textContent=q.n?t('hud.queue_wait',{n:q.n,sec:Math.ceil(q.sec)}):occ?t('hud.small_occ'):!shipyardSeen?t('hud.small_no_shipyard'):!tech?t('hud.small_research'):(c.batches||[]).length>=6?t('hud.queue_full'):(manpower[PLAYER]||0)<SHIP_MP?t('hud.small_mp_low',{n:SHIP_MP}):t('hud.small_cost_mp',{cost:SHIP_COST,mp:SHIP_MP});
   }
@@ -364,6 +367,7 @@ function updatePanel(){
     const enabled=!occ&&airportSeen&&tech&&(c.batches||[]).length<6&&gold[PLAYER]>=PLANE_COST&&(manpower[PLAYER]||0)>=PLANE_MP;
     planeBuildRow.style.display=airportSeen?'':'none';
     planeBuildRow.classList.toggle('dis',!enabled);
+    planeBuildRow.classList.toggle('locked',occ);
     planeBuildRow.querySelector('.unitBuy')?.classList.toggle('dis',!enabled);
     planeBuildRow.querySelector('small').textContent=q.n?t('hud.queue_wait',{n:q.n,sec:Math.ceil(q.sec)}):occ?t('hud.small_occ'):!airportSeen?t('hud.small_no_airport'):!tech?t('hud.small_research'):(c.batches||[]).length>=6?t('hud.queue_full'):(manpower[PLAYER]||0)<PLANE_MP?t('hud.small_mp_low',{n:PLANE_MP}):t('hud.small_cost_mp',{cost:PLANE_COST,mp:PLANE_MP});
   }

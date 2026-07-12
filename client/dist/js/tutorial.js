@@ -286,6 +286,13 @@
       const rows = document.querySelectorAll('#heroList .hpick'); return rows[i] ? rows[i].querySelector('.summon') : null; } catch (e) { return null; }
   };
   const yardCityIdx = (air) => { const s = sim(); if (!s) return -1; const c = s.cities.find(x => x.owner === PLAYER && (air ? (x.hasAirport || x.isAirport) : (x.hasShipyard || x.isShipyard))); return c ? c.idx : -1; };
+  const unitNearCity = (kind, cityIdx, radius) => {
+    const s = sim(), c = simCity(cityIdx);
+    if (!s || !c) return false;
+    const list = kind === 'plane' ? s.planes : s.ships;
+    const r2 = radius * radius;
+    return (list || []).some(u => u && u.owner === PLAYER && u.hp > 0 && ((u.x - c.gx) ** 2 + (u.z - c.gz) ** 2) <= r2);
+  };
   // закрыть меню строительства (если открыто) — при переоткрытии оно обновит tech-локи плиток
   const closeBuild = () => { try { if (buildWin()) document.getElementById('sbBuild').click(); } catch (e) {} };
 
@@ -435,7 +442,7 @@
     // корабль → Генуя: игрок выделяет корабль и тащит его к вражескому приморскому городу (обстрел авто, нужен tech shipMissile — предвыдан i6)
     { t: 'sShipt', x: 'sShip', lock: 'none', spot: () => cityRect(CITY_GENOA),
       allow: (o) => o.cmd === 'shipmove',
-      done() { return !!(lastCmd && lastCmd.cmd === 'shipmove'); } },
+      done() { return unitNearCity('ship', CITY_GENOA, 7); } },
 
     /* ── Часть 7: авиация ── */
     { t: 's30t', x: 's30', lock: 'hard',
@@ -455,7 +462,7 @@
     // дирижабль → Цюрих: игрок выделяет дирижабль и тащит его к чужому городу (разведка/раскрытие территории)
     { t: 'sAirt', x: 'sAir', lock: 'none', spot: () => cityRect(CITY_ZURICH),
       allow: (o) => o.cmd === 'planemove',
-      done() { return !!(lastCmd && lastCmd.cmd === 'planemove'); } },
+      done() { return unitNearCity('plane', CITY_ZURICH, 6); } },
 
     /* ── Часть 5: мир — оккупацию Турина закрепляем аннексией ── */
     { t: 's22t', x: 's22', lock: 'hard', spot: () => elRect(document.getElementById('sbPol')),
