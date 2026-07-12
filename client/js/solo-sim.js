@@ -87,24 +87,33 @@ function syncLocalHeroes(sim) {
   if (sim.heroMaxSlots != null) HERO_SLOTS_MAX = sim.heroMaxSlots;
   const src = sim.heroSlots[PLAYER] || [];
   const buffSrc = sim.heroBuffs || [];
-  const sig = JSON.stringify({
-    p: PLAYER,
-    slots: src.map(h => [h.id, h.cd || []]),
-    buffs: buffSrc.filter(b => b.fid === PLAYER).map(b => [b.key, b.add, Math.max(0, (b.until || 0) - sim.time)]),
-  });
   heroBuffs = buffSrc.map(b => ({ fid: b.fid, key: b.key, add: b.add, until: gameTime + Math.max(0, (b.until || 0) - sim.time) }));
-  if (sig === _lsHeroSig) return;
-  _lsHeroSig = sig;
-  heroSlots[PLAYER] = src.map(h => {
-    const d = heroDef(h.id);
-    const actives = d ? d.abilities.filter(a => a.kind === 'active') : [];
-    const cd = Array.isArray(h.cd) ? h.cd.slice() : actives.map(() => 0);
-    while (cd.length < actives.length) cd.push(0);
-    return { id: h.id, cd };
-  });
-  if (typeof buildHeroBar === 'function') buildHeroBar();
-  const hw = document.getElementById('heroWin');
-  if (typeof buildHeroPick === 'function' && hw && hw.style.display === 'flex') buildHeroPick();
+  // СТРУКТУРНАЯ сигнатура: ТОЛЬКО состав слотов (id героев), БЕЗ cd/buffs. Раньше в сигнатуру входили cd —
+  //   а они убывают каждый тик, поэтому buildHeroBar() пересобирал весь DOM панели ~60 раз/сек, пока хоть один
+  //   скилл на кулдауне, и клики по другим способностям терялись (элемент пересоздавался под курсором).
+  //   Пересобираем DOM только при смене состава героев; значения cd льём ин-плейс (отсчёт рисует refreshHeroBar).
+  const structSig = JSON.stringify({ p: PLAYER, ids: src.map(h => h.id) });
+  if (structSig !== _lsHeroSig) {
+    _lsHeroSig = structSig;
+    heroSlots[PLAYER] = src.map(h => {
+      const d = heroDef(h.id);
+      const actives = d ? d.abilities.filter(a => a.kind === 'active') : [];
+      const cd = Array.isArray(h.cd) ? h.cd.slice() : actives.map(() => 0);
+      while (cd.length < actives.length) cd.push(0);
+      return { id: h.id, cd };
+    });
+    if (typeof buildHeroBar === 'function') buildHeroBar();
+    const hw = document.getElementById('heroWin');
+    if (typeof buildHeroPick === 'function' && hw && hw.style.display === 'flex') buildHeroPick();
+  } else {
+    // состав тот же → обновляем ТОЛЬКО значения cd на СТАБИЛЬНЫХ объектах (их _abEls живут → refreshHeroBar
+    //   рисует отсчёт без пересборки; кнопки не пересоздаются → клики по не-остывшим способностям проходят).
+    const dst = heroSlots[PLAYER];
+    if (Array.isArray(dst)) for (let i = 0; i < src.length && i < dst.length; i++) {
+      const sc = src[i] && src[i].cd, dc = dst[i] && dst[i].cd;
+      if (Array.isArray(sc) && Array.isArray(dc)) for (let k = 0; k < sc.length && k < dc.length; k++) dc[k] = sc[k];
+    }
+  }
 }
 
 // Экономика/техи/герои соло: напрямую из sim в клиентские массивы (без приватности — это игра игрока).
