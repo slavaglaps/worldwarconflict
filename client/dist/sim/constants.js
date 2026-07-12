@@ -47,14 +47,14 @@ module.exports = {
   OVERCAP_DRAIN_SEC: 5, OVERCAP_DRAIN_N: 1,
   CITY_GOLD_INTERVAL: 4, CITY_GOLD_YIELD: 1, CITY_CAPITAL_GOLD: 1.5, CITY_TRAIN_BASE: 0.5, CITY_TRAIN_PER_SIZE: 0.07,
   // спец/тир коэффициенты: +cap/def/atk за тир у соответствующего спеца; prod-город — pow(GOLD_DECAY,tier) к интервалу
-  CITY_DEF_CAP_PER_TIER: 0.22, CITY_DEF_MULT_PER_TIER: 0.32, CITY_ATK_MULT_PER_TIER: 0.28, CITY_PROD_GOLD_DECAY: 0.68,
+  CITY_DEF_CAP_PER_TIER: 0.22, CITY_DEF_MULT_PER_TIER: 0.40, CITY_ATK_MULT_PER_TIER: 0.28, CITY_PROD_GOLD_DECAY: 0.68,
   // буст «контроля страны» (вся страна у одной фракции): ×cap, ×gold-интервал, ×train
   CITY_BOOST_CAP: 1.25, CITY_BOOST_GOLD: 0.75, CITY_BOOST_TRAIN: 0.8,
   OCCUPY_INCOME: 1.0,      // множитель золотого дохода оккупированного города (1 = без штрафа)
 
-  // бой. SIEGE_ATK↓/SIEGE_DEF↑ (было 0.30/0.30): осада медленнее и дороже для атакующего —
-  //   2:1 берётся за ~4с ценой ~40% потерь (было 1.9с/15%), 1.5:1 не проходит, 1:1 держит защитник.
-  FIGHT_RATE: 0.30, SIEGE_ATK: 0.16, SIEGE_DEF: 0.38,
+  // бой. Порог захвата = √(SIEGE_DEF·defMult / SIEGE_ATK) по закону Ланчестера; defMult=1+CITY_DEF_MULT_PER_TIER·tier.
+  //   При 0.25/0.36 и CITY_DEF_MULT_PER_TIER=0.40 нужный перевес атакующих: tier0 ×1.2, tier1 ×1.42, tier2 ×1.61, tier3 ×1.78.
+  FIGHT_RATE: 0.30, SIEGE_ATK: 0.25, SIEGE_DEF: 0.36,
   SQUAD_SPEED: 0.8,
   // 🌊 морской переход отряда: у берега 2.5с «каст» корабля, затем плывём (быстрее пехоты), у суши — высадка.
   //   Участок пути считается морским АВТОМАТИЧЕСКИ по водному гриду (water.js isWaterAt), разметка не нужна.

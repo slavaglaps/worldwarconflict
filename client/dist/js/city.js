@@ -109,7 +109,7 @@ class City{
   syncLegacyTier(track){if(track!=='atk')this.spec=track;this.tier=this.visualTier;}   // atk-прокачка не переключает визуальную тему
   get capacity(){let c=CITY_CAP_BASE+this.size*CITY_CAP_PER_SIZE;c*=1+CITY_DEF_CAP_PER_TIER*this.branchTier('prod');if(this.boosted)c*=CITY_BOOST_CAP;return c*techVal(this.owner,'cc');}
   get goldInterval(){let g=CITY_GOLD_INTERVAL;if(this.boosted)g*=CITY_BOOST_GOLD;return g/techMul(this.owner,'eco');}
-  get goldRate(){return this.size/this.goldInterval;}
+  get goldRate(){return this.size*CITY_GOLD_YIELD*(this.capital?CITY_CAPITAL_GOLD:1)*(this.occ?OCCUPY_INCOME:1)/this.goldInterval;}
   get defMult(){return (1+CITY_DEF_MULT_PER_TIER*this.branchTier('def'))*techMul(this.owner,'def');}
   get atkMult(){return (1+CITY_ATK_MULT_PER_TIER*this.branchTier('atk'))*techMul(this.owner,'atk');}
   get speedMult(){return (1+.18*this.branchTier('atk'))*techMul(this.owner,'speed');}
@@ -386,7 +386,7 @@ class City{
     // все фракции производят голду и солдат (×size×YIELD; оккупированный город — ×OCCUPY_INCOME) — формула как на сервере
     let income=0;
     this.goldTimer+=dt;
-    while(this.goldTimer>=this.goldInterval){this.goldTimer-=this.goldInterval;income+=this.size*CITY_GOLD_YIELD;}
+    while(this.goldTimer>=this.goldInterval){this.goldTimer-=this.goldInterval;income+=this.size*CITY_GOLD_YIELD*(this.capital?CITY_CAPITAL_GOLD:1);}
     if(this.occ)income*=OCCUPY_INCOME;
     gold[this.owner]+=income;
     if(this.batches.length){

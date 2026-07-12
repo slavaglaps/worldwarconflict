@@ -118,6 +118,7 @@
 
   /* ── оверлей: 4 щита (затемнение+блок кликов) + кольцо + коуч-карточка ── */
   const Z = 99990;
+  const MENTOR_AVATAR = 'assets/tutorial/mentor-avatar.png';
   let shields = [], ring = null, coach = null, coachTitle = null, coachText = null, coachMeta = null, coachBtn = null, styleEl = null;
   function buildUI() {
     styleEl = document.createElement('style');
@@ -127,28 +128,48 @@
       .tutRing{position:fixed;z-index:${Z + 1};pointer-events:none;border:3px solid #ffd23f;border-radius:14px;
         box-shadow:0 0 0 4px rgba(255,210,63,.25),0 0 26px rgba(255,210,63,.55);animation:tutPulse 1.4s ease-in-out infinite}
       @keyframes tutPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.045);opacity:.75}}
-      .tutCoach{position:fixed;left:50%;transform:translateX(-50%);top:78px;z-index:${Z + 2};max-width:480px;min-width:320px;
-        background:rgba(8,16,26,.94);border:1px solid rgba(255,210,63,.4);border-radius:14px;padding:14px 18px 12px;
-        color:#e8f0fa;font-family:inherit;box-shadow:0 10px 34px rgba(0,0,0,.55)}
+      .tutCoach{position:fixed;left:50%;transform:translateX(-50%);top:72px;z-index:${Z + 2};width:min(680px,calc(100vw - 28px));
+        min-height:134px;background:linear-gradient(180deg,rgba(11,18,22,.97),rgba(7,12,16,.96));
+        border:1px solid rgba(196,166,90,.72);border-radius:22px 22px 8px 22px;padding:12px 18px 12px 12px;
+        color:#e8f0fa;font-family:inherit;box-shadow:0 16px 42px rgba(0,0,0,.58),inset 0 0 0 1px rgba(255,255,255,.035);
+        display:grid;grid-template-columns:92px 1fr;gap:14px;align-items:center;overflow:hidden}
+      .tutCoach:before{content:'';position:absolute;inset:6px;border:1px solid rgba(197,171,104,.22);border-radius:17px 17px 5px 17px;pointer-events:none}
+      .tutCoach:after{content:'';position:absolute;left:124px;right:24px;top:21px;height:1px;background:linear-gradient(90deg,rgba(202,168,94,.7),transparent);opacity:.65;pointer-events:none}
       .tutCoach.bottom{top:auto;bottom:96px}
-      .tutCoach.danger{border-color:rgba(255,90,70,.65);box-shadow:0 0 34px rgba(255,60,40,.35)}
-      .tutCoach .tt{font-size:16px;font-weight:900;color:#ffd23f;margin-bottom:5px}
+      .tutCoach.danger{border-color:rgba(255,90,70,.7);box-shadow:0 0 34px rgba(255,60,40,.35),0 16px 42px rgba(0,0,0,.58)}
+      .tutPortrait{position:relative;z-index:1;width:88px;height:88px;border-radius:16px;align-self:start;margin-top:2px;
+        background:#101817 url("${MENTOR_AVATAR}") center/cover no-repeat;border:1px solid rgba(214,181,101,.8);
+        box-shadow:0 9px 22px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.035)}
+      .tutPortrait:after{content:'';position:absolute;inset:5px;border:1px solid rgba(238,207,142,.24);border-radius:11px;pointer-events:none}
+      .tutBody{position:relative;z-index:1;min-width:0}
+      .tutCoach .tt{font-family:'KnightsQuest',Georgia,serif;font-size:27px;line-height:1;font-weight:600;letter-spacing:.35px;
+        color:#f0c46a;margin:0 0 10px;text-shadow:0 3px 14px rgba(0,0,0,.78)}
       .tutCoach.danger .tt{color:#ff7a6a}
-      .tutCoach .tx{font-size:13.5px;line-height:1.45;color:#cfe0f0}
-      .tutCoach .meta{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px}
-      .tutCoach .stepn{font-size:11px;color:#8fa4bd;font-weight:700}
-      .tutCoach .tskip{background:none;border:1px solid rgba(140,165,195,.35);color:#9db4cc;border-radius:8px;
-        padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer}
-      .tutCoach .tskip:hover{color:#e8f0fa;border-color:#e8f0fa}
-      .tutCoach .tgo{display:none;margin-top:10px;width:100%;background:linear-gradient(180deg,#ffd23f,#d8a41f);
-        border:none;border-radius:10px;padding:10px;font-size:15px;font-weight:900;color:#3a2c05;cursor:pointer}
-      .tutCoach .tgo:hover{filter:brightness(1.08)}`;
+      .tutCoach .tx{font-size:17px;line-height:1.38;color:#d7e3ed;font-weight:650;text-shadow:0 2px 10px rgba(0,0,0,.68)}
+      .tutCoach .meta{display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:12px}
+      .tutCoach .stepn{font-family:'KnightsQuest',Georgia,serif;font-size:15px;letter-spacing:.25px;color:#b9ad92;font-weight:700}
+      .tutCoach .tskip{background:rgba(16,26,33,.72);border:1px solid rgba(172,153,117,.55);color:#d8d0bd;border-radius:12px;
+        padding:8px 15px;font-family:'KnightsQuest',Georgia,serif;font-size:15px;font-weight:700;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035)}
+      .tutCoach .tskip:hover{color:#fff0ca;border-color:#d9b76d;background:rgba(42,31,16,.78)}
+      .tutCoach .tgo{display:none;margin-top:12px;width:100%;background:linear-gradient(180deg,#d7a94a,#7b5721);
+        border:1px solid rgba(238,204,130,.85);border-radius:12px;padding:11px;font-family:'KnightsQuest',Georgia,serif;
+        font-size:20px;font-weight:700;color:#160f06;cursor:pointer;text-shadow:0 1px 0 rgba(255,255,255,.25)}
+      .tutCoach .tgo:hover{filter:brightness(1.08)}
+      @media (max-width:560px){
+        .tutCoach{grid-template-columns:62px 1fr;gap:10px;min-height:112px;padding:10px 12px 10px 10px;border-radius:17px 17px 7px 17px}
+        .tutCoach:after{left:88px;right:16px;top:17px}
+        .tutPortrait{width:58px;height:58px;border-radius:12px}
+        .tutCoach .tt{font-size:22px;margin-bottom:7px}
+        .tutCoach .tx{font-size:14.5px}
+        .tutCoach .meta{margin-top:11px}
+        .tutCoach .stepn,.tutCoach .tskip{font-size:13px}
+      }`;
     document.head.appendChild(styleEl);
     for (let i = 0; i < 4; i++) { const d = document.createElement('div'); d.className = 'tutShield'; d.style.display = 'none'; document.body.appendChild(d); shields.push(d); }
     ring = document.createElement('div'); ring.className = 'tutRing'; ring.style.display = 'none'; document.body.appendChild(ring);
     coach = document.createElement('div'); coach.className = 'tutCoach'; coach.style.display = 'none';
-    coach.innerHTML = `<div class="tt"></div><div class="tx"></div><button class="tgo"></button>
-      <div class="meta"><span class="stepn"></span><button class="tskip"></button></div>`;
+    coach.innerHTML = `<div class="tutPortrait" aria-hidden="true"></div><div class="tutBody"><div class="tt"></div><div class="tx"></div><button class="tgo"></button>
+      <div class="meta"><span class="stepn"></span><button class="tskip"></button></div></div>`;
     document.body.appendChild(coach);
     coachTitle = coach.querySelector('.tt'); coachText = coach.querySelector('.tx');
     coachMeta = coach.querySelector('.stepn'); coachBtn = coach.querySelector('.tgo');
@@ -483,7 +504,7 @@
   }
   function render() {
     const st = STEPS[idx]; if (!st) return;
-    coach.style.display = 'block';
+    coach.style.display = 'grid';
     coachTitle.textContent = L()[st.t];
     coachText.textContent = st.text ? st.text() : L()[st.x];
     coachMeta.textContent = `${L().step} ${idx + 1}/${STEPS.length}`;

@@ -144,6 +144,12 @@ function countryCtrl(countryName){
 
 function sendUnits(from,to,pctOverride){
   if(from===to)return;
+  // клиентские плашки о причинах отказа при атаке чужого города (сервер всё равно валидирует cmdSend)
+  if(from&&to&&to.owner!==from.owner&&!allied(from.owner,to.owner)){
+    if(!atWar(from.owner,to.owner)){ notify(t('notif.needWar')); return; }
+    const cd=warCountdown(from.owner,to.owner);
+    if(cd>0){ notify(t('polit.mobilizing',{s:Math.ceil(cd)})); return; }   // «⏳ Мобилизация: Nс — атака пока недоступна»
+  }
   // соло/MP → серверный Sim (cmdSend валидирует путь/войну/мобилизацию). Старый клиентский путь (new Squad) удалён.
   MP.cmd({cmd:'army',a:from.idx,b:to.idx,pct:Math.round(sendPct*100)});
 }
@@ -163,6 +169,23 @@ function buyAmount(c,spec){
   if(spec==='max')return Math.max(0,cap);
   return Math.min(parseInt(spec,10),cap);
 }
+// причина, по которой найм в городе c невозможен (для плашки-уведомления); null = можно
+function buyBlockReason(c,spec){
+  if(!c)return null;
+  if(c.occ)return t('toast.occNoRecruit');                                   // «🏴 Оккупирован — нельзя нанимать»
+  if(Math.floor(c.capacity-c.units-c.queued)<=0)return t('notif.garrisonFull'); // «🏙 Город переполнен»
+  if(gold[c.owner]<SOLDIER_PRICE)return t('notif.noGold');
+  if((manpower[c.owner]||0)<SOLDIER_MP)return t('notif.noMp');
+  return null;
+}
+// делегированный перехват (capture): клик по ЗАБЛОКИРОВАННОЙ кнопке найма → плашка с причиной.
+//   Кнопка с классом dis свою покупку не делает — иначе игрок кликает «в пустоту» без фидбэка.
+document.addEventListener('click',(e)=>{
+  const b=e.target&&e.target.closest?e.target.closest('.unitBuy'):null;
+  if(!b||!b.dataset||!b.dataset.unit||!b.classList.contains('dis'))return;   // только кнопки НАЙМА (не корабль/дирижабль) и только заблокированные
+  if(typeof panelCity==='undefined'||!panelCity)return;
+  const r=buyBlockReason(panelCity,b.dataset.spec); if(r)notify(r);
+},true);
 function buySoldiers(c,spec,unit){
   const type=(unit==='arc'||unit==='cav')?unit:'inf';   // 👥 тип найма из панели
   if(MP.guest){ MP.cmd({cmd:'buy',c:c.idx,spec:String(spec),unit:type}); return; }

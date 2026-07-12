@@ -202,6 +202,31 @@ function toast(msg){
   toastTimer=setTimeout(()=>el.style.opacity=0,1600);
 }
 
+// ── центрированные плашки-уведомления о запрещённых действиях (найм при переполнении,
+//    атака до конца мобилизации и т.п.). Появляются по центру, стопкой, гаснут через 2с. ──
+let _notifWrap=null; const _notifRecent={};
+function notify(msg){
+  if(!msg)return;
+  const now=(typeof performance!=='undefined'?performance.now():Date.now());
+  if(_notifRecent[msg]&&now-_notifRecent[msg]<1500)return;   // антидубль (мультиселект шлёт из нескольких городов)
+  _notifRecent[msg]=now;
+  if(!_notifWrap){
+    const st=document.createElement('style');
+    st.textContent='#centerNotif{position:fixed;left:50%;top:36%;transform:translateX(-50%);z-index:60;'
+      +'display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;}'
+      +'.cNotif{background:rgba(10,16,24,.92);border:1px solid rgba(255,150,110,.5);color:#ffd9c9;'
+      +'font:700 14px/1.3 sans-serif;padding:9px 18px;border-radius:10px;box-shadow:0 6px 22px rgba(0,0,0,.5);'
+      +'opacity:0;transform:translateY(-6px);transition:opacity .18s ease,transform .18s ease;max-width:80vw;text-align:center;white-space:nowrap;}'
+      +'.cNotif.show{opacity:1;transform:translateY(0);}';
+    document.head.appendChild(st);
+    _notifWrap=document.createElement('div'); _notifWrap.id='centerNotif'; document.body.appendChild(_notifWrap);
+  }
+  const el=document.createElement('div'); el.className='cNotif'; el.textContent=msg;
+  _notifWrap.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('show'));
+  setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>el.remove(),220); },2000);
+}
+
 /* ── real Europe coords (from europe.html) ──────────────────── */
 const LON0=-13, LON1=51, LAT0=34, LAT1=70; // расширено на восток (Кавказ) и север (Норвегия)
 
