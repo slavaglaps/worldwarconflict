@@ -33,6 +33,7 @@
     s3t: 'Твоя столица', s3: 'Кликни по Парижу. Сверху — твои ресурсы: 💰 золото, 👥 манпауэр, 🏛 политические очки.',
     s4t: 'Армия', s4: 'Открой вкладку «⚔ Army» в панели города.',
     s5t: 'Найм войск', s5: 'Найми пехоту — нажми кнопку найма. Войска производятся городом и пополняют гарнизон.',
+    sQueuet: 'Очередь производства', sQueue: 'Это очередь: войска обучаются по порядку и по готовности идут в гарнизон. Посмотри и нажми «Понятно».',
     s6t: 'Строительство', s6: 'Открой меню строительства (кнопка 🏠 справа или клавиша B).',
     s7t: 'Ферма', s7: 'Выбери 🌾 Ферму и поставь её на подсвеченный хекс рядом с городом. Ферма приносит золото и не требует технологий.',
     s8t: 'Технологии', s8: 'Открой дерево технологий (кнопка 📖 справа или клавиша T).',
@@ -75,6 +76,7 @@
     s3t: 'Your capital', s3: 'Click Paris. On top — your resources: 💰 gold, 👥 manpower, 🏛 politics points.',
     s4t: 'Army', s4: 'Open the “⚔ Army” tab in the city panel.',
     s5t: 'Recruiting', s5: 'Hire infantry — press the recruit button. Troops are produced by the city and join its garrison.',
+    sQueuet: 'Production queue', sQueue: 'This is the queue: troops train in order and join the garrison when ready. Look, then press “Got it”.',
     s6t: 'Construction', s6: 'Open the construction menu (🏠 button on the right, or B).',
     s7t: 'Farm', s7: 'Pick the 🌾 Farm and place it on a highlighted hex near your city. Farms yield gold and need no research.',
     s8t: 'Research', s8: 'Open the tech tree (📖 button on the right, or T).',
@@ -310,7 +312,7 @@
   };
   // менюхи, которые ШАГ оставляет открытыми (продолжает использовать); остальные закрываются на входе. Ключ = поле t шага.
   const STEP_KEEP = {
-    s4t: ['panel'], s5t: ['panel'], s6t: ['build'], s7t: ['build'],
+    s4t: ['panel'], s5t: ['panel'], sQueuet: ['panel'], s6t: ['build'], s7t: ['build'],
     s9t: ['tech'], s10t: ['tech'], s13t: ['hero'], s15t: ['pol'],
     s23t: ['pol'], s24t: ['pol', 'peace'], s25t: ['pol', 'peace'],
     s35t: ['panel'],   // сохранить мультивыделение городов для освобождения Парижа (panel-закрывашка снимает выделение)
@@ -352,6 +354,10 @@
       spot: () => panelSpot(CITY_PARIS, () => { try { return buyRows['inf_5']; } catch (e) { return null; } }),
       allow: (o) => o.cmd === 'buy' && (o.c | 0) === CITY_PARIS && String(o.spec) === '5' && (!o.unit || o.unit === 'inf'),
       done() { const c = simCity(CITY_PARIS); return !!(c && c.queued > stepState.queued); } },
+    { t: 'sQueuet', x: 'sQueue', lock: 'soft', ack: true,
+      onEnter() { const c = simCity(CITY_PARIS); if (c && Array.isArray(c.batches)) c.batches.push({ count: 6, time: 40, elapsed: 0, type: 'inf' }); },  // длинный батч → очередь видна всё время объяснения
+      spot: () => elRect(document.getElementById('unitQueue')),
+      done() { return !!stepState.acked; } },
     { t: 's6t', x: 's6', lock: 'hard', spot: () => elRect(document.getElementById('sbBuild')),
       done() { return buildWin(); } },
     { t: 's7t', x: 's7', lock: 'soft', buildRole: 'farm',
