@@ -1,6 +1,7 @@
 /* ── three.js setup ─────────────────────────────────────────── */
 const app=document.getElementById('app');
-const renderer=new T3.WebGLRenderer({antialias:true});
+// powerPreference:'high-performance' — просим браузер взять ДИСКРЕТНУЮ GPU (без него Windows часто рендерит на встройке → лаги)
+const renderer=new T3.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.outputEncoding=T3.sRGBEncoding;
 renderer.toneMapping=T3.ACESFilmicToneMapping;
