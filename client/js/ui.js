@@ -223,7 +223,7 @@ function summonHero(id){
   if(hs.length>=HERO_SLOTS_MAX){toast(t('panel.all_slots_full',{n:HERO_SLOTS_MAX}));return;}
   if(hs.some(h=>h.id===id)){toast(t('panel.hero_already_summoned'));return;}
   if((manpower[PLAYER]||0)<HERO_SUMMON_MP){toast(t('panel.not_enough_mp_need',{n:HERO_SUMMON_MP}));return;}
-  if(MP.guest){ MP.cmd({cmd:'summon', id}); toast(t('panel.summoning')); return; }   // онлайн: сервер спишет манпауэр и пришлёт обновлённые слоты в balance
+  if(MP.guest){ if(MP.cmd({cmd:'summon', id})===false)return; toast(t('panel.summoning')); return; }   // онлайн: сервер спишет манпауэр и пришлёт обновлённые слоты в balance
   const d=heroDef(id); if(!d)return;
   manpower[PLAYER]-=HERO_SUMMON_MP;
   hs.push({id, cd:d.abilities.filter(a=>a.kind==='active').map(()=>0)});

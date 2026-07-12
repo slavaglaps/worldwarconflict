@@ -232,12 +232,18 @@ function updateHireTypeBtns(){
 }
 function updateCityPanelHeader(c){
   document.getElementById('pName').textContent=cityDisp(c.idx);
+  const income=document.getElementById('pIncome');
   const meta=document.getElementById('pMeta');
   if(c._fog){   // 🌫 город вне вижена: только last-seen число (или «?»), без уровней/состава
     const seen=c._seenUnits!=null?c._seenUnits:'?';
+    if(income)income.textContent='';
     if(meta)meta.innerHTML=`<span class="pGarrison">Garrison ${seen}</span>`;
     return;
   }
+  const goldRate=Number.isFinite(c.goldRate)?c.goldRate:0;
+  const politRate=POLIT_PER_CITY+c.totalTier*POLIT_PER_TIER;
+  const mpRate=(MP_RATE_BASE+c.size*MP_RATE_PER_SIZE+c.totalTier*MP_RATE_PER_TIER)*(c.capital?MP_CAPITAL:1)*techMul(c.owner,'prod');
+  if(income)income.innerHTML=`${c.capital?'<span class="pCapitalMark" title="Capital">♛</span>':''}<span>💰 +${goldRate.toFixed(2)}/s</span><span>🏛 +${politRate.toFixed(2)}/s</span><span>👥 +${mpRate.toFixed(2)}/s</span>`;
   const lvl=CITY_UPGRADE_TRACKS.map(tr=>`<span class="pLevelChip"><span>${SPEC[tr].icon}</span><b>${c.branchTier(tr)}</b></span>`).join('');
   const comp=c.comp||{inf:c.units,arc:0,cav:0};
   const unitChips=PANEL_UNITS.map(u=>`<span class="pUnitChip"><span>${u.icon}</span><b>${Math.round(comp[u.id]||0)}</b></span>`).join('');

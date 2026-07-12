@@ -40,6 +40,12 @@ test('манпауэр стартует на потолке', () => { const s = 
 group('Экономика (доход = размер города / интервал)');
 test('size=2 даёт +2 голды за интервал', () => { const c = mkCity({ size: 2 }); eq(c.goldInterval, 4); eq(c.update(4.0001), 2); });
 test('несколько интервалов за большой dt', () => { const c = mkCity({ size: 1 }); eq(c.update(8.5), 2); }); // пересёк 4 и 8
+test('столица приносит больше золота по CITY_CAPITAL_GOLD', () => {
+  const normal = mkCity({ size: 1, capital: false });
+  const capital = mkCity({ size: 1, capital: true });
+  near(capital.goldRate, normal.goldRate * C.CITY_CAPITAL_GOLD);
+  near(capital.update(capital.goldInterval + 0.001), C.CITY_GOLD_YIELD * C.CITY_CAPITAL_GOLD);
+});
 test('prod повышает вместимость гарнизона, но не ускоряет золото', () => {
   const c = mkCity({ size: 1 }); const baseCap = c.capacity;
   c.prodTier = 1; c.spec = 'prod'; c.tier = 1;

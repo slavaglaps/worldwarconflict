@@ -508,7 +508,7 @@ function proposePeace(){
   if(cd>0){ toast(t('polit.negotiationPaused',{s:Math.ceil(cd)})); return; } // анти-спам: нельзя сразу перепредложить
   if(!politEnough(POLIT_PEACE))return;          // мир стоит политочки
   const T=peaceTermsObj();
-  if(MP.guest){ MP.cmd({cmd:'peace',tg:t,land:T.land,money:T.money,repar:T.repar}); closePeace(); return; }
+  if(MP.guest){ if(MP.cmd({cmd:'peace',tg:t,land:T.land,money:T.money,repar:T.repar})===false)return; closePeace(); return; }
   setPeaceCD(PLAYER,t);                          // одно предложение раз в PEACE_CD секунд (успех или отказ)
   if(Math.random()<peaceAcceptChance(t,PLAYER,T)){
     politPts[PLAYER]-=POLIT_PEACE;

@@ -806,7 +806,7 @@ class Sim {
     for (let i = this.reparations.length - 1; i >= 0; i--) {
       const r = this.reparations[i];
       if (this.time >= r.until) { this.reparations.splice(i, 1); continue; }
-      let inc = 0; for (const c of this.cities) if (c.owner === r.from) inc += c.size / c.goldInterval;   // goldRate
+      let inc = 0; for (const c of this.cities) if (c.owner === r.from) inc += c.goldRate;
       const amt = inc * r.pct * dt; if (amt > 0) { this.gold[r.from] = Math.max(0, this.gold[r.from] - amt); this.gold[r.to] += amt; }
     }
   }

@@ -95,6 +95,7 @@ class City {
 
   get capacity()    { let c = this.K.CITY_CAP_BASE + this.size * this.K.CITY_CAP_PER_SIZE; c *= 1 + this.K.CITY_DEF_CAP_PER_TIER * this.branchTier('prod'); if (this.boosted) c *= this.K.CITY_BOOST_CAP; return c * this.tv(this.owner, 'cc'); }
   get goldInterval(){ let g = this.K.CITY_GOLD_INTERVAL; if (this.boosted) g *= this.K.CITY_BOOST_GOLD; return g / this.tm(this.owner, 'eco'); }
+  get goldRate()    { return this.size * this.K.CITY_GOLD_YIELD * (this.capital ? this.K.CITY_CAPITAL_GOLD : 1) * (this.occ ? this.K.OCCUPY_INCOME : 1) / this.goldInterval; }
   get trainPer()    { let t = this.K.CITY_TRAIN_BASE - this.size * this.K.CITY_TRAIN_PER_SIZE; if (this.boosted) t *= this.K.CITY_BOOST_TRAIN; return t / this.tm(this.owner, 'prod'); }
   get queued()      { return this.batches.reduce((s, b) => s + (b.type === 'ship' || b.type === 'plane' ? 0 : b.count), 0); }
   get defMult()     { return (1 + this.K.CITY_DEF_MULT_PER_TIER * this.branchTier('def')) * this.tm(this.owner, 'def'); }
@@ -142,7 +143,7 @@ class City {
     // ── экономика: голда по интервалу (×size×YIELD; оккупированный город — ×OCCUPY_INCOME) ──
     let income = 0;
     this.goldTimer += dt;
-    while (this.goldTimer >= this.goldInterval) { this.goldTimer -= this.goldInterval; income += this.size * this.K.CITY_GOLD_YIELD; }
+    while (this.goldTimer >= this.goldInterval) { this.goldTimer -= this.goldInterval; income += this.size * this.K.CITY_GOLD_YIELD * (this.capital ? this.K.CITY_CAPITAL_GOLD : 1); }
     if (this.occ) income *= this.K.OCCUPY_INCOME;
     // ── производство: FIFO, продвигается только batches[0] ──
     if (this.batches.length) {

@@ -625,6 +625,10 @@
   function place(item, h) {
     const hb = window.HEXBUILD;
     if (!hb) return;
+    if (window.TUT && TUT.active && typeof TUT.allowBuild === 'function' && !TUT.allowBuild(item.role)) {
+      if (typeof toast === 'function') toast((typeof LANG !== 'undefined' && LANG === 'ru') ? '⚠ Следуй подсказке туториала' : '⚠ Follow the tutorial hint');
+      return;
+    }
     if (itemLockedNow(item)) { setHint(lockHint(item)); return; }   // 🔓 гейт по исследованию
     if (!models[item.key]) { ensureModels().then(() => { if (selected === item && models[item.key]) makeGhost(); }); return; }
     if (isOccupiedBuildHex(h)) { setHint(t('build.hint_occupied')); return; }

@@ -194,29 +194,31 @@ function localSimStep(gdt) {                              // вызываетс�
 var _LS_TRACK = { 1: 'prod', 2: 'def', 3: 'atk', prod: 'prod', def: 'def', atk: 'atk' };
 var _LS_I = (v) => (v == null ? null : v | 0);
 function localSimCmd(o) {                                 // MP.cmd в режиме ?ls → методы серверного Sim (как GameRoom)
-  const s = LOCALSIM, f = PLAYER; if (!s) { _lsPendingCmds.push({ ...o }); if (_lsPendingCmds.length > 40) _lsPendingCmds.shift(); return; }
+  const s = LOCALSIM, f = PLAYER; if (!s) { _lsPendingCmds.push({ ...o }); if (_lsPendingCmds.length > 40) _lsPendingCmds.shift(); return true; }
   try {
+    let accepted;
     switch (o.cmd) {
-      case 'buy':      s.cmdBuy(f, _LS_I(o.c), String(o.spec), o.unit ? String(o.unit) : undefined); break;   // 👥 unit = тип найма
-      case 'upg':      s.cmdUpgrade(f, _LS_I(o.c), _LS_TRACK[o.track]); break;
-      case 'army':     s.cmdSend(f, _LS_I(o.a), _LS_I(o.b), (o.pct || 50) / 100); break;
-      case 'war':      s.cmdWar(f, _LS_I(o.tg)); break;
-      case 'ally':     s.cmdAlly(f, _LS_I(o.tg)); break;
-      case 'break':    s.cmdBreak(f, _LS_I(o.tg)); break;
-      case 'sup':      s.cmdSupport(f, _LS_I(o.tg)); break;
-      case 'peace':    s.cmdPeace(f, _LS_I(o.tg), { land: !!o.land, money: o.money | 0, repar: o.repar | 0 }); break;
-      case 'research': s.cmdResearch(f, String(o.node)); break;
-      case 'bship':    s.cmdBuildShip(f, _LS_I(o.c)); break;
-      case 'bplane':   s.cmdBuildPlane(f, _LS_I(o.c)); break;
+      case 'buy':      accepted = s.cmdBuy(f, _LS_I(o.c), String(o.spec), o.unit ? String(o.unit) : undefined); break;   // 👥 unit = тип найма
+      case 'upg':      accepted = s.cmdUpgrade(f, _LS_I(o.c), _LS_TRACK[o.track]); break;
+      case 'army':     accepted = s.cmdSend(f, _LS_I(o.a), _LS_I(o.b), (o.pct || 50) / 100); break;
+      case 'war':      accepted = s.cmdWar(f, _LS_I(o.tg)); break;
+      case 'ally':     accepted = s.cmdAlly(f, _LS_I(o.tg)); break;
+      case 'break':    accepted = s.cmdBreak(f, _LS_I(o.tg)); break;
+      case 'sup':      accepted = s.cmdSupport(f, _LS_I(o.tg)); break;
+      case 'peace':    accepted = s.cmdPeace(f, _LS_I(o.tg), { land: !!o.land, money: o.money | 0, repar: o.repar | 0 }); break;
+      case 'research': accepted = s.cmdResearch(f, String(o.node)); break;
+      case 'bship':    accepted = s.cmdBuildShip(f, _LS_I(o.c)); break;
+      case 'bplane':   accepted = s.cmdBuildPlane(f, _LS_I(o.c)); break;
       case 'shipmove': (o.ids || []).forEach((id) => s.cmdShipMove(f, parseInt(String(id).replace(/\D/g, '')) || 0, o.x, o.z)); break;
       case 'planemove': (o.ids || []).forEach((id) => s.cmdPlaneMove(f, parseInt(String(id).replace(/\D/g, '')) || 0, o.x, o.z)); break;
-      case 'yard':     s.cmdBuildYard(f, _LS_I(o.c), o.kind); break;
-      case 'airorder': s.cmdAirOrder(f, o.recall ? -1 : _LS_I(o.cityIdx), o.x, o.z); break;
+      case 'yard':     accepted = s.cmdBuildYard(f, _LS_I(o.c), o.kind); break;
+      case 'airorder': accepted = s.cmdAirOrder(f, o.recall ? -1 : _LS_I(o.cityIdx), o.x, o.z); break;
       case 'aa':       break;
-      case 'hero':     s.cmdHeroAbility(f, _LS_I(o.h), _LS_I(o.ab)); break;
-      case 'summon':   s.cmdSummonHero(f, String(o.id)); break;
+      case 'hero':     accepted = s.cmdHeroAbility(f, _LS_I(o.h), _LS_I(o.ab)); break;
+      case 'summon':   accepted = s.cmdSummonHero(f, String(o.id)); break;
     }
     projectLocalSim(s, MP._onMsg);
     syncLocalEcon(s);
-  } catch (e) { console.warn('[ls] cmd', o.cmd, e); }
+    return accepted !== false;
+  } catch (e) { console.warn('[ls] cmd', o.cmd, e); return false; }
 }

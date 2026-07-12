@@ -40,6 +40,20 @@ test('океан у островной территории скрыт и отк
   eq(at(revealed, x, z + s.K.VISION_SHIP + 2), 0, 'за радиусом корабля море снова скрыто');
 });
 
+test('у своей территории видна ограниченная прибрежная полоса моря', () => {
+  const m = computeVision(s, 0);
+  let shore = null;
+  for (let x = 1; x < GRID - 1 && !shore; x++) for (let z = 1; z < GRID - 1; z++) {
+    if (!at(m, x, z) || isWaterAt(x, z)) continue;
+    for (let dx = -1; dx <= 1 && !shore; dx++) for (let dz = -1; dz <= 1; dz++) {
+      if (isWaterAt(x + dx, z + dz)) { shore = { x: x + dx, z: z + dz }; break; }
+    }
+  }
+  assert(shore, 'найден берег своей территории');
+  eq(at(m, shore.x, shore.z), 1, 'вода непосредственно у берега видна');
+  eq(at(m, 5, 110), 0, 'дальняя Атлантика остаётся под туманом');
+});
+
 test('дальняя вражеская столица НЕ видима', () => {
   const c0 = capOf(0);
   // фракция с самой далёкой столицей от нас

@@ -73,7 +73,7 @@ function activateHeroAbility(fid, h, abIndex){
   if(h.cd[ai]>0){ toast(t('hero.cooldown',{name:tName('heroab',ab.name),s:Math.ceil(h.cd[ai])})); return; }
   if(MP.guest){                            // онлайн: активку применяет СЕРВЕР авторитетно (кулдаун/эффект прилетят в econ)
     const hi=(heroSlots[fid]||[]).indexOf(h); if(hi<0)return;
-    MP.cmd({cmd:'hero', h:hi, ab:ai});
+    if(MP.cmd({cmd:'hero', h:hi, ab:ai})===false)return;
     h.cd[ai]=ab.cd;                        // оптимистичный КД; сервер подтвердит/сбросит через econ (или denied)
     toast(`${ab.icon} ${tName('heroab',ab.name)}`); refreshHeroBar(); return;
   }

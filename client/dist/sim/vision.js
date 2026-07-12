@@ -9,6 +9,8 @@
 //   • клиентом для отрисовки тёмного тумана (одна математика — ноль дрейфа).
 'use strict';
 
+const { isWaterAt } = require('./water');
+
 // Вороной: для каждого хекса — индекс ближайшего города. Считается один раз
 // (города не двигаются; динамические верфи/аэродромы рядом с родителем того же
 // владельца — сдвигом ячеек пренебрегаем). 65535 = городов нет.
@@ -64,16 +66,32 @@ function stampDisc(mask, GRID, x, z, radius) {
   }
 }
 
+// Раскрывает только воду вокруг видимого берега. Это даёт естественную
+// прибрежную полосу обзора, не возвращая бесконечный океан от Вороного.
+function stampWaterDisc(mask, GRID, x, z, radius) {
+  const cx = Math.round(x), cz = Math.round(z), r = Math.max(0, Math.round(radius));
+  for (let dx = -r; dx <= r; dx++) {
+    const px = cx + dx; if (px < 0 || px >= GRID) continue;
+    for (let dz = -r; dz <= r; dz++) {
+      const pz = cz + dz; if (pz < 0 || pz >= GRID || dx * dx + dz * dz > r * r) continue;
+      if (isWaterAt(px, pz)) mask[px * GRID + pz] = 1;
+    }
+  }
+}
+
 // Полная маска видимости фракции. sim — Sim; out — переиспользуемый Uint8Array (опц.).
 function computeVision(sim, fid, out) {
   const GRID = sim.K.GRID;
+  const K = sim.K;
   const N = GRID * GRID;
   const mask = (out && out.length === N) ? out.fill(0) : new Uint8Array(N);
   // «свой» = сам + союзники (общий вижен)
   const friendly = new Uint8Array(sim.factions);
   for (let o = 0; o < sim.factions; o++) friendly[o] = (o === fid || sim.allied(fid, o)) ? 1 : 0;
 
-  // 1) территория: хекс виден, если его ближайший город принадлежит своим
+  // 1) территория: сухопутный хекс виден, если его ближайший город принадлежит своим.
+  // Океан нельзя открывать Вороной: на островах ближайший дружественный город иначе
+  // подсвечивает море до следующей страны. Воду раскрывают только источники ниже.
   if (!sim._voronoi || sim._voronoiN !== sim.cities.length) {
     sim._voronoi = buildVoronoi(sim.cities, GRID);
     sim._voronoiN = sim.cities.length;
@@ -81,10 +99,26 @@ function computeVision(sim, fid, out) {
   const vor = sim._voronoi, cities = sim.cities;
   const cityOwn = new Uint8Array(cities.length);
   for (let i = 0; i < cities.length; i++) cityOwn[i] = friendly[cities[i].owner] || 0;
-  for (let i = 0; i < N; i++) { const ci = vor[i]; if (ci !== 65535 && cityOwn[ci]) mask[i] = 1; }
+  for (let x = 0; x < GRID; x++) for (let z = 0; z < GRID; z++) {
+    const i = x * GRID + z, ci = vor[i];
+    if (ci !== 65535 && cityOwn[ci] && !isWaterAt(x, z)) mask[i] = 1;
+  }
+
+  // Небольшая полоса моря вдоль своей/союзной территории. Штампуем только
+  // береговые клетки суши, чтобы цена не зависела от площади всей страны.
+  const coastRadius = K.VISION_COAST || 0;
+  if (coastRadius > 0) for (let x = 0; x < GRID; x++) for (let z = 0; z < GRID; z++) {
+    const i = x * GRID + z;
+    if (!mask[i] || isWaterAt(x, z)) continue;
+    let coast = false;
+    for (let dx = -1; dx <= 1 && !coast; dx++) for (let dz = -1; dz <= 1; dz++) {
+      if ((!dx && !dz) || x + dx < 0 || z + dz < 0 || x + dx >= GRID || z + dz >= GRID) continue;
+      if (isWaterAt(x + dx, z + dz)) { coast = true; break; }
+    }
+    if (coast) stampWaterDisc(mask, GRID, x, z, coastRadius);
+  }
 
   // 2) свои отряды/корабли/самолёты — «фонарики» (разведка боем)
-  const K = sim.K;
   const rSquad = K.VISION_SQUAD, rShip = K.VISION_SHIP, rPlane = K.VISION_PLANE;
   for (const s of sim.squads) if (friendly[s.owner]) stampDisc(mask, GRID, s.x, s.z, rSquad);
   for (const s of sim.ships) if (friendly[s.owner]) stampDisc(mask, GRID, s.x, s.z, rShip);
