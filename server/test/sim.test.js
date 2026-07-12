@@ -457,9 +457,9 @@ test('баланс: плоские колонки faction/heroMeta/unit_counter_
 
 group('ИИ-оппоненты (порт aiActFaction)');
 test('ИИ выключен по умолчанию (ai:false → никто не воюет)', () => { const s = new Sim({ map }); for (let i = 0; i < 200; i++) s.tick(0.1); eq(Object.values(s.relations).filter(v => v === 'war').length, 0); });
-test('ИИ объявляет войны', () => { const s = new Sim({ map, ai: true, goldStart: 200 }); s.humanFactions = new Set([19]); for (let i = 0; i < 800; i++) s.tick(0.1); gt(Object.values(s.relations).filter(v => v === 'war').length, 0); });
+test('ИИ объявляет войны', () => { const s = new Sim({ map, ai: true, goldStart: 200, balance: makeBalance({ ai: { warGrace: 0 } }) }); s.humanFactions = new Set([19]); for (let i = 0; i < 800; i++) s.tick(0.1); gt(Object.values(s.relations).filter(v => v === 'war').length, 0); });   // warGrace:0 — проверяем логику войны, не мирный старт
 test('ИИ исследует технологии', () => { const s = new Sim({ map, ai: true, goldStart: 300 }); for (let i = 0; i < 600; i++) s.tick(0.1); gt(s.techDone.filter(t => t.size > 0).length, 0); });
-test('ИИ строит и двигает армии (захваты идут)', () => { const s = new Sim({ map, ai: true, goldStart: 250, politStart: 200 }); for (let i = 0; i < 1000; i++) s.tick(0.1); gt(s.cities.filter(c => c.occ).length, 0); });   // politStart: ИИ теперь ПЛАТИТ за войну (cmdWar) — даём очки, чтобы не ждать накопления
+test('ИИ строит и двигает армии (захваты идут)', () => { const s = new Sim({ map, ai: true, goldStart: 250, politStart: 200, balance: makeBalance({ ai: { warGrace: 0 } }) }); for (let i = 0; i < 1000; i++) s.tick(0.1); gt(s.cities.filter(c => c.occ).length, 0); });   // politStart: ИИ платит за войну; warGrace:0 — без мирного старта, иначе захваты не успеют
 test('ИИ НЕ управляет фракциями людей', () => { const s = new Sim({ map, ai: true, goldStart: 300 }); s.humanFactions = new Set([5]); for (let i = 0; i < 400; i++) s.tick(0.1); eq(s.squads.filter(sq => sq.owner === 5).length, 0); eq(s.techDone[5].size, 0); eq(s.techRes[5].length, 0); });
 
 group('Мобилизация: атака только после WAR_PREP');

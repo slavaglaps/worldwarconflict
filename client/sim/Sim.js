@@ -481,8 +481,8 @@ class Sim {
         this.resolveOccupation(fid, f, 'white'); this.setRelation(fid, f, 'neutral'); this.setTruce(fid, f);
       }
     }
-    // война слабому соседу
-    if (this.warList(fid).length === 0 && rng() < A.warProb) {
+    // война слабому соседу (но не раньше warGrace сек с начала партии — мирный старт)
+    if (this.time >= (A.warGrace || 0) && this.warList(fid).length === 0 && rng() < A.warProb) {
       const nb = new Set();
       for (const c of mine) for (const n of (this.adj.get(c.idx) || [])) { const o = this.cities[n.to].owner; if (o !== fid) nb.add(o); }
       let target = null, ts = 1e9;
