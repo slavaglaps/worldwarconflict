@@ -171,11 +171,10 @@
     ring = document.createElement('div'); ring.className = 'tutRing'; ring.style.display = 'none'; document.body.appendChild(ring);
     coach = document.createElement('div'); coach.className = 'tutCoach'; coach.style.display = 'none';
     coach.innerHTML = `<div class="tutPortrait" aria-hidden="true"></div><div class="tutBody"><div class="tt"></div><div class="tx"></div><button class="tgo"></button>
-      <div class="meta"><span class="stepn"></span><button class="tskip"></button></div></div>`;
+      <div class="meta"><span class="stepn"></span></div></div>`;
     document.body.appendChild(coach);
     coachTitle = coach.querySelector('.tt'); coachText = coach.querySelector('.tx');
     coachMeta = coach.querySelector('.stepn'); coachBtn = coach.querySelector('.tgo');
-    coach.querySelector('.tskip').onclick = () => endTutorial(true);
   }
   function hideSpot() { for (const d of shields) d.style.display = 'none'; ring.style.display = 'none'; }
   // r = {x,y,w,h} в px; hard=true → щиты ловят клики вне дырки
@@ -521,7 +520,6 @@
     coachTitle.textContent = L()[st.t];
     coachText.textContent = st.text ? st.text() : L()[st.x];
     coachMeta.textContent = `${L().step} ${idx + 1}/${STEPS.length}`;
-    coach.querySelector('.tskip').textContent = L().skip;
     // кнопка внизу карточки: «В бой!» на финале · «Понятно» на ack-шаге (появляется, когда ackReady — напр. открыта панель Турина)
     if (st.final) { coachBtn.style.display = 'block'; coachBtn.textContent = L().go; coachBtn.onclick = () => endTutorial(false); }
     else if (st.ack) { const ready = !st.ackReady || st.ackReady();
