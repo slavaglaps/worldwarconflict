@@ -17,7 +17,7 @@
   if (!WANT || isMP) return;                       // MP/выкл → модуль пассивен
 
   /* ── константы сценария ── */
-  const CITY_PARIS = 6, CITY_LYON = 8, CITY_TURIN = 28;
+  const CITY_PARIS = 6, CITY_LYON = 8, CITY_TURIN = 28, CITY_GENOA = 146, CITY_ZURICH = 144;
   const PREGRANT_TECH = ['p1', 'p3', 'k1', 'k2', 'k4', 'i3', 'i6'];   // пререквизиты Верфи(i1)/Аэродрома(i8) — игроку остаётся 1 клик
   const WAR_WAIT = 15;                             // сек мобилизации в туториале (вместо WAR_PREP=60 — учим механике, не скуке)
   let IT = -1, BE = -1;                            // fid Италии/Бельгии (после buildFactions)
@@ -25,7 +25,9 @@
   /* ── локализация (модульная: без правки словарей i18n) ── */
   const RU = {
     skip: 'Пропустить обучение', step: 'Шаг', nudge: '⚠ Следуй подсказке туториала',
-    go: '⚔ В бой!', grant: '💰 Казна пополнена',
+    go: '⚔ В бой!', grant: '💰 Казна пополнена', gotit: 'Понятно',
+    sShipt: 'Морской обстрел', sShip: 'Выдели свой корабль и перетащи его к Генуе — он обстреляет вражеский город с моря.',
+    sAirt: 'Воздушная разведка', sAir: 'Выдели дирижабль и отправь его к Цюриху — авиация летит и раскрывает территорию.',
     s1t: 'Разведка карты', s1: 'Подвигай камеру — зажми край карты мышью или используй WASD/стрелки.',
     s2t: 'Приближение', s2: 'Покрути колесо мыши — приблизь камеру к своим городам.',
     s3t: 'Твоя столица', s3: 'Кликни по Парижу. Сверху — твои ресурсы: 💰 золото, 👥 манпауэр, 🏛 политические очки.',
@@ -44,9 +46,9 @@
     s16t: 'Мобилизация', s16: 'Армия мобилизуется — атаковать сразу нельзя. Осталось: {s} сек.',
     s17t: 'Вся армия', s17: 'Передвинь ползунок «Send» на 100% — в атаку пойдёт весь гарнизон, а не половина.',
     s18t: 'Наступление', s18: 'Кликни по своему Лиону, затем по итальянскому Турину — армия выйдет на осаду.',
-    s19t: 'Удар с воздуха', s19: 'Активируй 💥 «Ковровую бомбардировку» Шторма — она выбьет 40 защитников Турина.',
+    s19t: 'Удар с воздуха', s19: 'Нажми 💥 «Ковровую бомбардировку» Шторма на панели героя (слева внизу) — она выбьет 40 защитников Турина.',
     s20t: 'Осада', s20: 'Армия штурмует Турин. Дождись захвата города.',
-    s21t: 'Оккупация', s21: 'Кликни по захваченному Турину. Город оккупирован: найм, прокачка и стройка ЗАБЛОКИРОВАНЫ, пока не закрепишь его миром.',
+    s21t: 'Оккупация', s21: 'Кликни по захваченному Турину. Город оккупирован: найм, прокачка и стройка ЗАБЛОКИРОВАНЫ (кнопки серые), пока не закрепишь его миром. Посмотри и нажми «Понятно».',
     s22t: 'К переговорам', s22: 'Снова открой панель дипломатии.',
     s23t: 'Мир', s23: 'Нажми «Мир» напротив Италии — откроются условия договора.',
     s24t: 'Забрать землю', s24: 'Включи условие 🌍 «Аннексировать захваченные земли» — Турин останется тебе.',
@@ -65,7 +67,9 @@
   };
   const EN = {
     skip: 'Skip tutorial', step: 'Step', nudge: '⚠ Follow the tutorial hint',
-    go: '⚔ To battle!', grant: '💰 Treasury replenished',
+    go: '⚔ To battle!', grant: '💰 Treasury replenished', gotit: 'Got it',
+    sShipt: 'Naval bombardment', sShip: 'Select your ship and drag it to Genoa — it will shell the enemy city from the sea.',
+    sAirt: 'Air reconnaissance', sAir: 'Select your airship and send it to Zurich — aircraft fly out and reveal the map.',
     s1t: 'Scout the map', s1: 'Move the camera — drag the map edge or use WASD/arrows.',
     s2t: 'Zoom', s2: 'Use the mouse wheel — zoom in on your cities.',
     s3t: 'Your capital', s3: 'Click Paris. On top — your resources: 💰 gold, 👥 manpower, 🏛 politics points.',
@@ -84,9 +88,9 @@
     s16t: 'Mobilization', s16: 'The army is mobilizing — you cannot attack yet. Remaining: {s} s.',
     s17t: 'Full force', s17: 'Set the “Send” slider to 100% — the whole garrison will attack, not half.',
     s18t: 'Offensive', s18: 'Click your Lyon, then Italian Turin — the army will march to siege.',
-    s19t: 'Air strike', s19: 'Activate Storm’s 💥 “Carpet Bombing” — it wipes out 40 of Turin’s defenders.',
+    s19t: 'Air strike', s19: 'Press Storm’s 💥 “Carpet Bombing” on the hero bar (bottom-left) — it wipes out 40 of Turin’s defenders.',
     s20t: 'Siege', s20: 'Your army is storming Turin. Wait for the capture.',
-    s21t: 'Occupation', s21: 'Click captured Turin. It is occupied: recruiting, upgrades and construction are LOCKED until you secure it with a peace treaty.',
+    s21t: 'Occupation', s21: 'Click captured Turin. It is occupied: recruiting, upgrades and construction are LOCKED (buttons greyed out) until you secure it with a peace treaty. Look, then press “Got it”.',
     s22t: 'To the table', s22: 'Open the diplomacy panel again.',
     s23t: 'Peace', s23: 'Press “Peace” next to Italy — treaty terms will open.',
     s24t: 'Annex the land', s24: 'Enable 🌍 “Annex captured lands” — Turin will stay yours.',
@@ -110,9 +114,11 @@
   const cliCity = (idx) => { try { return cities.find(c => c && c.idx === idx) || null; } catch (e) { return null; } };
   const simCity = (idx) => { const s = sim(); return s ? (s.cities.find(c => c.idx === idx) || null) : null; };
   const say = (m) => { try { toast(m); } catch (e) {} };
+  const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
   /* ── оверлей: 4 щита (затемнение+блок кликов) + кольцо + коуч-карточка ── */
   const Z = 99990;
+  const MENTOR_AVATAR = 'assets/tutorial/mentor-avatar.png';
   let shields = [], ring = null, coach = null, coachTitle = null, coachText = null, coachMeta = null, coachBtn = null, styleEl = null;
   function buildUI() {
     styleEl = document.createElement('style');
@@ -122,28 +128,48 @@
       .tutRing{position:fixed;z-index:${Z + 1};pointer-events:none;border:3px solid #ffd23f;border-radius:14px;
         box-shadow:0 0 0 4px rgba(255,210,63,.25),0 0 26px rgba(255,210,63,.55);animation:tutPulse 1.4s ease-in-out infinite}
       @keyframes tutPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.045);opacity:.75}}
-      .tutCoach{position:fixed;left:50%;transform:translateX(-50%);top:78px;z-index:${Z + 2};max-width:480px;min-width:320px;
-        background:rgba(8,16,26,.94);border:1px solid rgba(255,210,63,.4);border-radius:14px;padding:14px 18px 12px;
-        color:#e8f0fa;font-family:inherit;box-shadow:0 10px 34px rgba(0,0,0,.55)}
+      .tutCoach{position:fixed;left:50%;transform:translateX(-50%);top:72px;z-index:${Z + 2};width:min(680px,calc(100vw - 28px));
+        min-height:134px;background:linear-gradient(180deg,rgba(11,18,22,.97),rgba(7,12,16,.96));
+        border:1px solid rgba(196,166,90,.72);border-radius:22px 22px 8px 22px;padding:12px 18px 12px 12px;
+        color:#e8f0fa;font-family:inherit;box-shadow:0 16px 42px rgba(0,0,0,.58),inset 0 0 0 1px rgba(255,255,255,.035);
+        display:grid;grid-template-columns:92px 1fr;gap:14px;align-items:center;overflow:hidden}
+      .tutCoach:before{content:'';position:absolute;inset:6px;border:1px solid rgba(197,171,104,.22);border-radius:17px 17px 5px 17px;pointer-events:none}
+      .tutCoach:after{content:'';position:absolute;left:124px;right:24px;top:21px;height:1px;background:linear-gradient(90deg,rgba(202,168,94,.7),transparent);opacity:.65;pointer-events:none}
       .tutCoach.bottom{top:auto;bottom:96px}
-      .tutCoach.danger{border-color:rgba(255,90,70,.65);box-shadow:0 0 34px rgba(255,60,40,.35)}
-      .tutCoach .tt{font-size:16px;font-weight:900;color:#ffd23f;margin-bottom:5px}
+      .tutCoach.danger{border-color:rgba(255,90,70,.7);box-shadow:0 0 34px rgba(255,60,40,.35),0 16px 42px rgba(0,0,0,.58)}
+      .tutPortrait{position:relative;z-index:1;width:88px;height:88px;border-radius:16px;align-self:start;margin-top:2px;
+        background:#101817 url("${MENTOR_AVATAR}") center/cover no-repeat;border:1px solid rgba(214,181,101,.8);
+        box-shadow:0 9px 22px rgba(0,0,0,.55),inset 0 0 0 2px rgba(255,255,255,.035)}
+      .tutPortrait:after{content:'';position:absolute;inset:5px;border:1px solid rgba(238,207,142,.24);border-radius:11px;pointer-events:none}
+      .tutBody{position:relative;z-index:1;min-width:0}
+      .tutCoach .tt{font-family:'KnightsQuest',Georgia,serif;font-size:27px;line-height:1;font-weight:600;letter-spacing:.35px;
+        color:#f0c46a;margin:0 0 10px;text-shadow:0 3px 14px rgba(0,0,0,.78)}
       .tutCoach.danger .tt{color:#ff7a6a}
-      .tutCoach .tx{font-size:13.5px;line-height:1.45;color:#cfe0f0}
-      .tutCoach .meta{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px}
-      .tutCoach .stepn{font-size:11px;color:#8fa4bd;font-weight:700}
-      .tutCoach .tskip{background:none;border:1px solid rgba(140,165,195,.35);color:#9db4cc;border-radius:8px;
-        padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer}
-      .tutCoach .tskip:hover{color:#e8f0fa;border-color:#e8f0fa}
-      .tutCoach .tgo{display:none;margin-top:10px;width:100%;background:linear-gradient(180deg,#ffd23f,#d8a41f);
-        border:none;border-radius:10px;padding:10px;font-size:15px;font-weight:900;color:#3a2c05;cursor:pointer}
-      .tutCoach .tgo:hover{filter:brightness(1.08)}`;
+      .tutCoach .tx{font-size:17px;line-height:1.38;color:#d7e3ed;font-weight:650;text-shadow:0 2px 10px rgba(0,0,0,.68)}
+      .tutCoach .meta{display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:12px}
+      .tutCoach .stepn{font-family:'KnightsQuest',Georgia,serif;font-size:15px;letter-spacing:.25px;color:#b9ad92;font-weight:700}
+      .tutCoach .tskip{background:rgba(16,26,33,.72);border:1px solid rgba(172,153,117,.55);color:#d8d0bd;border-radius:12px;
+        padding:8px 15px;font-family:'KnightsQuest',Georgia,serif;font-size:15px;font-weight:700;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035)}
+      .tutCoach .tskip:hover{color:#fff0ca;border-color:#d9b76d;background:rgba(42,31,16,.78)}
+      .tutCoach .tgo{display:none;margin-top:12px;width:100%;background:linear-gradient(180deg,#d7a94a,#7b5721);
+        border:1px solid rgba(238,204,130,.85);border-radius:12px;padding:11px;font-family:'KnightsQuest',Georgia,serif;
+        font-size:20px;font-weight:700;color:#160f06;cursor:pointer;text-shadow:0 1px 0 rgba(255,255,255,.25)}
+      .tutCoach .tgo:hover{filter:brightness(1.08)}
+      @media (max-width:560px){
+        .tutCoach{grid-template-columns:62px 1fr;gap:10px;min-height:112px;padding:10px 12px 10px 10px;border-radius:17px 17px 7px 17px}
+        .tutCoach:after{left:88px;right:16px;top:17px}
+        .tutPortrait{width:58px;height:58px;border-radius:12px}
+        .tutCoach .tt{font-size:22px;margin-bottom:7px}
+        .tutCoach .tx{font-size:14.5px}
+        .tutCoach .meta{margin-top:11px}
+        .tutCoach .stepn,.tutCoach .tskip{font-size:13px}
+      }`;
     document.head.appendChild(styleEl);
     for (let i = 0; i < 4; i++) { const d = document.createElement('div'); d.className = 'tutShield'; d.style.display = 'none'; document.body.appendChild(d); shields.push(d); }
     ring = document.createElement('div'); ring.className = 'tutRing'; ring.style.display = 'none'; document.body.appendChild(ring);
     coach = document.createElement('div'); coach.className = 'tutCoach'; coach.style.display = 'none';
-    coach.innerHTML = `<div class="tt"></div><div class="tx"></div><button class="tgo"></button>
-      <div class="meta"><span class="stepn"></span><button class="tskip"></button></div>`;
+    coach.innerHTML = `<div class="tutPortrait" aria-hidden="true"></div><div class="tutBody"><div class="tt"></div><div class="tx"></div><button class="tgo"></button>
+      <div class="meta"><span class="stepn"></span><button class="tskip"></button></div></div>`;
     document.body.appendChild(coach);
     coachTitle = coach.querySelector('.tt'); coachText = coach.querySelector('.tx');
     coachMeta = coach.querySelector('.stepn'); coachBtn = coach.querySelector('.tgo');
@@ -262,6 +288,30 @@
   const yardCityIdx = (air) => { const s = sim(); if (!s) return -1; const c = s.cities.find(x => x.owner === PLAYER && (air ? (x.hasAirport || x.isAirport) : (x.hasShipyard || x.isShipyard))); return c ? c.idx : -1; };
   // закрыть меню строительства (если открыто) — при переоткрытии оно обновит tech-локи плиток
   const closeBuild = () => { try { if (buildWin()) document.getElementById('sbBuild').click(); } catch (e) {} };
+
+  // ── закрытие транзиентных менюх при переходе между шагами ──
+  //   Каждая менюха имеет свой «закрывашка». На входе в шаг закрываем все, КРОМЕ перечисленных в STEP_KEEP.
+  //   'panel' закрывается снятием выделения города (панель показывается только при выбранном 1 городе).
+  const MENU_CLOSERS = {
+    build: () => { try { if (buildWin()) document.getElementById('sbBuild').click(); } catch (e) {} },
+    tech:  () => { try { if (techWin()) document.getElementById('techClose').click(); } catch (e) {} },
+    pol:   () => { try { if (polWin()) document.getElementById('polClose').click(); } catch (e) {} },
+    hero:  () => { try { if (heroWinOpen()) closeHeroPick(); } catch (e) {} },
+    diplo: () => { try { if (typeof closeDiplo === 'function') closeDiplo(); } catch (e) {} },
+    peace: () => { try { if (typeof closePeace === 'function') closePeace(); } catch (e) {} },
+    panel: () => { try { clearSel(); if (typeof panelCity !== 'undefined') panelCity = null; updatePanel(); } catch (e) {} },
+  };
+  // менюхи, которые ШАГ оставляет открытыми (продолжает использовать); остальные закрываются на входе. Ключ = поле t шага.
+  const STEP_KEEP = {
+    s4t: ['panel'], s5t: ['panel'], s6t: ['build'], s7t: ['build'],
+    s9t: ['tech'], s10t: ['tech'], s13t: ['hero'], s15t: ['pol'],
+    s23t: ['pol'], s24t: ['pol', 'peace'], s25t: ['pol', 'peace'],
+    s35t: ['panel'],   // сохранить мультивыделение городов для освобождения Парижа (panel-закрывашка снимает выделение)
+  };
+  function closeMenusExcept(keep) {
+    const k = new Set(keep || []);
+    for (const m in MENU_CLOSERS) if (!k.has(m)) MENU_CLOSERS[m]();
+  }
   // спот «панель города X» → если панель не на нём, светим сам город, иначе — элемент внутри панели
   const panelSpot = (cidx, innerEl) => {
     try { if (typeof panelCity !== 'undefined' && panelCity && panelCity.idx === cidx) { const r = elRect(innerEl && innerEl()); if (r) return r; } } catch (e) {}
@@ -271,11 +321,17 @@
   const STEPS = [
     /* ── Часть 1: основы ── */
     { t: 's1t', x: 's1', lock: 'none',   // камера орбитальная: пан двигает target (см. input.js/applyCam)
-      onEnter() { try { stepState.tx = target.x; stepState.tz = target.z; } catch (e) {} },
-      done() { try { return (Math.abs(target.x - stepState.tx) + Math.abs(target.z - stepState.tz)) > 3; } catch (e) { return false; } } },
+      onEnter() { stepState.lock = nowMs() + 700; try { stepState.tx = target.x; stepState.tz = target.z; } catch (e) {} },
+      done() { try {
+        if (nowMs() < stepState.lock) { stepState.tx = target.x; stepState.tz = target.z; return false; }   // абсорбируем автофокус камеры на старте
+        return (Math.abs(target.x - stepState.tx) + Math.abs(target.z - stepState.tz)) > 3;
+      } catch (e) { return false; } } },
     { t: 's2t', x: 's2', lock: 'none',   // зум = orbit.r (колесо)
-      onEnter() { try { stepState.r = orbit.r; } catch (e) {} },
-      done() { try { return Math.abs(orbit.r - stepState.r) > 3; } catch (e) { return false; } } },
+      onEnter() { stepState.lock = nowMs() + 500; try { stepState.r = orbit.r; } catch (e) {} },
+      done() { try {
+        if (nowMs() < stepState.lock) { stepState.r = orbit.r; return false; }
+        return Math.abs(orbit.r - stepState.r) > 3;
+      } catch (e) { return false; } } },
     { t: 's3t', x: 's3', lock: 'soft', spot: () => cityRect(CITY_PARIS),
       done() { return typeof panelCity !== 'undefined' && panelCity && panelCity.idx === CITY_PARIS; } },
 
@@ -354,24 +410,14 @@
       onDone() { const s = sim(); if (s) s.airOrder[PLAYER] = null; } },
     { t: 's20t', x: 's20', lock: 'none', spot: () => cityRect(CITY_TURIN),
       done() { const c = cliCity(CITY_TURIN); return c && c.owner === PLAYER; } },
-    { t: 's21t', x: 's21', lock: 'soft', spot: () => cityRect(CITY_TURIN),
+    { t: 's21t', x: 's21', lock: 'soft', ack: true,
+      // спотлайт на панель города (видны серые кнопки), пока она на Турине; иначе — на сам город
+      spot: () => { try { const p = document.getElementById('panel'); if (p && getComputedStyle(p).display !== 'none' && typeof panelCity !== 'undefined' && panelCity && panelCity.idx === CITY_TURIN) return elRect(p); } catch (e) {} return cityRect(CITY_TURIN); },
       onEnter() { try { clearSel(); } catch (e) {} try { if (typeof panelCity !== 'undefined') panelCity = null; } catch (e) {} },
-      done() { return typeof panelCity !== 'undefined' && panelCity && panelCity.idx === CITY_TURIN; } },
-    { t: 's22t', x: 's22', lock: 'hard', spot: () => elRect(document.getElementById('sbPol')),
-      done() { return polWin(); } },
-    { t: 's23t', x: 's23', lock: 'hard',
-      spot: () => polWin() ? elRect(polBtn(IT, 'peace')) : elRect(document.getElementById('sbPol')),
-      done() { const w = document.getElementById('peaceWin'); return w && w.style.display === 'flex'; } },
-    { t: 's24t', x: 's24', lock: 'hard', spot: () => elRect(document.getElementById('ptLandBtn')),
-      done() { return typeof peaceLand !== 'undefined' && peaceLand === true; } },
-    { t: 's25t', x: 's25', lock: 'hard', spot: () => elRect(document.getElementById('peacePropose')),
-      allow: (o) => o.cmd === 'peace' && o.tg === IT && !!o.land,
-      done() { const c = cliCity(CITY_TURIN); return !atWar(PLAYER, IT) && c && c.owner === PLAYER && !c.occ; } },
-    { t: 's26t', x: 's26', lock: 'none', spot: () => cityRect(CITY_TURIN),
-      onEnter() { stepState.at = performance.now(); try { const w = document.getElementById('peaceResult'); if (w) w.style.display = 'none'; } catch (e) {} },
-      done() { return performance.now() - stepState.at > 4500; } },
+      ackReady() { return typeof panelCity !== 'undefined' && panelCity && panelCity.idx === CITY_TURIN; },   // кнопка «Понятно» появляется, только когда открыта панель Турина
+      done() { return !!stepState.acked; } },
 
-    /* ── Часть 6: флот ── */
+    /* ── Часть 6: флот (ещё в войне с Италией → корабль обстреляет Геную) ── */
     { t: 's27t', x: 's27', lock: 'hard',
       onEnter() { grant(350, 0); },
       spot: () => techWin() ? elRect(nodeEl('i1')) : elRect(document.getElementById('sbTech')),
@@ -386,6 +432,10 @@
         return panelSpot(ci, () => { try { return (typeof panelTab !== 'undefined' && panelTab !== 'army') ? document.getElementById('tabArmy') : (shipBuildRow && shipBuildRow.querySelector('.unitBuy')); } catch (e) { return null; } }); },
       allow: (o) => o.cmd === 'bship',
       done() { return lastCmd && lastCmd.cmd === 'bship'; } },
+    // корабль → Генуя: игрок выделяет корабль и тащит его к вражескому приморскому городу (обстрел авто, нужен tech shipMissile — предвыдан i6)
+    { t: 'sShipt', x: 'sShip', lock: 'none', spot: () => cityRect(CITY_GENOA),
+      allow: (o) => o.cmd === 'shipmove',
+      done() { return !!(lastCmd && lastCmd.cmd === 'shipmove'); } },
 
     /* ── Часть 7: авиация ── */
     { t: 's30t', x: 's30', lock: 'hard',
@@ -402,6 +452,25 @@
         return panelSpot(ci, () => { try { return (typeof panelTab !== 'undefined' && panelTab !== 'army') ? document.getElementById('tabArmy') : (planeBuildRow && planeBuildRow.querySelector('.unitBuy')); } catch (e) { return null; } }); },
       allow: (o) => o.cmd === 'bplane',
       done() { return lastCmd && lastCmd.cmd === 'bplane'; } },
+    // дирижабль → Цюрих: игрок выделяет дирижабль и тащит его к чужому городу (разведка/раскрытие территории)
+    { t: 'sAirt', x: 'sAir', lock: 'none', spot: () => cityRect(CITY_ZURICH),
+      allow: (o) => o.cmd === 'planemove',
+      done() { return !!(lastCmd && lastCmd.cmd === 'planemove'); } },
+
+    /* ── Часть 5: мир — оккупацию Турина закрепляем аннексией ── */
+    { t: 's22t', x: 's22', lock: 'hard', spot: () => elRect(document.getElementById('sbPol')),
+      done() { return polWin(); } },
+    { t: 's23t', x: 's23', lock: 'hard',
+      spot: () => polWin() ? elRect(polBtn(IT, 'peace')) : elRect(document.getElementById('sbPol')),
+      done() { const w = document.getElementById('peaceWin'); return w && w.style.display === 'flex'; } },
+    { t: 's24t', x: 's24', lock: 'hard', spot: () => elRect(document.getElementById('ptLandBtn')),
+      done() { return typeof peaceLand !== 'undefined' && peaceLand === true; } },
+    { t: 's25t', x: 's25', lock: 'hard', spot: () => elRect(document.getElementById('peacePropose')),
+      allow: (o) => o.cmd === 'peace' && o.tg === IT && !!o.land,
+      done() { const c = cliCity(CITY_TURIN); return !atWar(PLAYER, IT) && c && c.owner === PLAYER && !c.occ; } },
+    { t: 's26t', x: 's26', lock: 'none', spot: () => cityRect(CITY_TURIN),
+      onEnter() { stepState.at = performance.now(); try { const w = document.getElementById('peaceResult'); if (w) w.style.display = 'none'; } catch (e) {} },
+      done() { return performance.now() - stepState.at > 4500; } },
 
     /* ── Часть 8: кризис — освобождение Парижа ── */
     { t: 's33t', x: 's33', lock: 'none', danger: true, spot: () => cityRect(CITY_PARIS),
@@ -429,18 +498,22 @@
   function enterStep(i) {
     idx = i; stepState = {}; lastCmd = null;
     const st = STEPS[idx]; if (!st) return;
+    closeMenusExcept(STEP_KEEP[st.t]);   // закрыть менюхи прошлого шага (город/стройка/тех/дипломатия…), кроме нужных текущему
     if (st.onEnter) { try { st.onEnter(); } catch (e) { console.warn('[tut] onEnter', e); } }
     coach.classList.toggle('danger', !!st.danger);
-    coachBtn.style.display = st.final ? 'block' : 'none';
-    if (st.final) { coachBtn.textContent = L().go; coachBtn.onclick = () => endTutorial(false); }
   }
   function render() {
     const st = STEPS[idx]; if (!st) return;
-    coach.style.display = 'block';
+    coach.style.display = 'grid';
     coachTitle.textContent = L()[st.t];
     coachText.textContent = st.text ? st.text() : L()[st.x];
     coachMeta.textContent = `${L().step} ${idx + 1}/${STEPS.length}`;
     coach.querySelector('.tskip').textContent = L().skip;
+    // кнопка внизу карточки: «В бой!» на финале · «Понятно» на ack-шаге (появляется, когда ackReady — напр. открыта панель Турина)
+    if (st.final) { coachBtn.style.display = 'block'; coachBtn.textContent = L().go; coachBtn.onclick = () => endTutorial(false); }
+    else if (st.ack) { const ready = !st.ackReady || st.ackReady();
+      coachBtn.style.display = ready ? 'block' : 'none'; coachBtn.textContent = L().gotit; coachBtn.onclick = () => { stepState.acked = true; }; }
+    else coachBtn.style.display = 'none';
     const r = st.spot ? st.spot() : null;
     if (r) { showSpot(r, st.lock === 'hard'); coach.classList.toggle('bottom', r.y < innerHeight * 0.45); }
     else { hideSpot(); coach.classList.remove('bottom'); }
@@ -479,6 +552,7 @@
   function endTutorial(skipped) {
     window.TUT.active = false; window.TUT.fullVision = false;
     unwrapCmd(); hideSpot();
+    try { if (_origDiplo) { openDiplo = _origDiplo; _origDiplo = null; } } catch (e) {}   // вернуть попап дипломатии
     if (_iv) { clearInterval(_iv); _iv = null; }
     if (cheatHideEl) { cheatHideEl.remove(); cheatHideEl = null; }
     coach.style.display = 'none';
@@ -493,9 +567,12 @@
   }
 
   /* ── запуск: ждём готовности локального сима, авто-выбор Франции ── */
+  let _origDiplo = null;
   function begin() {
     buildUI();
     wrapCmd();
+    // гасим попап дипломатии страны: клик по вражескому городу во время туториала иначе открывает окно политики и сбивает игрока
+    try { if (typeof openDiplo === 'function') { _origDiplo = openDiplo; openDiplo = function () {}; } } catch (e) {}
     window.TUT.active = true;
     window.TUT._dbg = () => ({ idx, step: STEPS[idx] && STEPS[idx].t, ticks: _ticks,
       done: (() => { try { return STEPS[idx].done(); } catch (e) { return 'ERR:' + e.message; } })() });   // отладка

@@ -182,6 +182,30 @@ function applyPerfStressOnce(){
 
 let last=performance.now(), panelTick=0, cityLabelTick=0;
 const cityLabelCamPos=new T3.Vector3().copy(camera.position),cityLabelCamQuat=new T3.Quaternion().copy(camera.quaternion);
+
+// ── кольцо выделения кораблей/дирижаблей (как у города): пульсирующий белый торус вокруг выбранного мувера ──
+const _moverSelRings=[];
+function _moverSelRing(i){
+  if(_moverSelRings[i])return _moverSelRings[i];
+  const m=new T3.Mesh(new T3.TorusGeometry(0.75,0.08,8,32), new T3.MeshBasicMaterial({color:0xffffff}));
+  m.userData.perfGroup='city-ui'; m.rotation.x=Math.PI/2; m.visible=false; m.renderOrder=3; scene.add(m);
+  _moverSelRings[i]=m; return m;
+}
+function updateMoverSelRings(now){
+  const k=1+Math.sin(now/220)*0.10;
+  let n=0;
+  for(const u of selectedUnits){                                  // selectedUnits хранит выбранных муверов (в соло — призраки)
+    if(!u||!u.group||(u.kind!==1&&u.kind!==2))continue;           // только корабль(1)/дирижабль(2)
+    const p=u.group.position, m=_moverSelRing(n++);
+    // корабль — кольцо над поверхностью под ним (вода или берег у верфи — иначе уходит под террейн); дирижабль — гало на его высоте
+    let y;
+    if(u.kind===2){ y=p.y; }
+    else { const gy=(typeof getTerrainHeight==='function')?getTerrainHeight(p.x,p.z):-0.05; y=Math.max(gy, (typeof WATER_Y_SHIP!=='undefined'?WATER_Y_SHIP:-0.05))+0.18; }
+    m.position.set(p.x, y, p.z);
+    m.scale.set(k,k,k); m.visible=true;
+  }
+  for(let i=n;i<_moverSelRings.length;i++)_moverSelRings[i].visible=false;   // спрятать лишние из пула
+}
 function loop(now){
   const dt=Math.min((now-last)/1000,.05); last=now;
   updateCameraKeys(dt);
@@ -248,6 +272,7 @@ function loop(now){
     if(c.siege)c.bring.scale.set(bk,bk,bk);
   }
   if(MP.on)mpTick(now,dt);   // хост рассылает снапшот/сущности; гость интерполирует зеркала
+  updateMoverSelRings(now);  // кольца выделения кораблей/дирижаблей (после mpTick — позиции призраков обновлены)
   updateHUD(); updateWarPreps();
   panelTick+=dt; if(panelTick>0.25){panelTick=0;if(regionsDirty){regionsDirty=false;assignRegions();}updatePanel();refreshTechAfford();refreshHeroBar();if(diploTarget!=null)refreshDiplo();refreshPol();if(peaceTarget!=null)refreshPeaceDialog();}  // refresh UI
   applyPerfStressOnce();
