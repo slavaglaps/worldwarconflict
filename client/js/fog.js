@@ -62,6 +62,9 @@
       VISION_SHIP: typeof VISION_SHIP !== 'undefined' ? VISION_SHIP : 8,
       VISION_PLANE: typeof VISION_PLANE !== 'undefined' ? VISION_PLANE : 12,
       VISION_TOWER: typeof VISION_TOWER !== 'undefined' ? VISION_TOWER : 9,
+      // без этих двух computeVision брал coastRadius=0 → полоса моря у берега НЕ раскрывалась в тумане
+      VISION_COAST: typeof VISION_COAST !== 'undefined' ? VISION_COAST : 0,
+      VISION_COAST_SEARCH: typeof VISION_COAST_SEARCH !== 'undefined' ? VISION_COAST_SEARCH : 1,
     };
     shim.factions = (typeof FACTIONS !== 'undefined') ? FACTIONS.length : 32;
     shim.cities = cities;
