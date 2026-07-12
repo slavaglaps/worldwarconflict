@@ -44,7 +44,7 @@
     s16t: 'Мобилизация', s16: 'Армия мобилизуется — атаковать сразу нельзя. Осталось: {s} сек.',
     s17t: 'Вся армия', s17: 'Передвинь ползунок «Send» на 100% — в атаку пойдёт весь гарнизон, а не половина.',
     s18t: 'Наступление', s18: 'Кликни по своему Лиону, затем по итальянскому Турину — армия выйдет на осаду.',
-    s19t: 'Удар с воздуха', s19: 'Активируй 💥 «Ковровую бомбардировку» Шторма — она выбьет 40 защитников Турина.',
+    s19t: 'Удар с воздуха', s19: 'Нажми 💥 «Ковровую бомбардировку» Шторма на панели героя (слева внизу) — она выбьет 40 защитников Турина.',
     s20t: 'Осада', s20: 'Армия штурмует Турин. Дождись захвата города.',
     s21t: 'Оккупация', s21: 'Кликни по захваченному Турину. Город оккупирован: найм, прокачка и стройка ЗАБЛОКИРОВАНЫ, пока не закрепишь его миром.',
     s22t: 'К переговорам', s22: 'Снова открой панель дипломатии.',
@@ -84,7 +84,7 @@
     s16t: 'Mobilization', s16: 'The army is mobilizing — you cannot attack yet. Remaining: {s} s.',
     s17t: 'Full force', s17: 'Set the “Send” slider to 100% — the whole garrison will attack, not half.',
     s18t: 'Offensive', s18: 'Click your Lyon, then Italian Turin — the army will march to siege.',
-    s19t: 'Air strike', s19: 'Activate Storm’s 💥 “Carpet Bombing” — it wipes out 40 of Turin’s defenders.',
+    s19t: 'Air strike', s19: 'Press Storm’s 💥 “Carpet Bombing” on the hero bar (bottom-left) — it wipes out 40 of Turin’s defenders.',
     s20t: 'Siege', s20: 'Your army is storming Turin. Wait for the capture.',
     s21t: 'Occupation', s21: 'Click captured Turin. It is occupied: recruiting, upgrades and construction are LOCKED until you secure it with a peace treaty.',
     s22t: 'To the table', s22: 'Open the diplomacy panel again.',
@@ -110,6 +110,7 @@
   const cliCity = (idx) => { try { return cities.find(c => c && c.idx === idx) || null; } catch (e) { return null; } };
   const simCity = (idx) => { const s = sim(); return s ? (s.cities.find(c => c.idx === idx) || null) : null; };
   const say = (m) => { try { toast(m); } catch (e) {} };
+  const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
   /* ── оверлей: 4 щита (затемнение+блок кликов) + кольцо + коуч-карточка ── */
   const Z = 99990;
@@ -153,6 +154,8 @@
   // r = {x,y,w,h} в px; hard=true → щиты ловят клики вне дырки
   function showSpot(r, hard) {
     const W = innerWidth, H = innerHeight, pad = 6;
+    // цель целиком за экраном (напр. кнопка в непроскролленной панели) → кольцо с отрицательной высотой; прячем вместо мусора
+    if (r.y >= H - 4 || r.x >= W - 4 || r.y + r.h <= 4 || r.x + r.w <= 4) { hideSpot(); return; }
     const x = Math.max(0, r.x - pad), y = Math.max(0, r.y - pad),
       w = Math.min(W - x, r.w + pad * 2), h = Math.min(H - y, r.h + pad * 2);
     const rects = [
@@ -167,7 +170,15 @@
     ring.style.display = 'block';
     ring.style.left = x + 'px'; ring.style.top = y + 'px'; ring.style.width = w + 'px'; ring.style.height = h + 'px';
   }
-  function elRect(el) { if (!el) return null; const r = el.getBoundingClientRect(); if (!r.width && !r.height) return null; return { x: r.left, y: r.top, w: r.width, h: r.height }; }
+  function elRect(el) {
+    if (!el) return null;
+    let r = el.getBoundingClientRect(); if (!r.width && !r.height) return null;
+    // цель в скролящейся панели ушла за вьюпорт (напр. карточка корабля внизу #armyTab) → доскроллим к ней
+    if (r.bottom > innerHeight - 8 || r.top < 48) {
+      try { el.scrollIntoView({ block: 'nearest' }); r = el.getBoundingClientRect(); } catch (e) {}
+    }
+    return { x: r.left, y: r.top, w: r.width, h: r.height };
+  }
   // город → экранный прямоугольник (проекция как у city-labels), с клампом к краям экрана
   function cityRect(idx) {
     const c = cliCity(idx); if (!c || typeof camera === 'undefined') return null;
@@ -217,12 +228,19 @@
     origCmd = MP.cmd;
     MP.cmd = (o) => {
       const st = STEPS[idx];
-      if (window.TUT.active && st && !(st.allow && st.allow(o))) { say(L().nudge); return; }
-      origCmd(o);
+      if (window.TUT.active && st && !(st.allow && st.allow(o))) {
+        say(L().nudge);
+        // activateHeroAbility ставит оптимистичный КД ПОСЛЕ вызова MP.cmd — откат через микротаск, чтобы выполниться позже него
+        if (o.cmd === 'hero') queueMicrotask(() => { try { const h = (heroSlots[PLAYER] || [])[o.h | 0]; if (h && h.cd) { h.cd[o.ab | 0] = 0; refreshHeroBar(); } } catch (e) {} });
+        return false;
+      }
+      const accepted = origCmd(o);
+      if (accepted === false) return false;
       lastCmd = o;
       // исследования туториала не должны тянуться 22-80с: доводим прогресс почти до конца
       if (o.cmd === 'research') { const s = sim(); const n = (typeof NODE !== 'undefined') && NODE[o.node];
         if (s && n && s.techRes && s.techRes[PLAYER]) { const r = s.techRes[PLAYER].find(x => x.id === o.node); if (r) r.t = Math.max(r.t, n.t - 1.2); } }
+      return true;
     };
   }
   function unwrapCmd() { if (origCmd) { MP.cmd = origCmd; origCmd = null; } }
@@ -245,6 +263,30 @@
   const yardCityIdx = (air) => { const s = sim(); if (!s) return -1; const c = s.cities.find(x => x.owner === PLAYER && (air ? (x.hasAirport || x.isAirport) : (x.hasShipyard || x.isShipyard))); return c ? c.idx : -1; };
   // закрыть меню строительства (если открыто) — при переоткрытии оно обновит tech-локи плиток
   const closeBuild = () => { try { if (buildWin()) document.getElementById('sbBuild').click(); } catch (e) {} };
+
+  // ── закрытие транзиентных менюх при переходе между шагами ──
+  //   Каждая менюха имеет свой «закрывашка». На входе в шаг закрываем все, КРОМЕ перечисленных в STEP_KEEP.
+  //   'panel' закрывается снятием выделения города (панель показывается только при выбранном 1 городе).
+  const MENU_CLOSERS = {
+    build: () => { try { if (buildWin()) document.getElementById('sbBuild').click(); } catch (e) {} },
+    tech:  () => { try { if (techWin()) document.getElementById('techClose').click(); } catch (e) {} },
+    pol:   () => { try { if (polWin()) document.getElementById('polClose').click(); } catch (e) {} },
+    hero:  () => { try { if (heroWinOpen()) closeHeroPick(); } catch (e) {} },
+    diplo: () => { try { if (typeof closeDiplo === 'function') closeDiplo(); } catch (e) {} },
+    peace: () => { try { if (typeof closePeace === 'function') closePeace(); } catch (e) {} },
+    panel: () => { try { clearSel(); if (typeof panelCity !== 'undefined') panelCity = null; updatePanel(); } catch (e) {} },
+  };
+  // менюхи, которые ШАГ оставляет открытыми (продолжает использовать); остальные закрываются на входе. Ключ = поле t шага.
+  const STEP_KEEP = {
+    s4t: ['panel'], s5t: ['panel'], s6t: ['build'], s7t: ['build'],
+    s9t: ['tech'], s10t: ['tech'], s13t: ['hero'], s15t: ['pol'],
+    s23t: ['pol'], s24t: ['pol', 'peace'], s25t: ['pol', 'peace'],
+    s35t: ['panel'],   // сохранить мультивыделение городов для освобождения Парижа (panel-закрывашка снимает выделение)
+  };
+  function closeMenusExcept(keep) {
+    const k = new Set(keep || []);
+    for (const m in MENU_CLOSERS) if (!k.has(m)) MENU_CLOSERS[m]();
+  }
   // спот «панель города X» → если панель не на нём, светим сам город, иначе — элемент внутри панели
   const panelSpot = (cidx, innerEl) => {
     try { if (typeof panelCity !== 'undefined' && panelCity && panelCity.idx === cidx) { const r = elRect(innerEl && innerEl()); if (r) return r; } } catch (e) {}
@@ -254,11 +296,17 @@
   const STEPS = [
     /* ── Часть 1: основы ── */
     { t: 's1t', x: 's1', lock: 'none',   // камера орбитальная: пан двигает target (см. input.js/applyCam)
-      onEnter() { try { stepState.tx = target.x; stepState.tz = target.z; } catch (e) {} },
-      done() { try { return (Math.abs(target.x - stepState.tx) + Math.abs(target.z - stepState.tz)) > 3; } catch (e) { return false; } } },
+      onEnter() { stepState.lock = nowMs() + 700; try { stepState.tx = target.x; stepState.tz = target.z; } catch (e) {} },
+      done() { try {
+        if (nowMs() < stepState.lock) { stepState.tx = target.x; stepState.tz = target.z; return false; }   // абсорбируем автофокус камеры на старте
+        return (Math.abs(target.x - stepState.tx) + Math.abs(target.z - stepState.tz)) > 3;
+      } catch (e) { return false; } } },
     { t: 's2t', x: 's2', lock: 'none',   // зум = orbit.r (колесо)
-      onEnter() { try { stepState.r = orbit.r; } catch (e) {} },
-      done() { try { return Math.abs(orbit.r - stepState.r) > 3; } catch (e) { return false; } } },
+      onEnter() { stepState.lock = nowMs() + 500; try { stepState.r = orbit.r; } catch (e) {} },
+      done() { try {
+        if (nowMs() < stepState.lock) { stepState.r = orbit.r; return false; }
+        return Math.abs(orbit.r - stepState.r) > 3;
+      } catch (e) { return false; } } },
     { t: 's3t', x: 's3', lock: 'soft', spot: () => cityRect(CITY_PARIS),
       done() { return typeof panelCity !== 'undefined' && panelCity && panelCity.idx === CITY_PARIS; } },
 
@@ -268,12 +316,13 @@
       spot: () => panelSpot(CITY_PARIS, () => document.getElementById('tabArmy')),
       done() { return typeof panelTab !== 'undefined' && panelTab === 'army' && panelCity && panelCity.owner === PLAYER; } },
     { t: 's5t', x: 's5', lock: 'soft',
+      onEnter() { const c = simCity(CITY_PARIS); stepState.queued = c ? c.queued : 0; },
       spot: () => panelSpot(CITY_PARIS, () => { try { return buyRows['inf_5']; } catch (e) { return null; } }),
-      allow: (o) => o.cmd === 'buy',
-      done() { return lastCmd && lastCmd.cmd === 'buy'; } },
+      allow: (o) => o.cmd === 'buy' && (o.c | 0) === CITY_PARIS && String(o.spec) === '5' && (!o.unit || o.unit === 'inf'),
+      done() { const c = simCity(CITY_PARIS); return !!(c && c.queued > stepState.queued); } },
     { t: 's6t', x: 's6', lock: 'hard', spot: () => elRect(document.getElementById('sbBuild')),
       done() { return buildWin(); } },
-    { t: 's7t', x: 's7', lock: 'soft',
+    { t: 's7t', x: 's7', lock: 'soft', buildRole: 'farm',
       onEnter() { stepState.farms = bCount('farm'); },
       spot: () => { const el = tileEl('windmill'); return (buildWin() && el && !el.classList.contains('sel')) ? elRect(el) : null; },
       done() { return bCount('farm') > stepState.farms; } },
@@ -291,7 +340,7 @@
       spot: () => techWin() ? elRect(nodeEl('m2')) : elRect(document.getElementById('sbTech')),
       allow: (o) => o.cmd === 'research' && o.node === 'm2',
       done() { return techHas(PLAYER, 'm2'); } },
-    { t: 's11t', x: 's11', lock: 'soft',
+    { t: 's11t', x: 's11', lock: 'soft', buildRole: 'tower',
       onEnter() { stepState.towers = bCount('tower'); closeBuild(); try { if (techWin()) document.getElementById('techClose').click(); } catch (e) {} },
       spot: () => { if (!buildWin()) return elRect(document.getElementById('sbBuild')); const el = tileEl('tower_A'); return (el && !el.classList.contains('sel')) ? elRect(el) : null; },
       done() { return bCount('tower') > stepState.towers; } },
@@ -329,10 +378,10 @@
       allow: (o) => o.cmd === 'army' && o.a === CITY_LYON && o.b === CITY_TURIN,
       done() { return lastCmd && lastCmd.cmd === 'army' && lastCmd.b === CITY_TURIN; } },
     { t: 's19t', x: 's19', lock: 'hard',
-      onEnter() { const s = sim(); if (s) s.airOrder[PLAYER] = { kind: 'bomb', cityIdx: CITY_TURIN }; }, // авиаудар ляжет точно по Турину
+      onEnter() { const s = sim(), c = simCity(CITY_TURIN); stepState.units = c ? c.units : Infinity; if (s) s.airOrder[PLAYER] = { kind: 'bomb', cityIdx: CITY_TURIN }; }, // авиаудар ляжет точно по Турину
       spot: () => elRect(stormAbilityEl()),
-      allow: (o) => o.cmd === 'hero',
-      done() { return lastCmd && lastCmd.cmd === 'hero'; },
+      allow: (o) => o.cmd === 'hero' && (o.ab | 0) === 0,          // только «Ковровая бомбардировка» — щит (ab=1) не должен засчитывать шаг
+      done() { const c = simCity(CITY_TURIN); return !!(lastCmd && lastCmd.cmd === 'hero' && (lastCmd.ab | 0) === 0 && c && c.units < stepState.units); },
       onDone() { const s = sim(); if (s) s.airOrder[PLAYER] = null; } },
     { t: 's20t', x: 's20', lock: 'none', spot: () => cityRect(CITY_TURIN),
       done() { const c = cliCity(CITY_TURIN); return c && c.owner === PLAYER; } },
@@ -359,7 +408,7 @@
       spot: () => techWin() ? elRect(nodeEl('i1')) : elRect(document.getElementById('sbTech')),
       allow: (o) => o.cmd === 'research' && o.node === 'i1',
       done() { return techHas(PLAYER, 'i1'); } },
-    { t: 's28t', x: 's28', lock: 'soft',
+    { t: 's28t', x: 's28', lock: 'soft', buildRole: 'shipyard',
       onEnter() { closeBuild(); try { if (techWin()) document.getElementById('techClose').click(); } catch (e) {} },
       spot: () => { if (!buildWin()) return elRect(document.getElementById('sbBuild')); const el = tileEl('shipyard'); return (el && !el.classList.contains('sel')) ? elRect(el) : null; },
       done() { return yardCityIdx(false) >= 0; } },
@@ -375,7 +424,7 @@
       spot: () => techWin() ? elRect(nodeEl('i8')) : elRect(document.getElementById('sbTech')),
       allow: (o) => o.cmd === 'research' && o.node === 'i8',
       done() { return techHas(PLAYER, 'i8'); } },
-    { t: 's31t', x: 's31', lock: 'soft',
+    { t: 's31t', x: 's31', lock: 'soft', buildRole: 'airport',
       onEnter() { closeBuild(); try { if (techWin()) document.getElementById('techClose').click(); } catch (e) {} },
       spot: () => { if (!buildWin()) return elRect(document.getElementById('sbBuild')); const el = tileEl('airport'); return (el && !el.classList.contains('sel')) ? elRect(el) : null; },
       done() { return yardCityIdx(true) >= 0; } },
@@ -411,6 +460,7 @@
   function enterStep(i) {
     idx = i; stepState = {}; lastCmd = null;
     const st = STEPS[idx]; if (!st) return;
+    closeMenusExcept(STEP_KEEP[st.t]);   // закрыть менюхи прошлого шага (город/стройка/тех/дипломатия…), кроме нужных текущему
     if (st.onEnter) { try { st.onEnter(); } catch (e) { console.warn('[tut] onEnter', e); } }
     coach.classList.toggle('danger', !!st.danger);
     coachBtn.style.display = st.final ? 'block' : 'none';
@@ -461,6 +511,9 @@
   function endTutorial(skipped) {
     window.TUT.active = false; window.TUT.fullVision = false;
     unwrapCmd(); hideSpot();
+    try { if (_origDiplo) { openDiplo = _origDiplo; _origDiplo = null; } } catch (e) {}   // вернуть попап дипломатии
+    if (_iv) { clearInterval(_iv); _iv = null; }
+    if (cheatHideEl) { cheatHideEl.remove(); cheatHideEl = null; }
     coach.style.display = 'none';
     const s = sim();
     if (s) {
@@ -473,19 +526,27 @@
   }
 
   /* ── запуск: ждём готовности локального сима, авто-выбор Франции ── */
+  let _origDiplo = null;
   function begin() {
     buildUI();
     wrapCmd();
+    // гасим попап дипломатии страны: клик по вражескому городу во время туториала иначе открывает окно политики и сбивает игрока
+    try { if (typeof openDiplo === 'function') { _origDiplo = openDiplo; openDiplo = function () {}; } } catch (e) {}
     window.TUT.active = true;
     window.TUT._dbg = () => ({ idx, step: STEPS[idx] && STEPS[idx].t, ticks: _ticks,
       done: (() => { try { return STEPS[idx].done(); } catch (e) { return 'ERR:' + e.message; } })() });   // отладка
     window.TUT._tick = tick;                     // ручной прогон (тесты/отладка в скрытой вкладке)
+    window.TUT.allowBuild = (role) => { const st = STEPS[idx]; return !!(st && st.buildRole === role); };
+    // «Cheat: all» открывает все техи МИМО MP.cmd (guard бессилен) и ломает шаги 9/10/27/30 — прячем на время туториала
+    cheatHideEl = document.createElement('style');
+    cheatHideEl.textContent = '#techCheatAll{display:none!important}';
+    document.head.appendChild(cheatHideEl);
     enterStep(0);
     requestAnimationFrame(rafLoop);
-    setInterval(tick, 250);                      // страховка: rAF заморожен в скрытой вкладке
+    _iv = setInterval(tick, 250);                // страховка: rAF заморожен в скрытой вкладке
     console.log('[tut] туториал запущен');
   }
-  let _ticks = 0;
+  let _ticks = 0, _iv = null, cheatHideEl = null;
   // скрыть окно выбора страны до автостарта (иначе мигнёт)
   const preHide = document.createElement('style'); preHide.textContent = '#countryWin{display:none!important}';
   document.head.appendChild(preHide);

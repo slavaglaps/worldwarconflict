@@ -83,6 +83,13 @@
 
   <div class="grid">
     <div class="card">
+      <h2>Первый раз?</h2>
+      <div class="row">
+        <button id="tutBtn">🎓 Обучение</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Создать комнату</h2>
       <div class="row">
         <input id="roomName" placeholder="Название комнаты" maxlength="40">
@@ -113,6 +120,9 @@
   let client = null, lobby = null;
 
   function setStatus(t, cls){ statusEl.textContent = t; statusEl.className = 'status' + (cls?' '+cls:''); }
+
+  // обучение → соло game-hex.html с форсом туториала (?tut=1 запускает 36-шаговый онбординг)
+  $('tutBtn').onclick = () => { location.href = 'game-hex.html?tut=1'; };
 
   // создать комнату → game-hex.html создаёт её с этим именем
   $('createBtn').onclick = () => {
