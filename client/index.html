@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>World War Conflict — Лобби</title>
+<title>World War Conflict — Lobby</title>
 <style>
   @font-face{font-family:KnightsQuest;src:url('assets/fonts/KnightsQuest.ttf') format('truetype');font-display:swap}
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{min-height:100%;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#e9efe8;
+  html,body{min-height:100%;font-family:KnightsQuest,Georgia,serif;color:#e9efe8;
     background:
       radial-gradient(circle at 50% 22%,rgba(90,114,92,.24),transparent 36%),
       radial-gradient(circle at 14% 86%,rgba(98,78,38,.22),transparent 31%),
@@ -28,16 +28,17 @@
   .title{text-align:center;font-family:KnightsQuest,Georgia,serif;font-size:48px;line-height:1;letter-spacing:.9px;text-transform:uppercase;color:#efe7d4;text-shadow:0 4px 18px rgba(0,0,0,.86)}
   .sub{text-align:center;color:#a9b59d;font-weight:700;font-size:14px;letter-spacing:.8px;text-transform:uppercase;margin-top:9px}
   .status{justify-self:end;min-width:188px;padding:10px 13px;border:1px solid rgba(151,130,83,.58);border-radius:3px;background:rgba(8,14,13,.66);
-    color:#aeb9ad;font-size:12px;font-weight:800;line-height:1.35;text-align:center;text-transform:uppercase;letter-spacing:.55px}
+    color:#aeb9ad;font-size:15px;font-weight:800;line-height:1.35;text-align:center;text-transform:uppercase;letter-spacing:.55px}
   .status.ok{color:#91d49b;border-color:rgba(96,159,92,.62)} .status.err{color:#e98b7c;border-color:rgba(185,85,69,.62)}
-  .grid{position:relative;z-index:1;display:grid;grid-template-columns:minmax(320px,420px) 1fr;gap:22px;align-items:start}
+  .grid{position:relative;z-index:1;display:grid;grid-template-columns:minmax(300px,360px) minmax(560px,1fr);gap:22px;align-items:start}
+  .leftStack{display:flex;flex-direction:column;gap:18px}
   .card{position:relative;border:1px solid rgba(157,138,92,.44);border-radius:3px;padding:18px;background:
     linear-gradient(180deg,rgba(23,36,34,.78),rgba(9,16,16,.88));box-shadow:0 12px 34px rgba(0,0,0,.42),inset 0 0 0 1px rgba(255,236,181,.035)}
   .card:before{content:"";position:absolute;inset:6px;border:1px solid rgba(197,166,103,.12);pointer-events:none}
   .card h2{position:relative;z-index:1;margin-bottom:15px;font-family:KnightsQuest,Georgia,serif;font-size:25px;font-weight:700;letter-spacing:.5px;color:#d7c394;text-transform:uppercase;text-shadow:0 2px 9px #000}
   .row{position:relative;z-index:1;display:flex;flex-direction:column;gap:12px}
   input{width:100%;height:54px;background:rgba(8,15,17,.82);border:1px solid rgba(84,103,92,.8);border-radius:3px;color:#edf2ec;
-    padding:0 15px;font-size:15px;font-weight:700;outline:none;box-shadow:inset 0 2px 10px rgba(0,0,0,.28)}
+    padding:0 15px;font-family:KnightsQuest,Georgia,serif;font-size:19px;font-weight:700;outline:none;box-shadow:inset 0 2px 10px rgba(0,0,0,.28)}
   input::placeholder{color:#738273}
   input:focus{border-color:#d2b46d;box-shadow:0 0 0 2px rgba(210,180,109,.14),inset 0 2px 10px rgba(0,0,0,.28)}
   button{height:54px;border:1px solid rgba(207,171,101,.78);clip-path:polygon(7% 0,93% 0,100% 50%,93% 100%,7% 100%,0 50%);
@@ -51,7 +52,7 @@
     background:linear-gradient(180deg,rgba(13,24,27,.88),rgba(7,14,16,.92));box-shadow:inset 0 0 0 1px rgba(255,255,255,.025)}
   .rm:hover{border-color:rgba(199,171,109,.62);background:linear-gradient(180deg,rgba(20,34,35,.9),rgba(8,16,18,.94))}
   .rm .nm{font-family:KnightsQuest,Georgia,serif;font-size:23px;color:#efe2c4;letter-spacing:.35px;text-shadow:0 2px 9px #000}
-  .rm .meta{color:#9ca99a;font-size:13px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;margin-top:4px}
+  .rm .meta{color:#9ca99a;font-size:16px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;margin-top:4px}
   .rm .full{color:#df9078}
   .empty{min-height:190px;display:grid;place-items:center;text-align:center;color:#8f9b8e;font-family:KnightsQuest,Georgia,serif;font-size:23px;border:1px dashed rgba(151,130,83,.32);background:rgba(8,14,13,.42)}
   .pill{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:25px;margin-left:8px;padding:0 10px;border:1px solid rgba(207,171,101,.54);
@@ -78,27 +79,28 @@
     <div>
       <div class="title">World War Conflict</div>
     </div>
-    <div class="status" id="status">подключение к серверу...</div>
+    <div class="status" id="status">connecting...</div>
   </div>
 
   <div class="grid">
-    <div class="card">
-      <h2>Первый раз?</h2>
-      <div class="row">
-        <button id="tutBtn">🎓 Обучение</button>
+    <div class="leftStack">
+      <div class="card">
+        <h2>Create Room</h2>
+        <div class="row">
+          <input id="roomName" placeholder="Room name" maxlength="40">
+          <button id="createBtn">Create</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <button id="tutBtn">Tutorial</button>
+        </div>
       </div>
     </div>
 
     <div class="card">
-      <h2>Создать комнату</h2>
-      <div class="row">
-        <input id="roomName" placeholder="Название комнаты" maxlength="40">
-        <button id="createBtn">Создать</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Активные комнаты <span class="pill" id="count">0</span></h2>
+      <h2>Active Rooms <span class="pill" id="count">0</span></h2>
       <div class="rooms" id="rooms"></div>
     </div>
   </div>
@@ -107,7 +109,7 @@
 <script src="vendor/colyseus.js"></script>
 <script>
 (function(){
-  // эндпоинт: localhost → локальный :2567, прочее → прод (Colyseus Cloud). ?cs=wss://… → override.
+  // Endpoint: localhost uses local :2567, everything else uses production Colyseus Cloud. ?cs=wss://... overrides.
   const params = new URLSearchParams(location.search);
   const PROD = 'wss://de-fra-fe578df7.colyseus.cloud';
   const isLocal = location.hostname==='localhost' || location.hostname==='127.0.0.1';
@@ -121,12 +123,12 @@
 
   function setStatus(t, cls){ statusEl.textContent = t; statusEl.className = 'status' + (cls?' '+cls:''); }
 
-  // обучение → соло game-hex.html с форсом туториала (?tut=1 запускает 36-шаговый онбординг)
+  // Tutorial starts the solo game with the forced onboarding flow.
   $('tutBtn').onclick = () => { location.href = 'game-hex.html?tut=1'; };
 
-  // создать комнату → game-hex.html создаёт её с этим именем
+  // Create room: game-hex.html creates it with this name.
   $('createBtn').onclick = () => {
-    const name = ($('roomName').value || '').trim() || ('Игра-' + Math.random().toString(36).slice(2,6));
+    const name = ($('roomName').value || '').trim() || ('Game-' + Math.random().toString(36).slice(2,6));
     location.href = 'game-hex.html?cs=1&create=1&mp=' + encodeURIComponent(name);
   };
   $('roomName').addEventListener('keydown', e => { if(e.key==='Enter') $('createBtn').click(); });
@@ -134,17 +136,17 @@
   function render(){
     const list = [...rooms.values()].filter(r => r.name === 'game');
     countEl.textContent = list.length;
-    if(!list.length){ roomsEl.innerHTML = '<div class="empty">Нет активных комнат</div>'; return; }
+    if(!list.length){ roomsEl.innerHTML = '<div class="empty">No active rooms</div>'; return; }
     roomsEl.innerHTML = '';
     list.sort((a,b)=> (b.clients||0)-(a.clients||0));
     for(const r of list){
-      const nm = (r.metadata && r.metadata.name) || 'Игра';
+      const nm = (r.metadata && r.metadata.name) || 'Game';
       const cur = r.clients||0, max = r.maxClients||24, full = cur>=max;
       const el = document.createElement('div'); el.className='rm';
       el.innerHTML = `<div><div class="nm">${escapeHtml(nm)}</div>
-        <div class="meta"><b class="${full?'full':''}">${cur}/${max}</b> игроков${(r.metadata&&r.metadata.over)?' · завершена':''}</div></div>`;
+        <div class="meta"><b class="${full?'full':''}">${cur}/${max}</b> players${(r.metadata&&r.metadata.over)?' · finished':''}</div></div>`;
       const btn = document.createElement('button');
-      btn.className='ghost'; btn.textContent = full ? 'Заполнена' : 'Войти'; btn.disabled = full;
+      btn.className='ghost'; btn.textContent = full ? 'Full' : 'Join'; btn.disabled = full;
       btn.onclick = () => { location.href = 'game-hex.html?cs=1&rid=' + encodeURIComponent(r.roomId); };
       el.appendChild(btn);
       roomsEl.appendChild(el);
@@ -156,14 +158,14 @@
     try{
       client = new Colyseus.Client(ENDPOINT);
       lobby = await client.joinOrCreate('lobby');
-      setStatus('онлайн · обновляется в реальном времени', 'ok');
+      setStatus('online · live rooms', 'ok');
       lobby.onMessage('rooms', (all) => { rooms.clear(); all.forEach(r => rooms.set(r.roomId, r)); render(); });
       lobby.onMessage('+', ([roomId, room]) => { rooms.set(roomId, room); render(); });
       lobby.onMessage('-', (roomId) => { rooms.delete(roomId); render(); });
-      lobby.onLeave(() => setStatus('соединение потеряно — обнови страницу', 'err'));
+      lobby.onLeave(() => setStatus('connection lost · refresh', 'err'));
       render();
     }catch(e){
-      setStatus('сервер недоступен: ' + (e.message||e), 'err');
+      setStatus('server unavailable: ' + (e.message||e), 'err');
       render();
       console.error(e);
     }
