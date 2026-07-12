@@ -8,7 +8,7 @@ module.exports = {
   MAX_SQUADS: 50, MAX_SHIPS: 60, MAX_PLANES: 60,
 
   // 🌫 туман войны: радиусы обзора (в тайлах) + период пересчёта маски (сек)
-  VISION_SQUAD: 6, VISION_SHIP: 8, VISION_PLANE: 12, VISION_TOWER: 9, VISION_COAST: 5, VISION_REFRESH: 0.4,
+  VISION_SQUAD: 6, VISION_SHIP: 8, VISION_PLANE: 12, VISION_TOWER: 9, VISION_COAST: 13, VISION_COAST_SEARCH: 3, VISION_REFRESH: 0.4,
 
   // 👥 манпауэр (лимит армии от городов)
   MP_BASE: 20, MP_PER_SIZE: 12, MP_PER_TIER: 12,        // потолок на город

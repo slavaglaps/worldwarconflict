@@ -79,6 +79,18 @@ function stampWaterDisc(mask, GRID, x, z, radius) {
   }
 }
 
+function hasWaterNear(GRID, x, z, radius) {
+  const r = Math.max(1, Math.round(radius));
+  for (let dx = -r; dx <= r; dx++) {
+    const px = x + dx; if (px < 0 || px >= GRID) continue;
+    for (let dz = -r; dz <= r; dz++) {
+      const pz = z + dz; if (pz < 0 || pz >= GRID || dx * dx + dz * dz > r * r) continue;
+      if (isWaterAt(px, pz)) return true;
+    }
+  }
+  return false;
+}
+
 // Полная маска видимости фракции. sim — Sim; out — переиспользуемый Uint8Array (опц.).
 function computeVision(sim, fid, out) {
   const GRID = sim.K.GRID;
@@ -104,18 +116,15 @@ function computeVision(sim, fid, out) {
     if (ci !== 65535 && cityOwn[ci] && !isWaterAt(x, z)) mask[i] = 1;
   }
 
-  // Небольшая полоса моря вдоль своей/союзной территории. Штампуем только
-  // береговые клетки суши, чтобы цена не зависела от площади всей страны.
+  // Полоса моря вдоль своей/союзной территории. На hex-карте береговая вода
+  // не всегда лежит прямо в 8 соседях растра, поэтому ищем воду в малом радиусе,
+  // но всё ещё штампуем только от уже видимой суши, чтобы не открыть океан Вороного.
   const coastRadius = K.VISION_COAST || 0;
+  const coastSearch = K.VISION_COAST_SEARCH || 1;
   if (coastRadius > 0) for (let x = 0; x < GRID; x++) for (let z = 0; z < GRID; z++) {
     const i = x * GRID + z;
     if (!mask[i] || isWaterAt(x, z)) continue;
-    let coast = false;
-    for (let dx = -1; dx <= 1 && !coast; dx++) for (let dz = -1; dz <= 1; dz++) {
-      if ((!dx && !dz) || x + dx < 0 || z + dz < 0 || x + dx >= GRID || z + dz >= GRID) continue;
-      if (isWaterAt(x + dx, z + dz)) { coast = true; break; }
-    }
-    if (coast) stampWaterDisc(mask, GRID, x, z, coastRadius);
+    if (hasWaterNear(GRID, x, z, coastSearch)) stampWaterDisc(mask, GRID, x, z, coastRadius);
   }
 
   // 2) свои отряды/корабли/самолёты — «фонарики» (разведка боем)
