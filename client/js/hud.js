@@ -186,6 +186,7 @@ function buildPanelRows(){
   bb.insertAdjacentHTML('beforeend',panelSectionTitle('Recruit'));
   const rg=document.createElement('div'); rg.className='recruitGrid'; hireTypeBtns={};
   for(const u of PANEL_UNITS){
+    if(unitTypeLocked(u.id))continue;   // не показываем залоченные техом типы (лучники/конница) — без мёртвых «TECH»-кнопок; появятся после исследования
     const card=document.createElement('div'); card.className='unitCard'; card.dataset.unit=u.id;
     card.innerHTML=`<div class="unitArt">${u.icon}</div><div class="unitName">${u.label}</div><div class="unitBtns"></div>`;
     const btns=card.querySelector('.unitBtns');
@@ -196,10 +197,6 @@ function buildPanelRows(){
     }
     card.addEventListener('click',()=>{ if((panelCity&&panelCity.occ)||unitTypeLocked(u.id))return; hireType=u.id;updateHireTypeBtns();});
     rg.appendChild(card); hireTypeBtns[u.id]=card;
-  }
-  { const card=document.createElement('div'); card.className='unitCard locked';
-    card.innerHTML='<div class="unitArt">♞</div><div class="unitName">Knight</div><div class="unitLock">Tech</div>';
-    rg.appendChild(card);
   }
   bb.appendChild(rg);
   { const card=document.createElement('div'); card.className='unitCard vehicleCard';
