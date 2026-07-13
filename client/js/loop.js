@@ -722,6 +722,8 @@ function loop(now){
   }
 
   /* ── гость: зеркала сущностей ── */
+  const ghostSquadPool=new Map();
+  const ghostPoolKey=(owner)=>String(owner|0);
   function ghostMesh(kind,owner){
     const col=(OWNER_COL[owner]!=null?OWNER_COL[owner]:0x9aa6b2), g=new T3.Group(); let lab=null, mat=null;
     g.userData.perfGroup=kind===0?'units':kind===1?'ships':kind===2?'planes':'projectiles';
@@ -744,6 +746,31 @@ function loop(now){
     if(ud&&ud.tm){ for(const b of ud.tm){ if(b.mesh&&b.mesh.dispose)b.mesh.dispose(); if(b.acc&&b.acc.dispose)b.acc.dispose(); b.mesh=null; b.acc=null; } ud.tm=null; }
     if(ud&&ud.shadow){ gh.group.remove(ud.shadow); if(ud.shadow.dispose)ud.shadow.dispose(); ud.shadow=null; }
     if(gh.mat&&gh.mat.dispose)gh.mat.dispose();
+  }
+  function resetSquadGhost(gh){
+    const ud=gh.group.userData;
+    gh.group.visible=true; gh.group.rotation.set(0,0,0); gh.group.scale.set(1,1,1);
+    gh._dying=null; gh._perish=null; gh._dmgT=0; gh._wasF=false; gh._lastUX=null; gh._lastUZ=null; gh._lastUC=null;
+    gh._fracR=null; gh._fracEdge=null; gh.fighting=false; gh.count=0; gh.comp=null; gh.edgeA=null; gh.edgeB=null; gh.frac=0;
+    if(ud){
+      ud.st=null; ud.trail=[]; ud.travelled=0; ud.lastHead=null; ud.fwd=null; ud.dieDir=null; ud._dieAt=null;
+      ud.corpses=null; ud.cheerT=0; ud.battleTgt=null; ud.battleFoeCount=0;
+      if(ud.orbs)for(const u of ud.orbs){u.ex=null;u.ey=null;u.ez=null;u.cy=null;}
+    }
+    if(gh.lab){gh.lab.style.display='none';gh._labVis=false;gh._labN=null;}
+  }
+  function releaseSquadGhost(gh){
+    selectedUnits.delete(gh); resetSquadGhost(gh); scene.remove(gh.group); if(gh.lab)gh.lab.remove();
+    const key=ghostPoolKey(gh.owner), pool=ghostSquadPool.get(key)||[];
+    const maxPool=gh.owner===PLAYER?3:1;
+    if(pool.length>=maxPool){killGhost(gh);return;}
+    pool.push(gh); ghostSquadPool.set(key,pool);
+  }
+  function acquireGhost(kind,owner){
+    if(kind!==0)return ghostMesh(kind,owner);
+    const pool=ghostSquadPool.get(ghostPoolKey(owner)), gh=pool&&pool.pop();
+    if(!gh)return ghostMesh(kind,owner);
+    resetSquadGhost(gh); scene.add(gh.group); if(gh.lab&&labels)labels.appendChild(gh.lab); return gh;
   }
   // рой отряда-призрака: n мини-юнитов по диску (золотой угол) — зеркало солошного Squad._buildCluster
   const ghostUnitDummy=new T3.Object3D();
@@ -1215,11 +1242,31 @@ function loop(now){
     ud.unitScale=(base?base.scale:1);   // 🔒 размер юнита ФИКСИРОВАН (не зависит от числа) — большие армии просто плотнее/шире по шеренге, а не мельче
     placeGhostUnits(gh,performance.now());
   }
+  let ghostWarmOwner=-1, ghostWarmPending=false;
+  function scheduleSquadGhostWarm(owner){
+    owner=owner|0;
+    if(ghostWarmPending&&ghostWarmOwner===owner)return;
+    ghostWarmOwner=owner; ghostWarmPending=true;
+    const run=()=>{
+      ghostWarmPending=false;
+      const pool=ghostSquadPool.get(ghostPoolKey(owner));
+      if((pool&&pool.length)||[...MP.ghosts.values()].some(g=>g.kind===0&&g.owner===owner))return;
+      const gh=ghostMesh(0,owner), n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
+      gh.comp={inf:n-each*2,arc:each,cav:each};
+      ghostSwarm(gh,n);                 // CPU geometry + GPU buffers are prepared outside the send gesture.
+      releaseSquadGhost(gh);
+    };
+    const enqueue=()=>{
+      if(typeof requestIdleCallback==='function')requestIdleCallback(run,{timeout:900});
+      else setTimeout(run,40);
+    };
+    if(typeof ensureUnitModels==='function')ensureUnitModels().then(enqueue,enqueue); else enqueue();
+  }
   function reconcile(list){
     const seen=new Set();
     for(const d of list){ const id=d[0],kind=d[1];
       let gh=MP.ghosts.get(id);
-      if(!gh||gh.kind!==kind){ if(gh)killGhost(gh); gh=ghostMesh(kind,d[2]); MP.ghosts.set(id,gh); gh.group.position.set(d[3],d[4],d[5]); }
+      if(!gh||gh.kind!==kind){ if(gh){if(gh.kind===0)releaseSquadGhost(gh);else killGhost(gh);} gh=acquireGhost(kind,d[2]); MP.ghosts.set(id,gh); gh.group.position.set(d[3],d[4],d[5]); }
       gh._mpid=id; gh.target.set(d[3],d[4],d[5]);
       if(kind===1){ gh.transport=(id.charCodeAt(0)===115&&id.charCodeAt(1)===104&&id.charCodeAt(2)===113); gh.authHeading=(d[7]!=null?d[7]:null); }  // 🚢 транспорт 'shq…' → авторитетный курс [7]
       if(kind===0&&gh.count>d[6])gh._dmgT=performance.now();               // 🔴 потери → красная вспышка метки
@@ -1256,7 +1303,7 @@ function loop(now){
       if(now-tSnap>140){tSnap=now;MP.send(buildSnap(now));}
       if(now-tEnt>70){tEnt=now;const ent=buildEnt();if(ent)MP.send(ent);} return; }
     if(!MP.guest)return;
-    if(MP._lastFid!==PLAYER){ MP._lastFid=PLAYER; MP.send({t:'joinInfo',fid:PLAYER,country:PLAYER_COUNTRY}); setPill(); } // надёжно сообщаем хосту свою фракцию
+    if(MP._lastFid!==PLAYER){ MP._lastFid=PLAYER; MP.send({t:'joinInfo',fid:PLAYER,country:PLAYER_COUNTRY}); setPill(); scheduleSquadGhostWarm(PLAYER); } // надёжно сообщаем хосту свою фракцию
     // ⚔ grid дерущихся kind-0 ghost'ов (раз в кадр): поиск боевой цели становится O(1) на отряд вместо O(N²) по всем ghost'ам.
     //    Ячейка = радиус пары (3). Позиции читаются живьём в поиске; ячейка с прошлого микро-шага — для facing-анимации точности хватает.
     const FCELL=3, _fgrid=(MP._fgrid||(MP._fgrid=new Map())); _fgrid.clear();
@@ -1265,18 +1312,18 @@ function loop(now){
     for(const [id,gh] of MP.ghosts){
       const p=gh.group.position,t=gh.target,k=Math.min(1,dt*12),dx=t.x-p.x,dz=t.z-p.z;
       if(gh._perish){                                                     // ⚔ погиб в бою: гаснет на месте и снимается
-        if(now-gh._perish>750){ killGhost(gh); MP.ghosts.delete(id); continue; }
+        if(now-gh._perish>750){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
         if(gh.kind===0&&gh.group.userData.orbs)placeGhostUnits(gh,now);
         continue; }
       if(gh._dying){ const ud=gh.group.userData, f=ud.dieDir||ud.fwd||[1,0];  // 🏰 роспуск: ряды по очереди заходят СТРОГО прямо в центр здания (по одному ряду), независимо от gameSpeed
         if(window.UNIT_STREAM!==false && gh.edgeA!=null && ud.st){          // 🍄 поток: юниты сами дотекают по дороге до здания и тают у двери
-          if((ud.st.tailS!=null && ud.st.tailS>ud.st.len+0.25) || now-gh._dying>60000){ killGhost(gh); MP.ghosts.delete(id); continue; }
+          if((ud.st.tailS!=null && ud.st.tailS>ud.st.len+0.25) || now-gh._dying>60000){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
           if(gh.kind===0&&ud.orbs)placeGhostUnits(gh,now);
           continue; }
         const rankSp=(ud.unitScale||1)*0.95, colLen=Math.ceil((ud.orbN||1)/(ud.colW||3))*rankSp;
         const adv=ud._dieAt?Math.hypot(p.x-ud._dieAt[0], p.z-ud._dieAt[1]):0;
         // ⚠ гасим ТОЛЬКО когда ПОСЛЕДНИЙ ряд полностью растаял (depth ≥ 2.2·rankSp), иначе хвост исчезал рывком на ~23% масштабе → «засасывало в конце»
-        if(adv>=colLen+rankSp*1.4 || now-gh._dying>60000){ killGhost(gh); MP.ghosts.delete(id); continue; }
+        if(adv>=colLen+rankSp*1.4 || now-gh._dying>60000){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
         // 🚶 марш В ГОРОД идёт ровно со СКОРОСТЬЮ ДВИЖЕНИЯ отряда (SQUAD_SPEED×gameSpeed), а не быстрее —
         //    поэтому колонна НЕ ускоряется на прибытии («не засасывает»), а спокойно доходит и тает у двери.
         const spd=((typeof LOCALSIM!=='undefined'&&LOCALSIM&&LOCALSIM.K&&LOCALSIM.K.SQUAD_SPEED!=null)?LOCALSIM.K.SQUAD_SPEED:(typeof SQUAD_SPEED!=='undefined'?SQUAD_SPEED:0.8))*(typeof gameSpeed!=='undefined'?gameSpeed:1);

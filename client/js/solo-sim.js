@@ -10,15 +10,18 @@ function projectLocalSim(sim, onMsg, parts) {
   parts = parts || { cities: true, entities: true };
   // 🌫 туман войны в соло: та же математика видимости, что на сервере (sim/vision.js)
   const _V = (window.__WWCSim && window.__WWCSim.vision) || null;
-  // 🗼 башни из меню строительства дают обзор: постройки живут на клиенте — кладём их в sim.towers
-  if (_V) {
+  let _mask = window.__LOCAL_VISION_MASK || null;
+  // Vision is a 256×256 scan. Refresh it with the city snapshot instead of every
+  // entity projection; moving squads use the shared latest mask in between.
+  if (_V && parts.vision !== false) {
+    // 🗼 башни из меню строительства дают обзор: постройки живут на клиенте — кладём их в sim.towers
     sim.towers = sim.towers || [];
     sim.towers.length = 0;
     if (window.MAP_BUILDINGS) for (const b of window.MAP_BUILDINGS)
       if (b && b.item && b.item.role === 'tower') sim.towers.push({ owner: b.owner, x: b.gx, z: b.gz });
+    _mask = _V.visionMask(sim, PLAYER);
+    if (_mask) { window.__LOCAL_VISION_MASK = _mask; window.__LOCAL_VISION_MASK_AT = performance.now(); }
   }
-  const _mask = _V ? _V.visionMask(sim, PLAYER) : null;
-  if (_mask) { window.__LOCAL_VISION_MASK = _mask; window.__LOCAL_VISION_MASK_AT = performance.now(); }
   const _G = sim.K.GRID;
   const inVision = (x, z) => { if (!_mask) return true; const cx = Math.round(x), cz = Math.round(z);
     return cx >= 0 && cz >= 0 && cx < _G && cz < _G && _mask[cx * _G + cz] === 1; };
@@ -227,7 +230,7 @@ function localSimStep(gdt, realDt) {                      // фиксирова�
   if (projectEntities || projectCities) {
     if (projectEntities) _lsProjectAcc %= LS_PROJECT_STEP;
     if (projectCities) _lsCityAcc %= LS_CITY_STEP;
-    projectLocalSim(LOCALSIM, MP._onMsg, { cities: projectCities, entities: projectEntities });
+    projectLocalSim(LOCALSIM, MP._onMsg, { cities: projectCities, entities: projectEntities, vision: projectCities });
   }
   if (_lsEconAcc >= LS_ECON_STEP) {
     _lsEconAcc %= LS_ECON_STEP;
@@ -261,11 +264,18 @@ function localSimCmd(o) {                                 // MP.cmd в режи�
       case 'hero':     accepted = s.cmdHeroAbility(f, _LS_I(o.h), _LS_I(o.ab)); break;
       case 'summon':   accepted = s.cmdSummonHero(f, String(o.id)); break;
     }
-    projectLocalSim(s, MP._onMsg);
-    syncLocalEcon(s);
-    _lsProjectAcc = 0;
-    _lsCityAcc = 0;
-    _lsEconAcc = 0;
+    if (o.cmd === 'army') {
+      // Do not perform a full vision/city/economy projection in the input event.
+      // The next render step publishes the squad; city totals follow on their
+      // normal 5 Hz snapshot instead of coupling a 65k-cell scan to dispatch.
+      _lsProjectAcc = LS_PROJECT_STEP;
+    } else {
+      projectLocalSim(s, MP._onMsg);
+      syncLocalEcon(s);
+      _lsProjectAcc = 0;
+      _lsCityAcc = 0;
+      _lsEconAcc = 0;
+    }
     return accepted !== false;
   } catch (e) { console.warn('[ls] cmd', o.cmd, e); return false; }
 }
