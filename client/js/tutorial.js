@@ -253,6 +253,16 @@
     if (origCmd) return;
     origCmd = MP.cmd;
     MP.cmd = (o) => {
+      // ⏱ догон гонки: игрок кликнул команду БЫСТРЕЕ, чем тик продвинул уже выполненный UI-шаг
+      //   (напр. «Открой Army» → сразу «Найм»). Без этого команда режется guard'ом ещё не сменённого
+      //   шага (у которого нет allow) → «не срабатывает с первого раза». Продвигаем синхронно.
+      let _g = 0;
+      while (window.TUT.active && idx + 1 < STEPS.length && STEPS[idx]) {
+        let done = false; try { done = STEPS[idx].done(); } catch (e) {}
+        if (!done || _g++ > 40) break;
+        const cur = STEPS[idx]; if (cur.onDone) { try { cur.onDone(); } catch (e) {} }
+        enterStep(idx + 1);
+      }
       const st = STEPS[idx];
       if (window.TUT.active && st && !(st.allow && st.allow(o))) {
         say(L().nudge);
