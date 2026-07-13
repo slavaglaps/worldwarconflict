@@ -342,10 +342,9 @@ function buildWorld(){
 
   // границы стран
   buildBorders();
-  // леса, скалы, облака (визуал движка)
+  // леса и скалы (визуал движка)
   buildTrees();
   buildPeaks();
-  buildClouds();
   // граф дорог + их визуал
   buildGraph();
   buildRoads();

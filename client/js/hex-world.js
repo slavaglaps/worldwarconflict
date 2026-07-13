@@ -587,7 +587,9 @@
     geo.rotateX(-Math.PI / 2);
     const seaMesh = new T.Mesh(geo, waterMat);
     seaMesh.position.set(GRID / 2, SEA_TOP, GRID / 2);
-    seaMesh.renderOrder = -1; seaMesh.frustumCulled = false;
+    // Draw opaque land first so the populated depth buffer rejects water pixels
+    // hidden below terrain before the expensive animated fragment work runs.
+    seaMesh.renderOrder = 1; seaMesh.frustumCulled = false;
     seaMesh.userData.perfGroup = 'map-water';
     scene.add(seaMesh);
     window.HEXWATER = waterFX;                       // loop.js двигает uTime каждый кадр

@@ -1,5 +1,5 @@
 import * as Core from 'three';
-import { WebGPURenderer, RenderPipeline, MeshStandardNodeMaterial } from 'three/webgpu';
+import { WebGPURenderer, RenderPipeline, MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   attribute,
@@ -254,8 +254,10 @@ window.createWWCWebGPUWaterMaterial = function createWWCWebGPUWaterMaterial(opti
   // Match the r128 GLSL output after its legacy tone/color transform.
   const finalColor = mix(rippledWater, foam, shoreFoam).mul(vec3(2.12, 1.33, 1.38)).clamp();
 
-  const material = new MeshStandardNodeMaterial({ roughness: 0.45, metalness: 0.0 });
-  material.colorNode = finalColor.mul(0.5);
-  material.emissiveNode = finalColor.mul(0.45).add(foam.mul(shoreFoam).mul(0.5));
+  const material = new MeshBasicNodeMaterial();
+  material.colorNode = finalColor;
+  material.depthTest = true;
+  material.depthWrite = true;
+  material.transparent = false;
   return { material, uTime };
 };

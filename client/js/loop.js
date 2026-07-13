@@ -251,12 +251,6 @@ function loop(now){
   waterShader.uniforms.time.value = now / 1000;
   waterShader.uniforms.camPos.value.copy(camera.position);
   if(window.HEXWATER)window.HEXWATER.uTime.value = now / 1000;   // ⬡ хекс-карта: шейдерная вода (flow+пена)
-  // дрейф облаков (с заворотом за край карты)
-  if(typeof updateClouds==='function')updateClouds(dt);
-  else for(const c of cloudList){
-    c.position.x+=c.userData.speed*dt;
-    if(c.position.x>GRID+12)c.position.x=-12;
-  }
   if(typeof fogUpdate==='function')fogUpdate(dt);   // 🌫 туман войны: маска + лерп текстуры + патч материалов
   if(typeof perfChipTick==='function')perfChipTick(now);   // 📈 перф-чип (FPS/мс под хэдером)
   if(typeof minimapUpdate==='function')minimapUpdate(dt);   // 🗺 миникарта: территория × туман + города/армии/вьюпорт
