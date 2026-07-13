@@ -2,9 +2,10 @@
   *{margin:0;padding:0;box-sizing:border-box;}
   /* Icons and labels inside a button must not steal its pointer target. */
   button *{pointer-events:none;}
-  html,body{height:100%;overflow:hidden;background:#8fd0e8;font-family:-apple-system,Segoe UI,Roboto,sans-serif;}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none;background:#8fd0e8;font-family:-apple-system,Segoe UI,Roboto,sans-serif;}
   #app{position:fixed;inset:0;}
   canvas{display:block;}
+  #app>canvas{touch-action:none;-webkit-user-select:none;user-select:none;}
   #gameLoading{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
     color:#efe7d2;background:
       radial-gradient(900px 560px at 50% 42%,rgba(61,83,72,.92),rgba(18,27,25,.96) 56%,#07100f 100%),

@@ -340,6 +340,82 @@ renderer.domElement.addEventListener('wheel',e=>{
   applyCam();
   scheduleHoverAfterCamera(100);
 },{passive:false});
+
+/* ── touch: iPad/tablet adapter over the established mouse controls ────────
+   One finger on a city/unit keeps the RTS drag interaction. One finger on
+   empty terrain pans the camera. Two fingers pan and pinch-zoom. */
+renderer.domElement.style.touchAction='none';
+let touchControl=null, touchPinch=null;
+const touchMid=(a,b)=>({x:(a.clientX+b.clientX)*0.5,y:(a.clientY+b.clientY)*0.5});
+const touchDist=(a,b)=>Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+function touchMouse(type,x,y,button,target){
+  const buttons=button===0?1:(button===1?4:2);
+  (target||window).dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:y,button,buttons:type==='mouseup'?0:buttons}));
+}
+function findTouch(list,id){for(let i=0;i<list.length;i++)if(list[i].identifier===id)return list[i];return list[0]||null;}
+function startTouchControl(control){
+  if(!control||control.started)return;
+  control.started=true;
+  touchMouse('mousedown',control.x,control.y,control.button,renderer.domElement);
+  if(control.button===2&&rmbDown)rmbDown.moved=true;
+}
+function cancelTouchControl(){
+  orbiting=null;panning=null;rmbDown=null;dragFrom=null;boxStart=null;unitDrag=null;dragLead=null;
+  hideDragArrow();boxEl.style.display='none';touchControl=null;
+}
+function beginTouchPinch(e){
+  cancelTouchControl();
+  const a=e.touches[0],b=e.touches[1],m=touchMid(a,b);
+  touchPinch={dist:Math.max(1,touchDist(a,b)),r:orbit.r,x:m.x,y:m.y};
+  cancelHoverRefresh();
+}
+renderer.domElement.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(e.touches.length>=2){beginTouchPinch(e);return;}
+  const t=e.touches[0];if(!t)return;
+  rememberPointer(t);touchPinch=null;
+  const interactive=!!pickUnit(t.clientX,t.clientY)||!!pickCity(t.clientX,t.clientY);
+  const button=interactive?0:2;
+  // Defer the synthetic press until move/end: a second finger may still arrive for pinch.
+  touchControl={id:t.identifier,button,x:t.clientX,y:t.clientY,moved:false,started:false};
+},{passive:false});
+renderer.domElement.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(e.touches.length>=2){
+    if(!touchPinch)beginTouchPinch(e);
+    const a=e.touches[0],b=e.touches[1],m=touchMid(a,b),d=Math.max(1,touchDist(a,b));
+    panBy(m.x-touchPinch.x,m.y-touchPinch.y);
+    orbit.r=Math.max(10,Math.min(520,touchPinch.r*touchPinch.dist/d));
+    touchPinch.x=m.x;touchPinch.y=m.y;applyCam();
+    return;
+  }
+  if(!touchControl)return;
+  const t=findTouch(e.touches,touchControl.id);if(!t)return;
+  if(Math.hypot(t.clientX-touchControl.x,t.clientY-touchControl.y)>6)touchControl.moved=true;
+  startTouchControl(touchControl);
+  touchMouse('mousemove',t.clientX,t.clientY,touchControl.button,window);
+},{passive:false});
+renderer.domElement.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(touchPinch){
+    if(e.touches.length===1){
+      const t=e.touches[0];touchPinch=null;
+      touchControl={id:t.identifier,button:2,x:t.clientX,y:t.clientY,moved:true,started:false};
+      startTouchControl(touchControl);
+    }else{touchPinch=null;scheduleHoverAfterCamera(80);}
+    return;
+  }
+  if(!touchControl)return;
+  if(e.touches.length)return;
+  const t=findTouch(e.changedTouches,touchControl.id);
+  const x=t?t.clientX:touchControl.x,y=t?t.clientY:touchControl.y,button=touchControl.button,moved=touchControl.moved;
+  startTouchControl(touchControl);
+  touchMouse('mouseup',x,y,button,window);
+  if(button===0&&!moved)touchMouse('click',x,y,0,renderer.domElement); // construction placement uses click capture
+  touchControl=null;
+},{passive:false});
+renderer.domElement.addEventListener('touchcancel',e=>{e.preventDefault();cancelTouchControl();touchPinch=null;},{passive:false});
+
 const keysDown=new Set();
 window.addEventListener('keydown',e=>{
   if(document.activeElement&&document.activeElement.tagName==='INPUT')return;
