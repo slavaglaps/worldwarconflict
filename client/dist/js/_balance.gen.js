@@ -44,6 +44,7 @@ var AI = {
   "peaceExhaustMult": 0.18,
   "warProb": 0.6,
   "warStrengthRatio": 0.7,
+  "warGrace": 180,
   "allyCap": 2,
   "allyProb": 0.05,
   "researchProb": 0.5,

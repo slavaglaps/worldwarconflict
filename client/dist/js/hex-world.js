@@ -106,7 +106,61 @@
   let HEXROADTILES = [];                      // центры видимых road/bridge-тайлов для ворот в стенах
   let HEXTYPES = new Map();                  // "q,r" → тип исходного тайла без игровой подложки
 
-  const dummy = new T.Object3D(), WHITE = new T.Color(0xffffff);
+  const dummy = new T.Object3D(), WHITE = new T.Color(0xffffff), INSTANCE_TINT = new T.Color();
+  // Статическая карта целиком остаётся в памяти, но рендерится пространственными
+  // батчами. Запас расширяет bounds за край чанка, чтобы мелкий декор включался
+  // до входа в кадр и не появлялся на самой границе экрана.
+  const MAP_CHUNK_SIZE = 24;
+  const MAP_CHUNK_PAD = 8;
+  const chunkLists = (list, pos = (o) => o) => {
+    const out = new Map();
+    for (const item of list) {
+      const p = pos(item), cx = Math.floor(p.gx / MAP_CHUNK_SIZE), cz = Math.floor(p.gz / MAP_CHUNK_SIZE);
+      const key = cx + ',' + cz;
+      let bucket = out.get(key);
+      if (!bucket) { bucket = []; out.set(key, bucket); }
+      bucket.push(item);
+    }
+    return out;
+  };
+  const setChunkBounds = (mesh, list, pos = (o) => o, pad = MAP_CHUNK_PAD) => {
+    let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (const item of list) {
+      const p = pos(item), x = p.gx, z = p.gz, y = Number.isFinite(p.top) ? p.top : (Number.isFinite(p.y) ? p.y : 0);
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+    }
+    if (!Number.isFinite(minX)) return mesh;
+    const box = new T.Box3(
+      new T.Vector3(minX - pad, minY - pad, minZ - pad),
+      new T.Vector3(maxX + pad, maxY + pad, maxZ + pad),
+    );
+    const sphere = box.getBoundingSphere(new T.Sphere());
+    // Legacy WebGL reads geometry bounds; current InstancedMesh reads its own.
+    // Keep both paths populated because the game can switch backend at boot.
+    mesh.geometry.boundingBox = box.clone();
+    mesh.geometry.boundingSphere = sphere.clone();
+    mesh.boundingBox = box;
+    mesh.boundingSphere = sphere;
+    mesh.frustumCulled = true;
+    mesh.userData.mapChunk = true;
+    return mesh;
+  };
+  const makeChunkMeshes = (list, create, pos = (o) => o) => {
+    const out = [];
+    for (const bucket of chunkLists(list, pos).values()) {
+      const mesh = create(bucket);
+      if (mesh) out.push({ mesh: setChunkBounds(mesh, bucket, pos), list: bucket });
+    }
+    return out;
+  };
+  const instanceTint = (color) => {
+    INSTANCE_TINT.copy(color || WHITE);
+    // Three r128 treated hexadecimal channels as raw linear instance colors.
+    if (IS_WEBGPU) INSTANCE_TINT.convertLinearToSRGB();
+    return INSTANCE_TINT;
+  };
   const tileTranslate = new T.Matrix4(), tileProjection = new T.Matrix4(), tileRotation = new T.Matrix4();
   function writeProjectedHexMatrix(out, gx, top, gz, ry, sy) {
     // kx/kz are map projection scales. They must stay in world axes; applying them
@@ -216,6 +270,15 @@
     // (трава/дорога/песок), а не biome-override этого батча — иначе захваченный winter/summer/desert
     // тайл при сбросе в обычный биом сохранял бы свою снежную/пустынную текстуру.
     const idx0Map = baseMap || mat.map || null;
+    if (IS_WEBGPU && idx0Map && window.createWWCWebGPUBiomeMaterial) {
+      return window.createWWCWebGPUBiomeMaterial({
+        sourceMaterial: mat,
+        baseMap: idx0Map,
+        desertMap,
+        summerMap,
+        winterMap,
+      });
+    }
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uBiomeBaseMap = { value: idx0Map };
       shader.uniforms.uBiomeDesertMap = { value: desertMap };
@@ -357,7 +420,7 @@
     for (let i = 0; i < list.length; i++) {
       const c = list[i], sy = (c.scaleTop != null ? c.scaleTop : c.top) - FLOORg;
       writeProjectedHexMatrix(dummy.matrix, c.gx, c.top, c.gz, c.ry || 0, sy);
-      im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, c.col != null ? c.col : WHITE);
+      im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, instanceTint(c.col != null ? c.col : WHITE));
       packBiome[i] = packBiomeIndex(c.biome);
     }
     geo.setAttribute('aPackBiome', new T.InstancedBufferAttribute(packBiome, 1));
@@ -366,7 +429,7 @@
   }
   function instObjectMesh(model, list, perfGroup = 'hex-objects', castShadow = true) {
     if (!list.length || !model) return null;
-    const im = new T.InstancedMesh(model.geo, model.mat, list.length);
+    const im = new T.InstancedMesh(model.geo.clone(), model.mat, list.length);
     im.castShadow = !!castShadow; im.receiveShadow = true;
     im.userData.perfGroup = perfGroup;
     for (let i = 0; i < list.length; i++) {
@@ -433,8 +496,19 @@
       rFlowSpeed: { value: 0.18 }, rFlowScale: { value: 0.06 }, rFlowStrength: { value: 0.35 },
       rFlowContrast: { value: 4.0 }, rNoiseScale: { value: 7.0 }, rNoiseStrength: { value: 0.4 },
     };
-    const waterMat = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.0 });
-    waterMat.onBeforeCompile = (sh) => {
+    let waterMat = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.0 });
+    if (IS_WEBGPU && window.createWWCWebGPUWaterMaterial) {
+      const gpuWater = window.createWWCWebGPUWaterMaterial({
+        dudvMap,
+        coastTexture: coastTex,
+        grid: GRID,
+        deepColor: waterFX.uColorDeep.value,
+        shallowColor: waterFX.uColorShallow.value,
+        foamColor: waterFX.uColorFoam.value,
+      });
+      waterMat = gpuWater.material;
+      waterFX.uTime = gpuWater.uTime;
+    } else waterMat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, waterFX);
       sh.vertexShader = 'varying vec3 vPos; varying vec3 vWorldPos;\n' +
         sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vPos = position; vWorldPos = (modelMatrix * vec4(position,1.0)).xyz;');
@@ -551,7 +625,20 @@
     }
     float streamNoise(vec2 uv, float t){ vec2 s=vec2(uv.x*3.0, uv.y*0.6); return cnoise(vec3(s,0.0))*0.5+0.5; }`;
   function applyRiverFlow(mat) {
-    if (!mat || mat.userData.__riverFlow) return mat;
+    if (!mat) return mat;
+    if (IS_WEBGPU && window.createWWCWebGPURiverMaterial && window.HEXWATER) {
+      if (mat.userData.__riverFlowMaterial) return mat.userData.__riverFlowMaterial;
+      const riverMat = window.createWWCWebGPURiverMaterial({
+        sourceMaterial: mat,
+        dudvMap: window.HEXWATER.tDudv.value,
+        timeNode: window.HEXWATER.uTime,
+        deepColor: window.HEXWATER.rColorDeep.value,
+        shallowColor: window.HEXWATER.rColorShallow.value,
+      });
+      mat.userData.__riverFlowMaterial = riverMat;
+      return riverMat;
+    }
+    if (mat.userData.__riverFlow) return mat;
     mat.userData.__riverFlow = true;
     mat.onBeforeCompile = (sh) => {
       if (window.HEXWATER) Object.assign(sh.uniforms, window.HEXWATER);
@@ -680,8 +767,13 @@
     for (const c of grass) (grassByTexture[c.textureKey || 'default'] || (grassByTexture[c.textureKey || 'default'] = [])).push(c);
     GRASSREF = [];                                   // индекс инстансов травы → перекраска территории при захвате
     for (const textureKey in grassByTexture) {
-      const list = grassByTexture[textureKey], mm = instMesh(landBatchModel(textureKey), list, 'map-land', false);
-      if (mm) { _add(mm); for (let i = 0; i < list.length; i++) GRASSREF.push({ mesh: mm, idx: i, gx: list[i].gx, gz: list[i].gz, base: list[i].col, biome: list[i].biome || 'default' }); }
+      const list = grassByTexture[textureKey], model = landBatchModel(textureKey);
+      for (const chunk of makeChunkMeshes(list, part => instMesh(model, part, 'map-land', false))) {
+        _add(chunk.mesh);
+        for (let i = 0; i < chunk.list.length; i++) {
+          const c = chunk.list[i]; GRASSREF.push({ mesh: chunk.mesh, idx: i, gx: c.gx, gz: c.gz, base: c.col, biome: c.biome || 'default' });
+        }
+      }
     }
     // течение по руслу: BFS от моря через речные хексы → per-instance aFlowDir (координаты игры)
     const rivDir = (() => {
@@ -701,39 +793,39 @@
     })();
     for (const k in rivByKey) {
       const list = rivByKey[k], model = M[k]; if (!model || !list.length) continue;
-      const im = new T.InstancedMesh(model.geo, applyRiverFlow(model.mat), list.length);
-      im.castShadow = false; im.receiveShadow = true; im.userData.perfGroup = 'map-rivers';
-      const fa = new Float32Array(list.length * 2);
-      for (let i = 0; i < list.length; i++) {
-        const c = list[i], sy = c.top - FLOORg;
-        writeProjectedHexMatrix(dummy.matrix, c.gx, c.top, c.gz, c.ry || 0, sy);
-        im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, WHITE);
-        const d = rivDir.get(c.q + ',' + c.r) || [0, 1]; fa[i * 2] = d[0]; fa[i * 2 + 1] = d[1];
-      }
-      model.geo.setAttribute('aFlowDir', new T.InstancedBufferAttribute(fa, 2));
-      im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
-      scene.add(im);
+      for (const chunk of makeChunkMeshes(list, part => {
+        const geo = model.geo.clone(), im = new T.InstancedMesh(geo, applyRiverFlow(model.mat), part.length);
+        im.castShadow = false; im.receiveShadow = true; im.userData.perfGroup = 'map-rivers';
+        const fa = new Float32Array(part.length * 2);
+        for (let i = 0; i < part.length; i++) {
+          const c = part[i], sy = c.top - FLOORg;
+          writeProjectedHexMatrix(dummy.matrix, c.gx, c.top, c.gz, c.ry || 0, sy);
+          im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, WHITE);
+          const d = rivDir.get(c.q + ',' + c.r) || [0, 1]; fa[i * 2] = d[0]; fa[i * 2 + 1] = d[1];
+        }
+        geo.setAttribute('aFlowDir', new T.InstancedBufferAttribute(fa, 2));
+        im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+        return im;
+      })) scene.add(chunk.mesh);
     }
     ROADREF = [];                                    // индекс инстансов дорог → перекраска при захвате (как трава)
     for (const k in roadByKey) {
-      const bucket = roadByKey[k], list = bucket.list;
-      const mm = instMesh(roadBatchModel(M[bucket.modelKey], bucket.textureKey), list, 'map-roads', true);
-      if (mm) { scene.add(mm); for (let i = 0; i < list.length; i++) ROADREF.push({ mesh: mm, idx: i, gx: list[i].gx, gz: list[i].gz, base: list[i].col, biome: list[i].biome || 'default' }); }
+      const bucket = roadByKey[k], list = bucket.list, model = roadBatchModel(M[bucket.modelKey], bucket.textureKey);
+      for (const chunk of makeChunkMeshes(list, part => instMesh(model, part, 'map-roads', true))) {
+        scene.add(chunk.mesh);
+        for (let i = 0; i < chunk.list.length; i++) {
+          const c = chunk.list[i]; ROADREF.push({ mesh: chunk.mesh, idx: i, gx: c.gx, gz: c.gz, base: c.col, biome: c.biome || 'default' });
+        }
+      }
     }
     TILEREF = [];
     for (const k in tileByKey) {
-      const bucket = tileByKey[k];
-      const mm = instMesh(tileBatchModel(M[bucket.modelKey], bucket.textureKey, bucket.modelKey), bucket.list, 'map-overrides', true);
-      if (mm) {
-        scene.add(mm);
-        for (let i = 0; i < bucket.list.length; i++) TILEREF.push({
-          mesh: mm,
-          idx: i,
-          gx: bucket.list[i].gx,
-          gz: bucket.list[i].gz,
-          base: bucket.list[i].col,
-          biome: bucket.list[i].biome || 'default',
-        });
+      const bucket = tileByKey[k], model = tileBatchModel(M[bucket.modelKey], bucket.textureKey, bucket.modelKey);
+      for (const chunk of makeChunkMeshes(bucket.list, part => instMesh(model, part, 'map-overrides', true))) {
+        scene.add(chunk.mesh);
+        for (let i = 0; i < chunk.list.length; i++) {
+          const c = chunk.list[i]; TILEREF.push({ mesh: chunk.mesh, idx: i, gx: c.gx, gz: c.gz, base: c.col, biome: c.biome || 'default' });
+        }
       }
     }
 
@@ -753,30 +845,32 @@
       });
     }
     window.HEXBRIDGES = bridgeCenters;                       // центры мостов → рой сужается в колонну на мосту
-    for (const k in brByKey) { const mm = instObjectMesh(M[k], brByKey[k], 'map-bridges', true); if (mm) scene.add(mm); }
+    for (const k in brByKey) for (const chunk of makeChunkMeshes(brByKey[k], part => instObjectMesh(M[k], part, 'map-bridges', true))) scene.add(chunk.mesh);
 
     // декор: [asset, wx, wz, y, yaw, scale, biome] — модель с равномерным масштабом
     const decByKey = {};
     for (const d of MAP.decor) {
       const biome = d[6] || 'default', textureKey = decorTextureKey(d[0], biome), bucket = d[0] + ':' + textureKey;
-      (decByKey[bucket] || (decByKey[bucket] = { asset: d[0], textureKey, list: [] })).list.push({ d, col: decorInstanceColor(d[0], biome) });
+      (decByKey[bucket] || (decByKey[bucket] = { asset: d[0], textureKey, list: [] })).list.push({ d, gx: wxToGX(d[1]), gz: wzToGZ(d[2]), top: (d[3] || 0) * kY, col: decorInstanceColor(d[0], biome) });
     }
     const decorGroup = new T.Group();
     decorGroup.userData.perfGroup = 'map-decor';
     for (const k in decByKey) {
       const bucket = decByKey[k], list = bucket.list, model = decorBatchModel(M[bucket.asset], bucket.textureKey); if (!model) continue;
-      const im = new T.InstancedMesh(model.geo.clone(), model.mat, list.length);
-      im.castShadow = true; im.receiveShadow = true;
-      im.userData.perfGroup = 'map-decor';
-      const packBiome = model.mat?.userData?.packBiomeShader ? new Float32Array(list.length) : null;
-      for (let i = 0; i < list.length; i++) {
-        const d = list[i].d, s = (d[5] || 1) * kY;
-        dummy.position.set(wxToGX(d[1]), (d[3] || 0) * kY, wzToGZ(d[2])); dummy.rotation.set(0, d[4] || 0, 0); dummy.scale.set(s, s, s); dummy.updateMatrix();
-        im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, list[i].col || WHITE);   // instanceColor ОБЯЗАТЕЛЕН: без него THREE падает в рендере (смешение инстансов с/без цвета)
-        if (packBiome) packBiome[i] = packBiomeIndex(d[6] || 'default');
-      }
-      if (packBiome) im.geometry.setAttribute('aPackBiome', new T.InstancedBufferAttribute(packBiome, 1));
-      im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; decorGroup.add(im);
+      for (const chunk of makeChunkMeshes(list, part => {
+        const im = new T.InstancedMesh(model.geo.clone(), model.mat, part.length);
+        im.castShadow = true; im.receiveShadow = true; im.userData.perfGroup = 'map-decor';
+        const packBiome = model.mat?.userData?.packBiomeShader ? new Float32Array(part.length) : null;
+        for (let i = 0; i < part.length; i++) {
+          const item = part[i], d = item.d, s = (d[5] || 1) * kY;
+          dummy.position.set(item.gx, item.top, item.gz); dummy.rotation.set(0, d[4] || 0, 0); dummy.scale.set(s, s, s); dummy.updateMatrix();
+          im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, instanceTint(item.col || WHITE));
+          if (packBiome) packBiome[i] = packBiomeIndex(d[6] || 'default');
+        }
+        if (packBiome) im.geometry.setAttribute('aPackBiome', new T.InstancedBufferAttribute(packBiome, 1));
+        im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+        return im;
+      })) decorGroup.add(chunk.mesh);
     }
     scene.add(decorGroup);
 
@@ -1172,7 +1266,7 @@
       if (hasPackBiomeTexture(biome)) tmp.copy(WHITE);                         // готовый KayKit-атлас даёт цвет сам
       else if (biome === g.biome) tmp.copy(g.base || WHITE);                   // владелец = родной биом → базовый цвет этого биома
       else tmp.copy(biomeTint(biome));                                        // захват → прямой цвет биома нового владельца
-      g.mesh.setColorAt(g.idx, tmp);
+      g.mesh.setColorAt(g.idx, instanceTint(tmp));
     }
     const meshes = new Set(); for (const g of refs) meshes.add(g.mesh);
     for (const mm of meshes) if (mm.instanceColor) mm.instanceColor.needsUpdate = true;
@@ -1347,7 +1441,7 @@
       const im = new T.InstancedMesh(b.model.geo, b.mat, b.matrices.length);
       // 🌗 города — ДИНАМИЧЕСКИЕ кастеры: из статичной карты исключены (castShadow=false),
       //    тень рисуют через отдельную карту (слой DYN_SHADOW_LAYER) — апгрейд перепекает только её
-      im.castShadow = false; im.receiveShadow = true;
+      im.castShadow = !!IS_WEBGPU; im.receiveShadow = true;
       im.layers.enable(typeof DYN_SHADOW_LAYER !== 'undefined' ? DYN_SHADOW_LAYER : 2);
       im.userData.perfGroup = b.group;
       for (let i = 0; i < b.matrices.length; i++) {
@@ -1358,6 +1452,7 @@
       CITY_BATCH_GROUP.add(im);
     }
     scene.add(CITY_BATCH_GROUP);
+    if (IS_WEBGPU && typeof markShadowsDirty === 'function') markShadowsDirty();
     if (typeof markDynShadowsDirty === 'function') markDynShadowsDirty();   // батчи городов пересобраны → одна перепечь динамической карты
   }
   window.rebuildCityBatchesIfDirty = rebuildCityBatchesIfDirty;

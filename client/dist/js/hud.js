@@ -198,7 +198,7 @@ function buildPanelRows(){
     rg.appendChild(card); hireTypeBtns[u.id]=card;
   }
   { const card=document.createElement('div'); card.className='unitCard locked';
-    card.innerHTML='<div class="unitArt">♞</div><div class="unitName">Knight</div><div class="unitLock">Tech</div>';
+    card.innerHTML='<div class="unitArt">♞</div><div class="unitName">Knight</div>';   // заблокированная карточка-превью (без «TECH»-бейджа)
     rg.appendChild(card);
   }
   bb.appendChild(rg);
@@ -225,9 +225,7 @@ function updateHireTypeBtns(){
     card.classList.toggle('locked',blocked);
     card.classList.toggle('occLocked',occ);
     card.classList.toggle('sel',tp===hireType&&!blocked);
-    let badge=card.querySelector('.unitLock');
-    if(lk&&!occ&&!badge){ badge=document.createElement('div'); badge.className='unitLock'; badge.textContent='Tech'; card.appendChild(badge); }
-    else if((!lk||occ)&&badge) badge.remove();
+    const badge=card.querySelector('.unitLock'); if(badge)badge.remove();   // без «TECH»-бейджа — залоченная карточка просто серая с 🔒
     card.querySelectorAll('.unitBuy').forEach(b=>b.classList.toggle('dis',blocked||b.classList.contains('disCost')));
   }
   if(occ||unitTypeLocked(hireType))hireType='inf';   // выбранный тип закрылся → откат на пехоту
@@ -443,31 +441,54 @@ function buildEmblem(country){
 let _lastEmblem=null;
 
 /* ── HUD ────────────────────────────────────────────────────── */
+const HUD_REFRESH_MS=125;
+let _hudNextRefresh=0, _hudPlayer=-1, _hudCountry='';
+const _hudTextCache=Object.create(null), _hudClassCache=Object.create(null);
+const _hudEls=Object.create(null);
+function _hudEl(id){return _hudEls[id]||(_hudEls[id]=document.getElementById(id));}
+function _hudText(id,value){
+  const text=String(value);
+  if(_hudTextCache[id]===text)return;
+  _hudTextCache[id]=text;
+  const el=_hudEl(id); if(el)el.textContent=text;
+}
+function _hudActive(id,active){
+  const value=!!active;
+  if(_hudClassCache[id]===value)return;
+  _hudClassCache[id]=value;
+  const el=_hudEl(id); if(el)el.classList.toggle('active',value);
+}
+function invalidateHUD(){_hudNextRefresh=0;}
+window.invalidateHUD=invalidateHUD;
 function updateHUD(){
-  // подсчёт городов по фракциям
-  const counts=FACTIONS.map(()=>0);
-  for(const c of cities)counts[c.owner]++;
-  const mine=counts[PLAYER]|0;
-  const aliveCount=counts.filter(n=>n>0).length;
-  // место игрока по числу городов
-  const sorted=[...counts].sort((a,b)=>b-a);
-  const rank=sorted.indexOf(counts[PLAYER])+1;
+  // Кнопки меню реагируют сразу; числа HUD не требуют RAF-частоты.
+  _hudActive('sbTech',!!techWinOpen);
+  _hudActive('sbPol',!!polWinOpen);
+  const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  const country=(typeof countryDisp==='function'?countryDisp(PLAYER_COUNTRY):PLAYER_COUNTRY);
+  const identityChanged=_hudPlayer!==PLAYER||_hudCountry!==country;
+  if(!identityChanged&&now<_hudNextRefresh)return;
+  _hudNextRefresh=now+HUD_REFRESH_MS;
+  _hudPlayer=PLAYER; _hudCountry=country;
+
   const colHex='#'+OWNER_COL[PLAYER].toString(16).padStart(6,'0');
-  document.getElementById('hFaction').textContent=(typeof countryDisp==='function'?countryDisp(PLAYER_COUNTRY):PLAYER_COUNTRY);
-  document.getElementById('fBar').style.background=colHex;
+  _hudText('hFaction',country);
+  const fBar=_hudEl('fBar');
+  if(_hudTextCache.fBarColor!==colHex){_hudTextCache.fBarColor=colHex;if(fBar)fBar.style.background=colHex;}
   if(_lastEmblem!==PLAYER_COUNTRY){_lastEmblem=PLAYER_COUNTRY;buildEmblem(PLAYER_COUNTRY);}
-  document.getElementById('hGold').textContent=gold[PLAYER]|0;
+  _hudText('hGold',gold[PLAYER]|0);
   const bGold=window.mapBuildingIncomeRate?window.mapBuildingIncomeRate(PLAYER,'gold'):0;
   const bPol=window.mapBuildingIncomeRate?window.mapBuildingIncomeRate(PLAYER,'polit'):0;
-  document.getElementById('hGoldRate').textContent='+'+(cities.filter(c=>c.owner===PLAYER).reduce((s,c)=>s+c.goldRate,0)+bGold).toFixed(1)+t('hud.per_sec');
-  document.getElementById('hPol').textContent=Math.floor(politPts[PLAYER]||0);
-  document.getElementById('hPolRate').textContent='+'+(politRate(PLAYER)+bPol).toFixed(2)+t('hud.per_sec');
+  let cityGoldRate=0;
+  for(const c of cities)if(c.owner===PLAYER)cityGoldRate+=c.goldRate;
+  _hudText('hGoldRate','+'+(cityGoldRate+bGold).toFixed(1)+t('hud.per_sec'));
+  _hudText('hPol',Math.floor(politPts[PLAYER]||0));
+  _hudText('hPolRate','+'+(politRate(PLAYER)+bPol).toFixed(2)+t('hud.per_sec'));
   {const mp=Math.floor(manpower[PLAYER]||0), mpcap=Math.round(manpowerCap(PLAYER));
-   const hmp=document.getElementById('hMp'); hmp.textContent=mp; hmp.style.color=mp<mpcap*0.12?'#ff7a6a':'';
-   document.getElementById('hMpCap').textContent=mpcap;
+   _hudText('hMp',mp);
+   const hmp=_hudEl('hMp'), mpColor=mp<mpcap*0.12?'#ff7a6a':'';
+   if(_hudTextCache.hMpColor!==mpColor){_hudTextCache.hMpColor=mpColor;if(hmp)hmp.style.color=mpColor;}
+   _hudText('hMpCap',mpcap);
    const bMp=window.mapBuildingIncomeRate?window.mapBuildingIncomeRate(PLAYER,'manpower'):0;
-   const mpr=document.getElementById('hMpRate'); if(mpr)mpr.textContent='+'+((typeof manpowerRate==='function'?manpowerRate(PLAYER):0)+bMp).toFixed(1)+t('hud.per_sec');}
-  // Cities / Rank / Factions-alive / Army убраны из топбара
-  document.getElementById('sbTech').classList.toggle('active',!!techWinOpen);
-  document.getElementById('sbPol').classList.toggle('active',!!polWinOpen);
+   _hudText('hMpRate','+'+((typeof manpowerRate==='function'?manpowerRate(PLAYER):0)+bMp).toFixed(1)+t('hud.per_sec'));}
 }

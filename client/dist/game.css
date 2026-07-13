@@ -2,9 +2,10 @@
   *{margin:0;padding:0;box-sizing:border-box;}
   /* Icons and labels inside a button must not steal its pointer target. */
   button *{pointer-events:none;}
-  html,body{height:100%;overflow:hidden;background:#8fd0e8;font-family:-apple-system,Segoe UI,Roboto,sans-serif;}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none;background:#8fd0e8;font-family:-apple-system,Segoe UI,Roboto,sans-serif;}
   #app{position:fixed;inset:0;}
   canvas{display:block;}
+  #app>canvas{touch-action:none;-webkit-user-select:none;user-select:none;}
   #gameLoading{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
     color:#efe7d2;background:
       radial-gradient(900px 560px at 50% 42%,rgba(61,83,72,.92),rgba(18,27,25,.96) 56%,#07100f 100%),
@@ -86,6 +87,21 @@
   .cityLab.cityLabFar{min-width:0;padding:4px 6px;opacity:.9;}
   .cityLab.cityLabFar .cityHead{padding-bottom:0;border-bottom:0;}
   .cityLab.cityLabFar .cityStats{display:none;}
+  /* ── 📈 перф-чип (под хэдером) ── */
+  #perfChip{position:fixed;left:12px;top:60px;z-index:12;display:flex;align-items:center;gap:5px;cursor:pointer;
+    padding:3px 9px 3px 7px;border-radius:9px;border:1px solid rgba(150,160,120,.25);
+    background:linear-gradient(180deg,rgba(24,30,39,.92),rgba(11,15,21,.94));
+    font:10.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe0d4;user-select:none;
+    box-shadow:0 3px 10px rgba(0,0,0,.4);}
+  #perfChip .pcDot{width:7px;height:7px;border-radius:50%;background:#5fd06a;box-shadow:0 0 6px rgba(95,208,106,.7);}
+  #perfChip.warn .pcDot{background:#ffce6a;box-shadow:0 0 6px rgba(255,206,106,.7);}
+  #perfChip.bad .pcDot{background:#ff6a52;box-shadow:0 0 6px rgba(255,106,82,.7);}
+  #perfChip b{font-size:12px;color:#f0f5ee;font-variant-numeric:tabular-nums;}
+  #perfChip.warn b{color:#ffce6a;} #perfChip.bad b{color:#ff6a52;}
+  #perfChip .pcU{opacity:.55;}
+  #perfChip i{font-style:normal;opacity:.65;font-variant-numeric:tabular-nums;}
+  #perfChip:hover{border-color:rgba(232,206,138,.45);}
+
   /* ── 🗺 миникарта (правый нижний угол, в стиле gpanel) ── */
   #minimap{position:fixed;right:12px;bottom:12px;width:196px;z-index:14;padding:6px 8px 8px;
     background:linear-gradient(180deg,#27302a,#161d17);

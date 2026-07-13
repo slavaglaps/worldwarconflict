@@ -6,23 +6,29 @@
    Координаты sim уже в мировых (грид 0..256) — QPOS-квантование не нужно (это
    делал только Colyseus ради трафика). spec-кодировка совпадает с сервером. */
 var _SOLO_SPEC2ID = { prod: 1, def: 2, atk: 3 };   // = server SPEC_ID (SPEC2ID в loop.js — локальный, недоступен тут)
-function projectLocalSim(sim, onMsg) {
+function projectLocalSim(sim, onMsg, parts) {
+  parts = parts || { cities: true, entities: true };
   // 🌫 туман войны в соло: та же математика видимости, что на сервере (sim/vision.js)
   const _V = (window.__WWCSim && window.__WWCSim.vision) || null;
-  // 🗼 башни из меню строительства дают обзор: постройки живут на клиенте — кладём их в sim.towers
-  if (_V) {
+  let _mask = window.__LOCAL_VISION_MASK || null;
+  // Vision is a 256×256 scan. Refresh it with the city snapshot instead of every
+  // entity projection; moving squads use the shared latest mask in between.
+  if (_V && parts.vision !== false) {
+    // 🗼 башни из меню строительства дают обзор: постройки живут на клиенте — кладём их в sim.towers
     sim.towers = sim.towers || [];
     sim.towers.length = 0;
     if (window.MAP_BUILDINGS) for (const b of window.MAP_BUILDINGS)
       if (b && b.item && b.item.role === 'tower') sim.towers.push({ owner: b.owner, x: b.gx, z: b.gz });
+    _mask = _V.visionMask(sim, PLAYER);
+    if (_mask) { window.__LOCAL_VISION_MASK = _mask; window.__LOCAL_VISION_MASK_AT = performance.now(); }
   }
-  const _mask = _V ? _V.visionMask(sim, PLAYER) : null;
   const _G = sim.K.GRID;
   const inVision = (x, z) => { if (!_mask) return true; const cx = Math.round(x), cz = Math.round(z);
     return cx >= 0 && cz >= 0 && cx < _G && cz < _G && _mask[cx * _G + cz] === 1; };
   // ── города (тапл как в push(): [idx,owner,units,spec,tier,occ,queued,siegeU,siegeO,prodT,prodE,shipQ,shipT,planeQ,planeT]) ──
-  const c = [];
-  for (const cc of sim.cities) {
+  if (parts.cities !== false) {
+    const c = [];
+    for (const cc of sim.cities) {
     // 🌫 город вне вижена → «оболочка»: units=null (applyCity заморозит last-seen)
     if (!(cc.owner === PLAYER || sim.allied(PLAYER, cc.owner) || inVision(cc.gx, cc.gz))) {
       c.push([cc.idx, cc.owner, null, 0, 0, cc.occ ? 1 : 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -45,13 +51,15 @@ function projectLocalSim(sim, onMsg) {
       cc.branchTier('prod'), cc.branchTier('def'), cc.branchTier('atk'),
       cc.comp ? Math.round(cc.comp.inf) : Math.round(cc.units), cc.comp ? Math.round(cc.comp.arc) : 0, cc.comp ? Math.round(cc.comp.cav) : 0,
       cc.occ && cc.occFrom != null ? cc.occFrom : 255, q]);   // [18..20] 👥 состав, [21] occFrom, [22] queue
+    }
+    const rel = []; for (const k in sim.relations) rel.push([k, sim.relations[k]]);             // 'war'|'ally'
+    const ws = []; for (const k in sim.warSince) if (sim.relations[k] === 'war') ws.push([k, sim.warSince[k]]);
+    const owners = new Set(); for (const cc of sim.cities) owners.add(cc.owner);                // конец партии = осталась ≤1 фракция
+    onMsg({ data: { t: 'snap', time: +sim.time || 0, over: owners.size <= 1 ? 1 : 0, c, rel, ws } });
   }
-  const rel = []; for (const k in sim.relations) rel.push([k, sim.relations[k]]);             // 'war'|'ally'
-  const ws = []; for (const k in sim.warSince) if (sim.relations[k] === 'war') ws.push([k, sim.warSince[k]]);
-  const owners = new Set(); for (const cc of sim.cities) owners.add(cc.owner);                // конец партии = осталась ≤1 фракция
-  onMsg({ data: JSON.stringify({ t: 'snap', time: +sim.time || 0, over: owners.size <= 1 ? 1 : 0, c, rel, ws }) });
 
   // ── движущиеся сущности (id,kind,owner,x,y,z,count); kind 0=отряд 1=корабль 2=самолёт ──
+  if (parts.entities === false) return;
   const gy = (x, z) => (typeof getTerrainHeight === 'function' ? getTerrainHeight(x, z) : 0);
   const WY = (typeof WATER_Y_SHIP !== 'undefined' ? WATER_Y_SHIP : -0.1);
   const PA = (typeof PLANE_ALT !== 'undefined' ? PLANE_ALT : 4.5);
@@ -75,12 +83,21 @@ function projectLocalSim(sim, onMsg) {
   }
   for (const s of sim.ships) if (moverVisible(s.owner, s.x, s.z)) e.push(['sh' + s.id, 1, s.owner, s.x, WY, s.z, 0]);
   for (const p of sim.planes) if (moverVisible(p.owner, p.x, p.z)) e.push(['pl' + p.id, 2, p.owner, p.x, PA, p.z, 0]);
-  onMsg({ data: JSON.stringify({ t: 'ent', e }) });
+  onMsg({ data: { t: 'ent', e } });
 }
 
 let _lsHeroSig = '';
 let _lsTechSig = '';
 let _lsPendingCmds = [];
+let _lsProjectAcc = 0;
+let _lsCityAcc = 0;
+let _lsEconAcc = 0;
+let _lsSimAcc = 0;
+let _lsTechFactionSig = [];
+const LS_SIM_STEP = 1 / 30;
+const LS_PROJECT_STEP = 1 / 20;
+const LS_CITY_STEP = 1 / 5;
+const LS_ECON_STEP = 0.2;
 
 function syncLocalHeroes(sim) {
   if (!sim || !sim.heroSlots) return;
@@ -120,7 +137,12 @@ function syncLocalHeroes(sim) {
 function syncLocalEcon(sim) {
   for (let f = 0; f < sim.factions; f++) { gold[f] = sim.gold[f]; manpower[f] = sim.manpower[f]; politPts[f] = sim.politPts[f]; }
   if (typeof techDone !== 'undefined' && sim.techDone) for (let f = 0; f < sim.factions; f++) {
-    if (sim.techDone[f]) { techDone[f] = new Set(sim.techDone[f]); try { recomputeTech(f); } catch (e) {} }
+    if (!sim.techDone[f]) continue;
+    const nextSig = Array.from(sim.techDone[f]).sort().join(',');
+    if (_lsTechFactionSig[f] === nextSig) continue;
+    _lsTechFactionSig[f] = nextSig;
+    techDone[f] = new Set(sim.techDone[f]);
+    try { recomputeTech(f); } catch (e) {}
   }
   if (typeof techRes !== 'undefined' && sim.techRes && sim.techRes[PLAYER]) techRes[PLAYER] = sim.techRes[PLAYER].map(r => ({ id: r.id, t: r.t }));
   if (typeof buildTechWindow === 'function' && typeof techWinOpen !== 'undefined') {
@@ -178,17 +200,42 @@ function startLocalSim() {
   if (typeof LOCALSIM.clearFactionHeroes === 'function') LOCALSIM.clearFactionHeroes(PLAYER);
   _lsHeroSig = '';
   _lsTechSig = '';
+  _lsProjectAcc = 0;
+  _lsCityAcc = 0;
+  _lsEconAcc = 0;
+  _lsSimAcc = 0;
+  _lsTechFactionSig = [];
   gameOver = false;
   projectLocalSim(LOCALSIM, MP._onMsg); syncLocalEcon(LOCALSIM);   // первый кадр — сразу состояние
   const pending = _lsPendingCmds.splice(0);
   for (const cmd of pending) localSimCmd(cmd);
 }
 
-function localSimStep(gdt) {                              // вызывается из loop() каждый кадр в режиме ?ls
+function localSimStep(gdt, realDt) {                      // фиксированный Sim; render-loop интерполирует между снапшотами
   if (!LOCALSIM || gameOver || gdt <= 0) return;
-  LOCALSIM.tick(gdt);
-  projectLocalSim(LOCALSIM, MP._onMsg);                  // → applySnap (города/дипломатия/gameTime) + reconcile (призраки)
-  syncLocalEcon(LOCALSIM);                               // голда/манпауэр/политочки/техи
+  _lsSimAcc += Math.min(gdt, 0.25);
+  let steps = 0;
+  while (_lsSimAcc >= LS_SIM_STEP && steps < 8) {
+    LOCALSIM.tick(LS_SIM_STEP);
+    _lsSimAcc -= LS_SIM_STEP;
+    steps++;
+  }
+  if (steps === 8 && _lsSimAcc >= LS_SIM_STEP) _lsSimAcc %= LS_SIM_STEP;
+  const wallDt = Number.isFinite(realDt) ? realDt : Math.min(gdt, 0.05);
+  _lsProjectAcc += wallDt;
+  _lsCityAcc += wallDt;
+  _lsEconAcc += wallDt;
+  const projectEntities = _lsProjectAcc >= LS_PROJECT_STEP;
+  const projectCities = _lsCityAcc >= LS_CITY_STEP;
+  if (projectEntities || projectCities) {
+    if (projectEntities) _lsProjectAcc %= LS_PROJECT_STEP;
+    if (projectCities) _lsCityAcc %= LS_CITY_STEP;
+    projectLocalSim(LOCALSIM, MP._onMsg, { cities: projectCities, entities: projectEntities, vision: projectCities });
+  }
+  if (_lsEconAcc >= LS_ECON_STEP) {
+    _lsEconAcc %= LS_ECON_STEP;
+    syncLocalEcon(LOCALSIM);                             // UI-экономика/техи не требуют 120 полных синков в секунду
+  }
 }
 
 var _LS_TRACK = { 1: 'prod', 2: 'def', 3: 'atk', prod: 'prod', def: 'def', atk: 'atk' };
@@ -217,8 +264,18 @@ function localSimCmd(o) {                                 // MP.cmd в режи�
       case 'hero':     accepted = s.cmdHeroAbility(f, _LS_I(o.h), _LS_I(o.ab)); break;
       case 'summon':   accepted = s.cmdSummonHero(f, String(o.id)); break;
     }
-    projectLocalSim(s, MP._onMsg);
-    syncLocalEcon(s);
+    if (o.cmd === 'army') {
+      // Do not perform a full vision/city/economy projection in the input event.
+      // The next render step publishes the squad; city totals follow on their
+      // normal 5 Hz snapshot instead of coupling a 65k-cell scan to dispatch.
+      _lsProjectAcc = LS_PROJECT_STEP;
+    } else {
+      projectLocalSim(s, MP._onMsg);
+      syncLocalEcon(s);
+      _lsProjectAcc = 0;
+      _lsCityAcc = 0;
+      _lsEconAcc = 0;
+    }
     return accepted !== false;
   } catch (e) { console.warn('[ls] cmd', o.cmd, e); return false; }
 }

@@ -87,6 +87,7 @@ const DEFAULTS = {
     exhaustWindow: 90, exhaustDivisor: 300,      // усталость войны: (возраст войны − window)/divisor
     peaceLosingProb: 0.3, peaceExhaustMult: 0.18, // шанс замириться (проигрывая / от усталости×mult)
     warProb: 0.6, warStrengthRatio: 0.7,         // шанс начать войну / нужный перевес силы для атаки
+    warGrace: 180,                               // сек с начала партии, пока ИИ НЕ объявляет войну (мирный старт)
     allyCap: 2, allyProb: 0.05,                  // лимит союзов / шанс искать союз
     researchProb: 0.5, researchEarlyExit: 0.5,   // шанс исследовать / завершить ход после
     techPrioSlot: 3, techPrioUnlock: 2,          // веса приоритета техов (слот-узлы / анлоки)

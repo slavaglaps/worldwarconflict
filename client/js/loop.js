@@ -190,6 +190,18 @@ const cityLabelCamPos=new T3.Vector3().copy(camera.position),cityLabelCamQuat=ne
 const labelsRoot=document.getElementById('labels');
 let labelsHiddenUntil=0, labelsAreHidden=false;
 
+// Динамические сущности рендерятся в кадре и в расширенной экранной зоне.
+// Проекция дешевле отдельного Frustum/Sphere на каждый рой и одинаково работает
+// в WebGPU/WebGL. Запас даёт время подготовить instance-буферы до входа в кадр.
+const dynamicCullV=new T3.Vector3();
+const DYNAMIC_CULL_MARGIN_X=0.38, DYNAMIC_CULL_MARGIN_Y=0.42;
+function dynamicInRenderZone(pos,yOffset=0){
+  dynamicCullV.set(pos.x,pos.y+yOffset,pos.z).project(camera);
+  return dynamicCullV.z>=-1&&dynamicCullV.z<=1
+    &&Math.abs(dynamicCullV.x)<=1+DYNAMIC_CULL_MARGIN_X
+    &&Math.abs(dynamicCullV.y)<=1+DYNAMIC_CULL_MARGIN_Y;
+}
+
 // ── кольцо выделения кораблей/дирижаблей (как у города): пульсирующий белый торус вокруг выбранного мувера ──
 const _moverSelRings=[];
 function _moverSelRing(i){
@@ -203,7 +215,8 @@ function updateMoverSelRings(now){
   let n=0;
   for(const u of selectedUnits){                                  // selectedUnits хранит выбранных муверов (в соло — призраки)
     if(!u||!u.group||(u.kind!==1&&u.kind!==2))continue;           // только корабль(1)/дирижабль(2)
-    const p=u.group.position, m=_moverSelRing(n++);
+    const p=u.group.position; if(!dynamicInRenderZone(p,u.kind===2?0:0.2))continue;
+    const m=_moverSelRing(n++);
     // корабль — кольцо над поверхностью под ним (вода или берег у верфи — иначе уходит под террейн); дирижабль — гало на его высоте
     let y;
     if(u.kind===2){ y=p.y; }
@@ -291,7 +304,7 @@ function loop(now){
   const k=1+Math.sin(now/220)*0.08;
   const bk=1+Math.sin(now/110)*0.14;
   for(const c of cities){
-    if(c!==dragFrom&&c.owner!==OWNER.PLAYER&&selectedSet.has(c)){selectedSet.delete(c);if(typeof updatePanel==='function')updatePanel();}   // город захвачен врагом → снять выделение (иначе кольцо селектора зависает)
+    if(c!==dragFrom&&selectedSet.has(c)&&(c.owner!==OWNER.PLAYER||(c.occ&&c.occFrom!==OWNER.PLAYER))){selectedSet.delete(c);if(typeof updatePanel==='function')updatePanel();}   // город потерян (захват = оккупация: owner остаётся, occ=true) → снять выделение, иначе кольцо селектора зависает
     const on=selectedSet.has(c)||c===dragFrom;
     c.ring.visible=on;
     if(on)c.ring.scale.set(k,k,k);
@@ -647,6 +660,7 @@ function loop(now){
     for(const b of ghostShipBatches.values()){b.im.count=0;b.im.visible=false;}
     const byKey=new Map();
     for(const gh of MP.ghosts.values())if(gh.kind===1&&!gh.group.userData.fallbackShip){
+      if(!dynamicInRenderZone(gh.group.position,0.4))continue;
       if(gh.transport && typeof isWaterAt==='function' && !isWaterAt(gh.group.position.x,gh.group.position.z))continue;   // 🏝 транспорт НЕ рисуем над видимой сушей (не заезжает на остров)
       const key=shipKeyForOwner(gh.owner);
       const list=byKey.get(key)||[]; list.push(gh); byKey.set(key,list);
@@ -702,6 +716,7 @@ function loop(now){
     for(const b of ghostPlaneBatches.values()){b.im.count=0;b.im.visible=false;}
     const byOwner=new Map();
     for(const gh of MP.ghosts.values())if(gh.kind===2){
+      if(!dynamicInRenderZone(gh.group.position))continue;
       const list=byOwner.get(gh.owner)||[]; list.push(gh); byOwner.set(gh.owner,list);
     }
     for(const [owner,list] of byOwner){
@@ -1240,7 +1255,9 @@ function loop(now){
     //    после боя (fighting=false) выжившие перестраиваются под новую численность.
     if(!gh.fighting || ud.colW==null) ud.colW = n<=5?1 : n<=20?2 : n<=40?3 : 4;
     ud.unitScale=(base?base.scale:1);   // 🔒 размер юнита ФИКСИРОВАН (не зависит от числа) — большие армии просто плотнее/шире по шеренге, а не мельче
-    placeGhostUnits(gh,performance.now());
+    const renderVisible=dynamicInRenderZone(gh.group.position,0.4);
+    gh.group.visible=renderVisible;
+    if(renderVisible)placeGhostUnits(gh,performance.now());
   }
   let ghostWarmOwner=-1, ghostWarmPending=false;
   function scheduleSquadGhostWarm(owner){
@@ -1311,11 +1328,14 @@ function loop(now){
     for(const g2 of MP.ghosts.values()){ if(g2.kind!==0||!g2.fighting)continue; const q=g2.group.position; const kk=_fkey(q.x,q.z); let a=_fgrid.get(kk); if(!a){a=[];_fgrid.set(kk,a);} a.push(g2); }
     for(const [id,gh] of MP.ghosts){
       const p=gh.group.position,t=gh.target,k=Math.min(1,dt*12),dx=t.x-p.x,dz=t.z-p.z;
+      let renderVisible=dynamicInRenderZone(p,gh.kind===2?0:0.4);
+      gh.group.visible=renderVisible;
       if(gh._perish){                                                     // ⚔ погиб в бою: гаснет на месте и снимается
-        if(now-gh._perish>750){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
+        if(!renderVisible||now-gh._perish>750){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
         if(gh.kind===0&&gh.group.userData.orbs)placeGhostUnits(gh,now);
         continue; }
       if(gh._dying){ const ud=gh.group.userData, f=ud.dieDir||ud.fwd||[1,0];  // 🏰 роспуск: ряды по очереди заходят СТРОГО прямо в центр здания (по одному ряду), независимо от gameSpeed
+        if(!renderVisible){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
         if(window.UNIT_STREAM!==false && gh.edgeA!=null && ud.st){          // 🍄 поток: юниты сами дотекают по дороге до здания и тают у двери
           if((ud.st.tailS!=null && ud.st.tailS>ud.st.len+0.25) || now-gh._dying>60000){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
           if(gh.kind===0&&ud.orbs)placeGhostUnits(gh,now);
@@ -1359,6 +1379,8 @@ function loop(now){
           const tgt=-gh.authHeading; gh._ry=(gh._ry==null)?tgt:gh._ry+angDiff(tgt,gh._ry)*Math.min(1,dt*8); gh.group.rotation.y=gh._ry;
         } else if((gh.kind===1||gh.kind===2)&&dx*dx+dz*dz>1e-4)gh.group.rotation.y=-Math.atan2(dz,dx);   // нос моделей смотрит +X → разворот по курсу
       }
+      renderVisible=dynamicInRenderZone(p,gh.kind===2?0:0.4);
+      gh.group.visible=renderVisible;
       if(gh.mat&&gh.mat.emissive)gh.mat.emissive.setHex(selectedUnits.has(gh)?0x1f6fc0:0x000000); // подсветка выбранных
       // ⚔ цель боя: ближайший ВРАЖЕСКИЙ дерущийся отряд рядом → передний ряд разворачивается к нему (боевая анимация)
       if(gh.kind===0){
@@ -1374,7 +1396,7 @@ function loop(now){
         if(gh._wasF&&!gh.fighting&&!gh._dying&&(gh.count||0)>0)ud2.cheerT=0.9;
         gh._wasF=gh.fighting;
       }
-      if(gh.kind===0&&gh.group.userData.orbs){   // 🪖 юниты отряда: 🍄 поток по дороге / строй (бой, поле, откат UNIT_STREAM=false)
+      if(renderVisible&&gh.kind===0&&gh.group.userData.orbs){   // 🪖 юниты отряда: 🍄 поток по дороге / строй (бой, поле, откат UNIT_STREAM=false)
         // гейт: не пересчитываем рой (и не перезаливаем инстанс-буфер) для СТАТИЧНОГО отряда — не двигался, не дерётся,
         //   не чирит, число не менялось. Движущийся отряд (общий случай) рендерится всегда; экономит кадр на стоящих/паузе.
         const ud0=gh.group.userData;
@@ -1382,7 +1404,7 @@ function loop(now){
           gh._lastUX=p.x; gh._lastUZ=p.z; gh._lastUC=gh.count; placeGhostUnits(gh,now); }
       }
       if(updateLabels && gh.lab && !gh._dying){ const v=_labV.set(p.x,p.y+0.4,p.z).project(camera);   // скрытые при движении метки не проецируем
-        const vis=v.z<1;
+        const vis=renderVisible&&v.z>=-1&&v.z<=1&&Math.abs(v.x)<=1.04&&Math.abs(v.y)<=1.04;
         if(gh._labVis!==vis){ gh._labVis=vis; gh.lab.style.display=vis?'block':'none'; }
         if(vis){
           const lx=((v.x*0.5+0.5)*innerWidth)|0, ly=((-v.y*0.5+0.5)*innerHeight)|0;

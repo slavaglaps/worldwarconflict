@@ -56,8 +56,7 @@
     let hex = 0x4c7ad8;
     if (owner == null) owner = playerId();
     try { if (typeof OWNER_COL !== 'undefined' && OWNER_COL[owner] != null) hex = OWNER_COL[owner]; } catch (e) {}
-    const c = new T.Color(hex); if (T.sRGBEncoding && c.convertSRGBToLinear) c.convertSRGBToLinear();
-    return c;
+    return new T.Color(hex);
   }
   function playerColorLinear() { return ownerColorLinear(playerId()); }
   function setMaterialOwner(mat, owner) {
@@ -65,9 +64,15 @@
     mat.userData.__ownerUniform.value.copy(ownerColorLinear(owner));
   }
   function applyOwnerColor(mat, owner) {
-    if (!mat) return;
+    if (!mat) return mat;
     mat.userData = mat.userData || {};
-    if (mat.userData.__owned) { setMaterialOwner(mat, owner); return; }
+    if (mat.userData.__owned) { setMaterialOwner(mat, owner); return mat; }
+    if (typeof IS_WEBGPU !== 'undefined' && IS_WEBGPU && window.createWWCWebGPUOwnerMaterial) {
+      const result = window.createWWCWebGPUOwnerMaterial({ sourceMaterial: mat, ownerColor: ownerColorLinear(owner) });
+      if (!result || !result.material || !result.ownerUniform) return mat;
+      result.material.userData.__ownerUniform = result.ownerUniform;
+      return result.material;
+    }
     mat.userData.__owned = true;
     const u = { value: ownerColorLinear(owner) };
     mat.userData.__ownerUniform = u;
@@ -89,22 +94,23 @@
         }`);
     };
     mat.needsUpdate = true;
+    return mat;
   }
   function recolorObject(obj, owner) {
     if (!obj) return;
     obj.traverse((o) => {
       if (!o.isMesh || !o.material) return;
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      mats.forEach((m) => applyOwnerColor(m, owner));
+      if (Array.isArray(o.material)) o.material = o.material.map((m) => applyOwnerColor(m, owner));
+      else o.material = applyOwnerColor(o.material, owner);
     });
   }
   function cloneOwnerMaterial(mat, owner) {
-    const c = mat.clone();
+    const source = mat.__wwcOwnerSource || mat;
+    const c = source.clone();
     c.userData = Object.assign({}, c.userData || {});
     delete c.userData.__owned;
     delete c.userData.__ownerUniform;
-    applyOwnerColor(c, owner);
-    return c;
+    return applyOwnerColor(c, owner);
   }
 
   function playerId() {
@@ -153,14 +159,23 @@
     return item.cost ? `−${item.cost}💰` : '';
   }
   function buildingIncomeRate(fid, key) {
-    let r = 0;
+    const r = buildingIncomeCache.get(fid);
+    if (!r) return 0;
+    if (key === 'gold') return r.goldOther + r.goldFarm * techVal(fid, 'farmIncome');
+    return r[key] || 0;
+  }
+  const buildingIncomeCache = new Map();
+  function rebuildBuildingIncomeCache() {
+    buildingIncomeCache.clear();
     for (const b of placedBuildings) {
-      if (!b || b.owner !== fid) continue;
-      if (key === 'gold') r += (b.item.goldRate || 0) * (b.item.role === 'farm' ? techVal(fid, 'farmIncome') : 1);
-      else if (key === 'polit') r += b.item.politRate || 0;
-      else if (key === 'manpower') r += b.item.manpowerRate || 0;
+      if (!b || !b.item) continue;
+      let r = buildingIncomeCache.get(b.owner);
+      if (!r) { r = { goldFarm: 0, goldOther: 0, polit: 0, manpower: 0 }; buildingIncomeCache.set(b.owner, r); }
+      if (b.item.role === 'farm') r.goldFarm += b.item.goldRate || 0;
+      else r.goldOther += b.item.goldRate || 0;
+      r.polit += b.item.politRate || 0;
+      r.manpower += b.item.manpowerRate || 0;
     }
-    return r;
   }
   window.mapBuildingIncomeRate = buildingIncomeRate;
 
@@ -176,8 +191,8 @@
       if (!o.isMesh) return;
       o.castShadow = false; o.receiveShadow = true;
       if (!o.material) return;
-      if (Array.isArray(o.material)) o.material = o.material.map((m) => { const c = m.clone(); c.metalness = 0; c.roughness = 0.9; applyOwnerColor(c, owner); return c; });
-      else { o.material = o.material.clone(); o.material.metalness = 0; o.material.roughness = 0.9; applyOwnerColor(o.material, owner); }
+      if (Array.isArray(o.material)) o.material = o.material.map((m) => { const c = m.clone(); c.metalness = 0; c.roughness = 0.9; return applyOwnerColor(c, owner); });
+      else { o.material = o.material.clone(); o.material.metalness = 0; o.material.roughness = 0.9; o.material = applyOwnerColor(o.material, owner); }
     });
     holder.add(root);
     if (partKey) holder.userData.shipyardPart = partKey;
@@ -243,20 +258,37 @@
 
   // ── миниатюры (offscreen-рендер) ──
   let thumbRenderer = null;
+  function prepareThumbObject(obj) {
+    obj.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const toLegacyMaterial = (mat) => {
+        if (!mat) return mat;
+        const source = mat.__wwcOwnerSource || mat;
+        return source.clone ? source.clone() : source;
+      };
+      o.material = Array.isArray(o.material)
+        ? o.material.map(toLegacyMaterial)
+        : toLegacyMaterial(o.material);
+    });
+    return obj;
+  }
   function buildThumbs() {
     try {
       const S = 76;
       if (thumbRenderer) thumbRenderer.dispose();
-      thumbRenderer = new T.WebGLRenderer({ antialias: true, alpha: true });
+      // The main scene uses WebGPU node materials. Thumbnails use their original
+      // GLTF materials so this small legacy renderer remains fast and compatible.
+      thumbRenderer = new T.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
       thumbRenderer.setSize(S, S); thumbRenderer.setPixelRatio(1);
-      if (T.sRGBEncoding) thumbRenderer.outputEncoding = T.sRGBEncoding;
+      if ('outputColorSpace' in thumbRenderer && T.SRGBColorSpace) thumbRenderer.outputColorSpace = T.SRGBColorSpace;
+      else if (T.sRGBEncoding) thumbRenderer.outputEncoding = T.sRGBEncoding;
       const tScene = new T.Scene();
       tScene.add(new T.HemisphereLight(0xffffff, 0x6b7280, 1.1));
       const dl = new T.DirectionalLight(0xffffff, 1.1); dl.position.set(3, 6, 4); tScene.add(dl);
       const cam = new T.PerspectiveCamera(35, 1, 0.1, 100);
       for (const item of CATALOG) {
         const src = models[item.key]; if (!src) continue;
-        const obj = src.clone(true);
+        const obj = prepareThumbObject(src.clone(true));
         const box = new T.Box3().setFromObject(obj); const sz = new T.Vector3(); box.getSize(sz);
         const ctr = new T.Vector3(); box.getCenter(ctr);
         const rad = Math.max(sz.x, sz.y, sz.z) * 0.5 || 1;
@@ -683,6 +715,7 @@
     const windmillFan = item.role === 'farm' ? obj.getObjectByName('building_windmill_top_fan_green') : null;
     if (windmillFan) windmillFan.rotation.z = Math.random() * Math.PI * 2;
     placedBuildings.push({ item, obj, key: h.key, owner, gx: h.gx, gz: h.gz, y, cd: 0, parentCity, windmillFan });
+    rebuildBuildingIncomeCache();
     hb.occupied.add(h.key);
     if (typeof attachDynShadowCaster === 'function') attachDynShadowCaster(obj);   // 🌗 в динамическую карту теней + её перепечь (дёшево)
     rebuildHighlight();           // убрать занятый хекс из подсветки
@@ -692,15 +725,16 @@
 
   function syncBuildingOwner(b) {
     const next = ownerOfHex(b.gx, b.gz);
-    if (next == null || next === b.owner) return;
+    if (next == null || next === b.owner) return false;
     b.owner = next;
     b.cd = 0;
+    b.scanCd = 0;
     recolorObject(b.obj, next);
+    return true;
   }
 
-  function enemyTargets(owner) {
+  function allCombatTargets() {
     const out = [];
-    const hostile = (o) => owner !== o && (typeof atWar !== 'function' || atWar(owner, o));
     const gy = (x, z) => (typeof getTerrainHeight === 'function') ? getTerrainHeight(x, z) : 0;
     const guest = (typeof MP !== 'undefined' && MP && MP.ghosts);
     // ⚔ ОСАДНЫЕ ПУЛЫ: армия, штурмующая город, исчезает из отрядов (живёт в city.siege) —
@@ -708,35 +742,44 @@
     if (typeof cities !== 'undefined') for (const c of cities) {
       if (!c || !c.siege) continue;
       for (const o in c.siege) { const ow = +o;
-        if (!hostile(ow) || !(c.siege[o].units > 0)) continue;
-        out.push({ x: c.gx, z: c.gz, y: gy(c.gx, c.gz) + 0.4, ref: { cityIdx: c.idx, owner: ow }, kind: 'siege' }); }
+        if (!(c.siege[o].units > 0)) continue;
+        out.push({ owner: ow, x: c.gx, z: c.gz, y: gy(c.gx, c.gz) + 0.4, ref: { cityIdx: c.idx, owner: ow }, kind: 'siege' }); }
     }
     if (guest) {
       for (const g of MP.ghosts.values()) {
-        if ((g.count || 0) < 0.5 || !hostile(g.owner)) continue;
+        if ((g.count || 0) < 0.5) continue;
         const p = g.group.position;
         const y = g.kind === 2 ? (typeof PLANE_ALT !== 'undefined' ? PLANE_ALT : 4.5)
           : (g.kind === 1 ? ((typeof WATER_Y_SHIP !== 'undefined' ? WATER_Y_SHIP : 0) + 0.2) : gy(p.x, p.z) + 0.3);
-        out.push({ x: p.x, z: p.z, y, ref: g, kind: 'ghost' });
+        out.push({ owner: g.owner, x: p.x, z: p.z, y, ref: g, kind: 'ghost' });
       }
       return out;
     }
-    if (typeof squads !== 'undefined') for (const s of squads) if (s.fcount >= 0.5 && hostile(s.owner)) out.push({ x: s.pos.x, z: s.pos.z, y: gy(s.pos.x, s.pos.z) + 0.3, ref: s, kind: 'squad' });
-    if (typeof ships !== 'undefined') for (const s of ships) if (s.hp > 0 && hostile(s.owner)) out.push({ x: s.pos.x, z: s.pos.z, y: (typeof WATER_Y_SHIP !== 'undefined' ? WATER_Y_SHIP : 0) + 0.2, ref: s, kind: 'ship' });
-    if (typeof planes !== 'undefined') for (const p of planes) if (p.hp > 0 && hostile(p.owner)) out.push({ x: p.pos.x, z: p.pos.z, y: (typeof PLANE_ALT !== 'undefined' ? PLANE_ALT : 4.5), ref: p, kind: 'plane' });
+    if (typeof squads !== 'undefined') for (const s of squads) if (s.fcount >= 0.5) out.push({ owner: s.owner, x: s.pos.x, z: s.pos.z, y: gy(s.pos.x, s.pos.z) + 0.3, ref: s, kind: 'squad' });
+    if (typeof ships !== 'undefined') for (const s of ships) if (s.hp > 0) out.push({ owner: s.owner, x: s.pos.x, z: s.pos.z, y: (typeof WATER_Y_SHIP !== 'undefined' ? WATER_Y_SHIP : 0) + 0.2, ref: s, kind: 'ship' });
+    if (typeof planes !== 'undefined') for (const p of planes) if (p.hp > 0) out.push({ owner: p.owner, x: p.pos.x, z: p.pos.z, y: (typeof PLANE_ALT !== 'undefined' ? PLANE_ALT : 4.5), ref: p, kind: 'plane' });
     return out;
   }
-  function updateTower(b, dt) {
+  function updateTower(b, dt, targetCache) {
     const it = b.item, cd = 1 / Math.max(0.1, it.attackSpeed || 0.5);
     b.cd = (b.cd || 0) + dt;
-    if (b.cd < cd || typeof TowerShot === 'undefined') return;
+    b.scanCd = Math.max(0, (b.scanCd || 0) - dt);
+    if (b.cd < cd || b.scanCd > 0 || typeof TowerShot === 'undefined') return;
     let best = null, bd = (it.range || 1) * (it.range || 1);
-    for (const t of enemyTargets(b.owner)) {
+    const CELL = 8;
+    if (!targetCache.grid) {
+      targetCache.grid = new Map();
+      for (const t of allCombatTargets()) { const k = Math.floor(t.x / CELL) * 100003 + Math.floor(t.z / CELL); let a = targetCache.grid.get(k); if (!a) { a = []; targetCache.grid.set(k, a); } a.push(t); }
+    }
+    const cr = Math.ceil((it.range || 1) / CELL), cx = Math.floor(b.gx / CELL), cz = Math.floor(b.gz / CELL);
+    for (let ox = -cr; ox <= cr; ox++) for (let oz = -cr; oz <= cr; oz++) { const targets = targetCache.grid.get((cx + ox) * 100003 + (cz + oz)); if (!targets) continue; for (const t of targets) {
+      if (t.owner === b.owner || (typeof atWar === 'function' && !atWar(b.owner, t.owner))) continue;
       const dx = b.gx - t.x, dz = b.gz - t.z, dd = dx * dx + dz * dz;
       if (dd < bd) { bd = dd; best = t; }
-    }
-    if (!best) return;
+    } }
+    if (!best) { b.scanCd = 0.15; return; }
     b.cd = 0;
+    b.scanCd = 0;
     const from = { x: b.gx, y: b.y + 1.0, z: b.gz };
     missiles.push(new TowerShot(b.owner, from, {
       kind: best.kind,
@@ -747,18 +790,25 @@
       dmg: Math.max(1, Math.round(it.damage || 1)),
     }));
   }
+  let seenRegionsVersion = -1;
   function updateMapBuildings(dt) {
     if (!dt || dt <= 0 || !placedBuildings.length || gameOver) return;
+    const regionsVersion = window.__WWC_REGIONS_VERSION || 0;
+    const syncOwners = seenRegionsVersion !== regionsVersion;
+    if (syncOwners) seenRegionsVersion = regionsVersion;
+    const targetCache = { grid: null };
+    let ownerChanged = false;
     for (const b of placedBuildings) {
-      syncBuildingOwner(b);
+      if (syncOwners && syncBuildingOwner(b)) ownerChanged = true;
       const it = b.item;
       if (b.windmillFan) b.windmillFan.rotation.z = (b.windmillFan.rotation.z + dt * 0.85) % (Math.PI * 2);
-      if (it.role === 'tower') updateTower(b, dt);
-      else {
-        addResource(b.owner, 'gold', (it.goldRate || 0) * (it.role === 'farm' ? techVal(b.owner, 'farmIncome') : 1) * dt);
-        addResource(b.owner, 'polit', (it.politRate || 0) * dt);
-        addResource(b.owner, 'manpower', (it.manpowerRate || 0) * dt);
-      }
+      if (it.role === 'tower') updateTower(b, dt, targetCache);
+    }
+    if (ownerChanged) rebuildBuildingIncomeCache();
+    for (const [owner] of buildingIncomeCache) {
+      addResource(owner, 'gold', buildingIncomeRate(owner, 'gold') * dt);
+      addResource(owner, 'polit', buildingIncomeRate(owner, 'polit') * dt);
+      addResource(owner, 'manpower', buildingIncomeRate(owner, 'manpower') * dt);
     }
   }
   function resetMapBuildings() {
@@ -781,6 +831,8 @@
       }
     }
     placedBuildings.length = 0;
+    buildingIncomeCache.clear();
+    seenRegionsVersion = window.__WWC_REGIONS_VERSION || 0;
     if (typeof markDynShadowsDirty === 'function') markDynShadowsDirty();   // 🌗 здания снесены → перепечь только динамическую карту
     if (highlightIM) rebuildHighlight();
   }

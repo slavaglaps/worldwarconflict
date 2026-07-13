@@ -160,7 +160,7 @@ Object.assign(I18N.en, {
   'hud.no_space_near':'✈ No free space nearby',
   'hud.build_airship':'✈ Build airship',
   'hud.build_ship':'⚓ Build ship',
-  'hud.minimap_title':'Europe',
+  'hud.minimap_title':'Map',
   'hud.yard_ship':'Shipyard {city}',
   'hud.yard_air':'Airport {city}',
   'hud.ship_built':'⚓ Built "{name}"',

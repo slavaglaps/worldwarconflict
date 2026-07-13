@@ -69,6 +69,13 @@
     .grid{grid-template-columns:1fr}
     .rooms{max-height:42vh}
   }
+  .fpsSeg{display:flex;gap:10px}
+  .fbtn{flex:1;height:48px;min-width:0;padding:0 8px;border:1px solid rgba(108,139,144,.58);border-radius:3px;clip-path:none;
+    background:linear-gradient(180deg,rgba(26,44,52,.94),rgba(9,21,25,.98));color:#c9d8d6;
+    font-family:KnightsQuest,Georgia,serif;font-size:17px;letter-spacing:.3px;cursor:pointer}
+  .fbtn:hover{border-color:rgba(199,171,109,.62);box-shadow:none}
+  .fbtn.on{border-color:#e8c76a;color:#f4dc8c;background:linear-gradient(180deg,rgba(52,74,44,.96),rgba(16,38,26,.98));box-shadow:0 0 16px rgba(232,199,104,.2)}
+  .fpsHint{margin-top:9px;color:#8f9b8e;font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -96,6 +103,17 @@
       <div class="card">
         <div class="row">
           <button id="tutBtn">Tutorial</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Frame Rate</h2>
+        <div class="row">
+          <div class="fpsSeg" id="fpsSeg">
+            <button type="button" class="fbtn" data-cap="144">144 Hz · Mac</button>
+            <button type="button" class="fbtn" data-cap="60">60 Hz · Windows</button>
+          </div>
+          <div class="fpsHint" id="fpsHint"></div>
         </div>
       </div>
     </div>
@@ -133,6 +151,17 @@
     location.href = 'game-hex.html?cs=1&create=1&mp=' + encodeURIComponent(name);
   };
   $('roomName').addEventListener('keydown', e => { if(e.key==='Enter') $('createBtn').click(); });
+
+  const FPS_KEY='wwc_fps_cap';
+  const isMac=/Mac|iPhone|iPad/i.test(navigator.platform||'')||/Mac OS X/.test(navigator.userAgent||'');
+  let fpsCap=localStorage.getItem(FPS_KEY)||(isMac?'144':'60');
+  localStorage.setItem(FPS_KEY,fpsCap);
+  function paintFps(){
+    document.querySelectorAll('#fpsSeg .fbtn').forEach(b=>b.classList.toggle('on',b.dataset.cap===fpsCap));
+    const h=$('fpsHint');if(h)h.textContent=fpsCap==='60'?'capped · 60 fps':'capped · 144 fps';
+  }
+  document.querySelectorAll('#fpsSeg .fbtn').forEach(b=>b.onclick=()=>{fpsCap=b.dataset.cap;localStorage.setItem(FPS_KEY,fpsCap);paintFps();});
+  paintFps();
 
   function render(){
     const list = [...rooms.values()].filter(r => r.name === 'game');

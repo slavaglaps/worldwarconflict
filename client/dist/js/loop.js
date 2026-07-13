@@ -114,17 +114,20 @@ function applyPerfStressOnce(){
   const center=target||new T3.Vector3(GRID/2,0,GRID/2);
   for(let s=0;s<squadsMax;s++){
     const bx=center.x-26+(s%10)*5.8, bz=center.z-18+Math.floor(s/10)*5.4, by=getTerrainHeight(bx,bz)+0.35;
-    const im=new T3.InstancedMesh(unitSrc?unitSrc.geo:UNIT_GEO,unitMat,18);
-    im.castShadow=false; im.receiveShadow=true; im.userData.perfGroup='units';
+    const typed=typeof unitTypedSource==='function'?unitTypedSource(owner,['inf','arc','cav'][s%3]):null;
+    const src=typed||unitSrc;
+    const parts=[{geo:src?src.geo:UNIT_GEO,mat:src?src.mat:unitMat,local:src&&src.local}];
+    if(src&&src.accGeo)parts.push({geo:src.accGeo,mat:src.accMat,local:null});
+    const meshes=parts.map(p=>{const im=new T3.InstancedMesh(p.geo,p.mat,18);
+      im.castShadow=false;im.receiveShadow=true;im.frustumCulled=false;im.userData.perfGroup='units';perfStressGroup.add(im);return {im,p};});
     for(let i=0;i<18;i++){
       const a=i*2.399963, r=0.18+Math.sqrt((i+0.5)/18)*0.75;
       perfStressDummy.position.set(bx+Math.cos(a)*r,by,bz+Math.sin(a)*r);
-      perfStressDummy.rotation.set(0,a,0); perfStressDummy.scale.setScalar(unitSrc?unitSrc.scale:1); perfStressDummy.updateMatrix();
-      if(unitSrc){const m=new T3.Matrix4().multiplyMatrices(perfStressDummy.matrix,unitSrc.local);im.setMatrixAt(i,m);}
-      else im.setMatrixAt(i,perfStressDummy.matrix);
+      perfStressDummy.rotation.set(0,a,0); perfStressDummy.scale.setScalar(src?src.scale:1); perfStressDummy.updateMatrix();
+      for(const part of meshes){if(part.p.local){const m=new T3.Matrix4().multiplyMatrices(perfStressDummy.matrix,part.p.local);part.im.setMatrixAt(i,m);}
+        else part.im.setMatrixAt(i,perfStressDummy.matrix);}
     }
-    im.instanceMatrix.needsUpdate=true;
-    perfStressGroup.add(im);
+    for(const part of meshes)part.im.instanceMatrix.needsUpdate=true;
   }
   const stressMatrix=new T3.Matrix4();
   const stressShipParts=[
@@ -181,7 +184,23 @@ function applyPerfStressOnce(){
 }
 
 let last=performance.now(), panelTick=0, cityLabelTick=0;
+window.__fpsCap=parseInt(localStorage.getItem('wwc_fps_cap')||'0',10)||0;
+let _lastRenderT=0;
 const cityLabelCamPos=new T3.Vector3().copy(camera.position),cityLabelCamQuat=new T3.Quaternion().copy(camera.quaternion);
+const labelsRoot=document.getElementById('labels');
+let labelsHiddenUntil=0, labelsAreHidden=false;
+
+// Динамические сущности рендерятся в кадре и в расширенной экранной зоне.
+// Проекция дешевле отдельного Frustum/Sphere на каждый рой и одинаково работает
+// в WebGPU/WebGL. Запас даёт время подготовить instance-буферы до входа в кадр.
+const dynamicCullV=new T3.Vector3();
+const DYNAMIC_CULL_MARGIN_X=0.38, DYNAMIC_CULL_MARGIN_Y=0.42;
+function dynamicInRenderZone(pos,yOffset=0){
+  dynamicCullV.set(pos.x,pos.y+yOffset,pos.z).project(camera);
+  return dynamicCullV.z>=-1&&dynamicCullV.z<=1
+    &&Math.abs(dynamicCullV.x)<=1+DYNAMIC_CULL_MARGIN_X
+    &&Math.abs(dynamicCullV.y)<=1+DYNAMIC_CULL_MARGIN_Y;
+}
 
 // ── кольцо выделения кораблей/дирижаблей (как у города): пульсирующий белый торус вокруг выбранного мувера ──
 const _moverSelRings=[];
@@ -196,7 +215,8 @@ function updateMoverSelRings(now){
   let n=0;
   for(const u of selectedUnits){                                  // selectedUnits хранит выбранных муверов (в соло — призраки)
     if(!u||!u.group||(u.kind!==1&&u.kind!==2))continue;           // только корабль(1)/дирижабль(2)
-    const p=u.group.position, m=_moverSelRing(n++);
+    const p=u.group.position; if(!dynamicInRenderZone(p,u.kind===2?0:0.2))continue;
+    const m=_moverSelRing(n++);
     // корабль — кольцо над поверхностью под ним (вода или берег у верфи — иначе уходит под террейн); дирижабль — гало на его высоте
     let y;
     if(u.kind===2){ y=p.y; }
@@ -207,6 +227,10 @@ function updateMoverSelRings(now){
   for(let i=n;i<_moverSelRings.length;i++)_moverSelRings[i].visible=false;   // спрятать лишние из пула
 }
 function loop(now){
+  requestAnimationFrame(loop);
+  const fpsCap=window.__fpsCap|0;
+  if(fpsCap&&now-_lastRenderT<1000/fpsCap-0.6)return;
+  _lastRenderT=now;
   const dt=Math.min((now-last)/1000,.05); last=now;
   updateCameraKeys(dt);
   // update water shader (время + позиция камеры для бликов/Френеля)
@@ -220,11 +244,20 @@ function loop(now){
     if(c.position.x>GRID+12)c.position.x=-12;
   }
   if(typeof fogUpdate==='function')fogUpdate(dt);   // 🌫 туман войны: маска + лерп текстуры + патч материалов
+  if(typeof perfChipTick==='function')perfChipTick(now);   // 📈 перф-чип (FPS/мс под хэдером)
   if(typeof minimapUpdate==='function')minimapUpdate(dt);   // 🗺 миникарта: территория × туман + города/армии/вьюпорт
   const gdt=dt*gameSpeed; // игровое время с учётом паузы/ускорения
   if(MP.localSim){   // 🧪 соло на ЛОКАЛЬНОМ серверном Sim: тик Sim → проекция в guest-рендер, визуал как у гостя
-    if(typeof localSimStep==='function')localSimStep(gdt);
-    if(!gameOver&&gdt>0){ for(const c of cities)c.drawProdRing(); if(typeof cityTowersFX==='function')cityTowersFX(gdt); if(typeof shipBombardFX==='function')shipBombardFX(gdt); if(typeof updateMissiles==='function')updateMissiles(gdt); }
+    if(typeof localSimStep==='function')localSimStep(gdt,dt);
+    if(!gameOver&&gdt>0){
+      for(const c of cities){
+        if(c.batches.length){const b=c.batches[0];if(b.elapsed<b.time)b.elapsed=Math.min(b.time,b.elapsed+gdt);}
+        if((c.isShipyard||c.hasShipyard)&&c.shipQueue>0&&c.shipTimer<SHIP_BUILD_TIME)c.shipTimer=Math.min(SHIP_BUILD_TIME,c.shipTimer+gdt);
+        if((c.isAirport||c.hasAirport)&&c.planeQueue>0&&c.planeTimer<PLANE_BUILD_TIME)c.planeTimer=Math.min(PLANE_BUILD_TIME,c.planeTimer+gdt);
+        c.drawProdRing();
+      }
+      if(typeof cityTowersFX==='function')cityTowersFX(gdt); if(typeof shipBombardFX==='function')shipBombardFX(gdt); if(typeof updateMissiles==='function')updateMissiles(gdt);
+    }
   } else if(MP.guest && !gameOver && gdt>0){
     // гость: сим заморожен, но локально продвигаем ТОЛЬКО таймеры (плавность между снапшотами; сервер их корректирует)
     gameTime+=gdt;                                                          // ⏳ отсчёт мобилизации войны
@@ -240,24 +273,38 @@ function loop(now){
     updateMissiles(gdt);   // анимируем трассеры/взрывы
   }
   if(!gameOver&&gdt>0&&typeof window.updateMapBuildings==='function')window.updateMapBuildings(gdt);
-  // во время поворота камеры (Q/E или мышь) прячем DOM-подписи целиком — иначе они дрожат
-  const _rot=camRotating; document.getElementById('labels').style.visibility=_rot?'hidden':'visible';
+  // При любом движении камеры скрываем DOM-плашки и не пересчитываем их позиции.
+  // Короткая задержка предотвращает мигание между соседними событиями ввода.
+  const _rot=camRotating;
   const cityLabelCamMoved=cityLabelCamPos.distanceToSquared(camera.position)>1e-6||1-Math.abs(cityLabelCamQuat.dot(camera.quaternion))>1e-7;
-  if(cityLabelCamMoved){cityLabelCamPos.copy(camera.position);cityLabelCamQuat.copy(camera.quaternion);}
-  const updateCityLabels=!_rot&&(cityLabelCamMoved||now>=cityLabelTick);
+  if(cityLabelCamMoved){
+    cityLabelCamPos.copy(camera.position);cityLabelCamQuat.copy(camera.quaternion);
+    labelsHiddenUntil=now+120;
+  }
+  const cameraMoving=_rot||cityLabelCamMoved||now<labelsHiddenUntil;
+  if(cameraMoving!==labelsAreHidden){
+    labelsAreHidden=cameraMoving;
+    labelsRoot.style.visibility=cameraMoving?'hidden':'visible';
+  }
+  const updateCityLabels=!cameraMoving&&now>=cityLabelTick;
   if(updateCityLabels)cityLabelTick=now+33;
-  for(const c of cities){if(updateCityLabels)c.updateLabel();c.updateSiegeViz(now);}
-  if(!_rot)for(const s of squads)s.updateLabel();
+  if(typeof window.updateSiegeFX==='function')window.updateSiegeFX(now);
+  for(const c of cities){
+    if(updateCityLabels)c.updateLabel();
+    if(c.siege||c._siegeVizActive){c.updateSiegeViz(now);c._siegeVizActive=!!c.siege;}
+  }
+  if(!cameraMoving)for(const s of squads)s.updateLabel();
   const tintUnit=s=>{const m=s.tintMat;if(m&&m.emissive)m.emissive.setHex(s.foe?0x6b1a12:(selectedUnits.has(s)?0x1f6fc0:0x000000));};
-  for(const s of ships){if(!_rot)s.updateLabel();tintUnit(s);
+  for(const s of ships){if(!cameraMoving)s.updateLabel();tintUnit(s);
     const sel=selectedUnits.has(s); s.rangeRing.visible=sel;
     if(sel)s.rangeRing.position.set(s.pos.x,WATER_Y_SHIP+0.1,s.pos.z); // кольцо следует за кораблём
   }
-  for(const s of planes){if(!_rot)s.updateLabel();tintUnit(s);}
+  for(const s of planes){if(!cameraMoving)s.updateLabel();tintUnit(s);}
   // selection rings (multi) + drag source highlight + pulse
   const k=1+Math.sin(now/220)*0.08;
   const bk=1+Math.sin(now/110)*0.14;
   for(const c of cities){
+    if(c!==dragFrom&&selectedSet.has(c)&&(c.owner!==OWNER.PLAYER||(c.occ&&c.occFrom!==OWNER.PLAYER))){selectedSet.delete(c);if(typeof updatePanel==='function')updatePanel();}   // город потерян (захват = оккупация: owner остаётся, occ=true) → снять выделение, иначе кольцо селектора зависает
     const on=selectedSet.has(c)||c===dragFrom;
     c.ring.visible=on;
     if(on)c.ring.scale.set(k,k,k);
@@ -271,7 +318,7 @@ function loop(now){
     c.bring.visible=!!c.siege;
     if(c.siege)c.bring.scale.set(bk,bk,bk);
   }
-  if(MP.on)mpTick(now,dt);   // хост рассылает снапшот/сущности; гость интерполирует зеркала
+  if(MP.on)mpTick(now,dt,!cameraMoving);   // скрытые при движении плашки не проецируем в DOM
   updateMoverSelRings(now);  // кольца выделения кораблей/дирижаблей (после mpTick — позиции призраков обновлены)
   updateHUD(); updateWarPreps();
   panelTick+=dt; if(panelTick>0.25){panelTick=0;if(regionsDirty){regionsDirty=false;assignRegions();}updatePanel();refreshTechAfford();refreshHeroBar();if(diploTarget!=null)refreshDiplo();refreshPol();if(peaceTarget!=null)refreshPeaceDialog();}  // refresh UI
@@ -282,7 +329,6 @@ function loop(now){
   if(typeof fogRender==='function')fogRender(renderer,scene,camera);    // 🌫 туман войны: пост-процесс (сцена → RT → затемнение вне вижена)
   else renderer.render(scene,camera);
   updatePerfOverlay(now);
-  requestAnimationFrame(loop);
 }
 
 /* ===================== МУЛЬТИПЛЕЕР (Colyseus server-authoritative) =====================
@@ -438,7 +484,7 @@ function loop(now){
     MP._lastTime=m.time; gameTime=m.time;
     const list=m.c||m.dc;
     if(m.c)MP._synced=true;   // получили полный keyframe → можно судить о победе/поражении
-    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15],d[16],d[17],d[18],d[19],d[20],d[21],d[22]); } regionsDirty=true; }
+    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15],d[16],d[17],d[18],d[19],d[20],d[21],d[22]); } }
     if(m.g){ const g=m.g; for(let i=0;i<g.length;i++){gold[i]=g[i];politPts[i]=m.p[i];manpower[i]=m.m[i];} }  // в cs-режиме экономика идёт через 'econ'; в relay — здесь
     if(m.rel){ relations={}; for(const [k,v] of m.rel)relations[k]=v; warSince={}; for(const [k,v] of m.ws)warSince[k]=+v; warNotify(); allyNotify(); }
     // победа/поражение — только после keyframe И если видели партию ИДУЩЕЙ (не врываемся в уже оконченную)
@@ -614,6 +660,7 @@ function loop(now){
     for(const b of ghostShipBatches.values()){b.im.count=0;b.im.visible=false;}
     const byKey=new Map();
     for(const gh of MP.ghosts.values())if(gh.kind===1&&!gh.group.userData.fallbackShip){
+      if(!dynamicInRenderZone(gh.group.position,0.4))continue;
       if(gh.transport && typeof isWaterAt==='function' && !isWaterAt(gh.group.position.x,gh.group.position.z))continue;   // 🏝 транспорт НЕ рисуем над видимой сушей (не заезжает на остров)
       const key=shipKeyForOwner(gh.owner);
       const list=byKey.get(key)||[]; list.push(gh); byKey.set(key,list);
@@ -669,6 +716,7 @@ function loop(now){
     for(const b of ghostPlaneBatches.values()){b.im.count=0;b.im.visible=false;}
     const byOwner=new Map();
     for(const gh of MP.ghosts.values())if(gh.kind===2){
+      if(!dynamicInRenderZone(gh.group.position))continue;
       const list=byOwner.get(gh.owner)||[]; list.push(gh); byOwner.set(gh.owner,list);
     }
     for(const [owner,list] of byOwner){
@@ -689,6 +737,8 @@ function loop(now){
   }
 
   /* ── гость: зеркала сущностей ── */
+  const ghostSquadPool=new Map();
+  const ghostPoolKey=(owner)=>String(owner|0);
   function ghostMesh(kind,owner){
     const col=(OWNER_COL[owner]!=null?OWNER_COL[owner]:0x9aa6b2), g=new T3.Group(); let lab=null, mat=null;
     g.userData.perfGroup=kind===0?'units':kind===1?'ships':kind===2?'planes':'projectiles';
@@ -711,6 +761,31 @@ function loop(now){
     if(ud&&ud.tm){ for(const b of ud.tm){ if(b.mesh&&b.mesh.dispose)b.mesh.dispose(); if(b.acc&&b.acc.dispose)b.acc.dispose(); b.mesh=null; b.acc=null; } ud.tm=null; }
     if(ud&&ud.shadow){ gh.group.remove(ud.shadow); if(ud.shadow.dispose)ud.shadow.dispose(); ud.shadow=null; }
     if(gh.mat&&gh.mat.dispose)gh.mat.dispose();
+  }
+  function resetSquadGhost(gh){
+    const ud=gh.group.userData;
+    gh.group.visible=true; gh.group.rotation.set(0,0,0); gh.group.scale.set(1,1,1);
+    gh._dying=null; gh._perish=null; gh._dmgT=0; gh._wasF=false; gh._lastUX=null; gh._lastUZ=null; gh._lastUC=null;
+    gh._fracR=null; gh._fracEdge=null; gh.fighting=false; gh.count=0; gh.comp=null; gh.edgeA=null; gh.edgeB=null; gh.frac=0;
+    if(ud){
+      ud.st=null; ud.trail=[]; ud.travelled=0; ud.lastHead=null; ud.fwd=null; ud.dieDir=null; ud._dieAt=null;
+      ud.corpses=null; ud.cheerT=0; ud.battleTgt=null; ud.battleFoeCount=0;
+      if(ud.orbs)for(const u of ud.orbs){u.ex=null;u.ey=null;u.ez=null;u.cy=null;}
+    }
+    if(gh.lab){gh.lab.style.display='none';gh._labVis=false;gh._labN=null;}
+  }
+  function releaseSquadGhost(gh){
+    selectedUnits.delete(gh); resetSquadGhost(gh); scene.remove(gh.group); if(gh.lab)gh.lab.remove();
+    const key=ghostPoolKey(gh.owner), pool=ghostSquadPool.get(key)||[];
+    const maxPool=gh.owner===PLAYER?3:1;
+    if(pool.length>=maxPool){killGhost(gh);return;}
+    pool.push(gh); ghostSquadPool.set(key,pool);
+  }
+  function acquireGhost(kind,owner){
+    if(kind!==0)return ghostMesh(kind,owner);
+    const pool=ghostSquadPool.get(ghostPoolKey(owner)), gh=pool&&pool.pop();
+    if(!gh)return ghostMesh(kind,owner);
+    resetSquadGhost(gh); scene.add(gh.group); if(gh.lab&&labels)labels.appendChild(gh.lab); return gh;
   }
   // рой отряда-призрака: n мини-юнитов по диску (золотой угол) — зеркало солошного Squad._buildCluster
   const ghostUnitDummy=new T3.Object3D();
@@ -1140,11 +1215,11 @@ function loop(now){
         const src=typeof unitTypedSource==='function'?unitTypedSource(gh.owner,b.t):null;
         b.cap=Math.max(18,Math.ceil((b.n+extra)*1.3));
         b.mesh=new T3.InstancedMesh(src?src.geo:UNIT_GEO,src?src.mat:gh.mat,b.cap);
-        b.mesh.count=0; b.mesh.castShadow=false; b.mesh.receiveShadow=true; b.mesh.userData.perfGroup='units';
+        b.mesh.count=0; b.mesh.castShadow=false; b.mesh.receiveShadow=true; b.mesh.frustumCulled=false; b.mesh.userData.perfGroup='units';
         gh.group.add(b.mesh);
         if(src&&src.accGeo){                                                    // 👥 аксессуар (лук/конь): отдельный меш, те же матрицы
           b.acc=new T3.InstancedMesh(src.accGeo,src.accMat,b.cap);
-          b.acc.count=0; b.acc.castShadow=false; b.acc.receiveShadow=true; b.acc.userData.perfGroup='units';
+          b.acc.count=0; b.acc.castShadow=false; b.acc.receiveShadow=true; b.acc.frustumCulled=false; b.acc.userData.perfGroup='units';
           gh.group.add(b.acc);
         }
       }
@@ -1180,13 +1255,35 @@ function loop(now){
     //    после боя (fighting=false) выжившие перестраиваются под новую численность.
     if(!gh.fighting || ud.colW==null) ud.colW = n<=5?1 : n<=20?2 : n<=40?3 : 4;
     ud.unitScale=(base?base.scale:1);   // 🔒 размер юнита ФИКСИРОВАН (не зависит от числа) — большие армии просто плотнее/шире по шеренге, а не мельче
-    placeGhostUnits(gh,performance.now());
+    const renderVisible=dynamicInRenderZone(gh.group.position,0.4);
+    gh.group.visible=renderVisible;
+    if(renderVisible)placeGhostUnits(gh,performance.now());
+  }
+  let ghostWarmOwner=-1, ghostWarmPending=false;
+  function scheduleSquadGhostWarm(owner){
+    owner=owner|0;
+    if(ghostWarmPending&&ghostWarmOwner===owner)return;
+    ghostWarmOwner=owner; ghostWarmPending=true;
+    const run=()=>{
+      ghostWarmPending=false;
+      const pool=ghostSquadPool.get(ghostPoolKey(owner));
+      if((pool&&pool.length)||[...MP.ghosts.values()].some(g=>g.kind===0&&g.owner===owner))return;
+      const gh=ghostMesh(0,owner), n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
+      gh.comp={inf:n-each*2,arc:each,cav:each};
+      ghostSwarm(gh,n);                 // CPU geometry + GPU buffers are prepared outside the send gesture.
+      releaseSquadGhost(gh);
+    };
+    const enqueue=()=>{
+      if(typeof requestIdleCallback==='function')requestIdleCallback(run,{timeout:900});
+      else setTimeout(run,40);
+    };
+    if(typeof ensureUnitModels==='function')ensureUnitModels().then(enqueue,enqueue); else enqueue();
   }
   function reconcile(list){
     const seen=new Set();
     for(const d of list){ const id=d[0],kind=d[1];
       let gh=MP.ghosts.get(id);
-      if(!gh||gh.kind!==kind){ if(gh)killGhost(gh); gh=ghostMesh(kind,d[2]); MP.ghosts.set(id,gh); gh.group.position.set(d[3],d[4],d[5]); }
+      if(!gh||gh.kind!==kind){ if(gh){if(gh.kind===0)releaseSquadGhost(gh);else killGhost(gh);} gh=acquireGhost(kind,d[2]); MP.ghosts.set(id,gh); gh.group.position.set(d[3],d[4],d[5]); }
       gh._mpid=id; gh.target.set(d[3],d[4],d[5]);
       if(kind===1){ gh.transport=(id.charCodeAt(0)===115&&id.charCodeAt(1)===104&&id.charCodeAt(2)===113); gh.authHeading=(d[7]!=null?d[7]:null); }  // 🚢 транспорт 'shq…' → авторитетный курс [7]
       if(kind===0&&gh.count>d[6])gh._dmgT=performance.now();               // 🔴 потери → красная вспышка метки
@@ -1218,12 +1315,12 @@ function loop(now){
   }
 
   const _labV=new T3.Vector3();   // переиспользуемый вектор проекции меток (без new Vector3 на метку/кадр)
-  window.mpTick=(now,dt)=>{
+  window.mpTick=(now,dt,updateLabels=true)=>{
     if(MP.host){ if(MP._lastGS!==gameSpeed){MP._lastGS=gameSpeed;setPill();}
       if(now-tSnap>140){tSnap=now;MP.send(buildSnap(now));}
       if(now-tEnt>70){tEnt=now;const ent=buildEnt();if(ent)MP.send(ent);} return; }
     if(!MP.guest)return;
-    if(MP._lastFid!==PLAYER){ MP._lastFid=PLAYER; MP.send({t:'joinInfo',fid:PLAYER,country:PLAYER_COUNTRY}); setPill(); } // надёжно сообщаем хосту свою фракцию
+    if(MP._lastFid!==PLAYER){ MP._lastFid=PLAYER; MP.send({t:'joinInfo',fid:PLAYER,country:PLAYER_COUNTRY}); setPill(); scheduleSquadGhostWarm(PLAYER); } // надёжно сообщаем хосту свою фракцию
     // ⚔ grid дерущихся kind-0 ghost'ов (раз в кадр): поиск боевой цели становится O(1) на отряд вместо O(N²) по всем ghost'ам.
     //    Ячейка = радиус пары (3). Позиции читаются живьём в поиске; ячейка с прошлого микро-шага — для facing-анимации точности хватает.
     const FCELL=3, _fgrid=(MP._fgrid||(MP._fgrid=new Map())); _fgrid.clear();
@@ -1231,19 +1328,22 @@ function loop(now){
     for(const g2 of MP.ghosts.values()){ if(g2.kind!==0||!g2.fighting)continue; const q=g2.group.position; const kk=_fkey(q.x,q.z); let a=_fgrid.get(kk); if(!a){a=[];_fgrid.set(kk,a);} a.push(g2); }
     for(const [id,gh] of MP.ghosts){
       const p=gh.group.position,t=gh.target,k=Math.min(1,dt*12),dx=t.x-p.x,dz=t.z-p.z;
+      let renderVisible=dynamicInRenderZone(p,gh.kind===2?0:0.4);
+      gh.group.visible=renderVisible;
       if(gh._perish){                                                     // ⚔ погиб в бою: гаснет на месте и снимается
-        if(now-gh._perish>750){ killGhost(gh); MP.ghosts.delete(id); continue; }
+        if(!renderVisible||now-gh._perish>750){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
         if(gh.kind===0&&gh.group.userData.orbs)placeGhostUnits(gh,now);
         continue; }
       if(gh._dying){ const ud=gh.group.userData, f=ud.dieDir||ud.fwd||[1,0];  // 🏰 роспуск: ряды по очереди заходят СТРОГО прямо в центр здания (по одному ряду), независимо от gameSpeed
+        if(!renderVisible){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
         if(window.UNIT_STREAM!==false && gh.edgeA!=null && ud.st){          // 🍄 поток: юниты сами дотекают по дороге до здания и тают у двери
-          if((ud.st.tailS!=null && ud.st.tailS>ud.st.len+0.25) || now-gh._dying>60000){ killGhost(gh); MP.ghosts.delete(id); continue; }
+          if((ud.st.tailS!=null && ud.st.tailS>ud.st.len+0.25) || now-gh._dying>60000){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
           if(gh.kind===0&&ud.orbs)placeGhostUnits(gh,now);
           continue; }
         const rankSp=(ud.unitScale||1)*0.95, colLen=Math.ceil((ud.orbN||1)/(ud.colW||3))*rankSp;
         const adv=ud._dieAt?Math.hypot(p.x-ud._dieAt[0], p.z-ud._dieAt[1]):0;
         // ⚠ гасим ТОЛЬКО когда ПОСЛЕДНИЙ ряд полностью растаял (depth ≥ 2.2·rankSp), иначе хвост исчезал рывком на ~23% масштабе → «засасывало в конце»
-        if(adv>=colLen+rankSp*1.4 || now-gh._dying>60000){ killGhost(gh); MP.ghosts.delete(id); continue; }
+        if(adv>=colLen+rankSp*1.4 || now-gh._dying>60000){ releaseSquadGhost(gh); MP.ghosts.delete(id); continue; }
         // 🚶 марш В ГОРОД идёт ровно со СКОРОСТЬЮ ДВИЖЕНИЯ отряда (SQUAD_SPEED×gameSpeed), а не быстрее —
         //    поэтому колонна НЕ ускоряется на прибытии («не засасывает»), а спокойно доходит и тает у двери.
         const spd=((typeof LOCALSIM!=='undefined'&&LOCALSIM&&LOCALSIM.K&&LOCALSIM.K.SQUAD_SPEED!=null)?LOCALSIM.K.SQUAD_SPEED:(typeof SQUAD_SPEED!=='undefined'?SQUAD_SPEED:0.8))*(typeof gameSpeed!=='undefined'?gameSpeed:1);
@@ -1279,6 +1379,8 @@ function loop(now){
           const tgt=-gh.authHeading; gh._ry=(gh._ry==null)?tgt:gh._ry+angDiff(tgt,gh._ry)*Math.min(1,dt*8); gh.group.rotation.y=gh._ry;
         } else if((gh.kind===1||gh.kind===2)&&dx*dx+dz*dz>1e-4)gh.group.rotation.y=-Math.atan2(dz,dx);   // нос моделей смотрит +X → разворот по курсу
       }
+      renderVisible=dynamicInRenderZone(p,gh.kind===2?0:0.4);
+      gh.group.visible=renderVisible;
       if(gh.mat&&gh.mat.emissive)gh.mat.emissive.setHex(selectedUnits.has(gh)?0x1f6fc0:0x000000); // подсветка выбранных
       // ⚔ цель боя: ближайший ВРАЖЕСКИЙ дерущийся отряд рядом → передний ряд разворачивается к нему (боевая анимация)
       if(gh.kind===0){
@@ -1294,15 +1396,15 @@ function loop(now){
         if(gh._wasF&&!gh.fighting&&!gh._dying&&(gh.count||0)>0)ud2.cheerT=0.9;
         gh._wasF=gh.fighting;
       }
-      if(gh.kind===0&&gh.group.userData.orbs){   // 🪖 юниты отряда: 🍄 поток по дороге / строй (бой, поле, откат UNIT_STREAM=false)
+      if(renderVisible&&gh.kind===0&&gh.group.userData.orbs){   // 🪖 юниты отряда: 🍄 поток по дороге / строй (бой, поле, откат UNIT_STREAM=false)
         // гейт: не пересчитываем рой (и не перезаливаем инстанс-буфер) для СТАТИЧНОГО отряда — не двигался, не дерётся,
         //   не чирит, число не менялось. Движущийся отряд (общий случай) рендерится всегда; экономит кадр на стоящих/паузе.
         const ud0=gh.group.userData;
         if(gh._lastUX==null||Math.abs(p.x-gh._lastUX)>1e-4||Math.abs(p.z-gh._lastUZ)>1e-4||gh.fighting||(ud0.cheerT>0)||gh.count!==gh._lastUC){
           gh._lastUX=p.x; gh._lastUZ=p.z; gh._lastUC=gh.count; placeGhostUnits(gh,now); }
       }
-      if(gh.lab && !gh._dying){ const v=_labV.set(p.x,p.y+0.4,p.z).project(camera);   // переиспользуемый вектор + запись в DOM ТОЛЬКО при изменении (без reflow каждый кадр)
-        const vis=v.z<1;
+      if(updateLabels && gh.lab && !gh._dying){ const v=_labV.set(p.x,p.y+0.4,p.z).project(camera);   // скрытые при движении метки не проецируем
+        const vis=renderVisible&&v.z>=-1&&v.z<=1&&Math.abs(v.x)<=1.04&&Math.abs(v.y)<=1.04;
         if(gh._labVis!==vis){ gh._labVis=vis; gh.lab.style.display=vis?'block':'none'; }
         if(vis){
           const lx=((v.x*0.5+0.5)*innerWidth)|0, ly=((-v.y*0.5+0.5)*innerHeight)|0;
@@ -1339,7 +1441,10 @@ function loop(now){
   }
 
   function onMsg(ev){
-    let m; try{m=JSON.parse(ev.data);}catch(e){return;}
+    let m;
+    if(ev&&ev.data&&typeof ev.data==='object')m=ev.data;       // локальный Sim: без stringify/parse на каждом snapshot
+    else if(ev&&ev.t)m=ev;
+    else try{m=JSON.parse(ev.data);}catch(e){return;}
     switch(m.t){
       case 'hello':
         MP.id=m.id; MP.hostId=m.hostId; MP.on=true;   // роль уже задана из URL, не переопределяем
