@@ -236,17 +236,6 @@
       s.techCache[PLAYER] = { add: Object.assign({}, techCache[PLAYER].add), flags: new Set(techCache[PLAYER].flags), slots: techCache[PLAYER].slots };
     }
   }
-  // полный обзор: подменяем vision-маску на «всё видно» (проектор соло и fog.js зовут её каждый кадр)
-  function patchVision() {
-    const V = window.__WWCSim && window.__WWCSim.vision; if (!V || V.__tutPatched) return;
-    V.__tutPatched = true; const orig = V.visionMask.bind(V);
-    let ones = null;
-    V.visionMask = (s, p) => {
-      if (window.TUT.fullVision) { const G = s.K.GRID; if (!ones || ones.length !== G * G) { ones = new Uint8Array(G * G); ones.fill(1); } return ones; }
-      return orig(s, p);
-    };
-  }
-
   /* ── перехват команд: on-rails ── */
   let origCmd = null, lastCmd = null;
   function wrapCmd() {
@@ -565,7 +554,7 @@
     if (lyon) lyon.units = 35;                             // ударный стек: гарантия захвата (35 > 1.54×12 по Ланчестеру)
     if (turin) turin.units = 12;
     grantTech(PREGRANT_TECH);                              // пререквизиты верфи/аэродрома — игроку остаётся финальный клик
-    patchVision(); window.TUT.fullVision = true;           // туман снят на время обучения
+    window.TUT.fullVision = false;                         // обучение использует обычную разведку и туман войны
     try { syncLocalEcon(s); } catch (e) {}
   }
 
