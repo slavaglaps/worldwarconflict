@@ -86,14 +86,12 @@
   function composeFog() {
     if (!base || !img) return;
     const d = img.data;
-    const fog = (typeof FOG !== 'undefined' && FOG.tex) ? FOG.tex.image.data : null;   // байты, x-major (x*G+z)
-    const prevFog = (typeof FOG !== 'undefined' && FOG.prevTex) ? FOG.prevTex.image.data : null;
-    const fogBlend = (typeof FOG !== 'undefined' ? FOG.blend : 1);
+    const fog = (typeof FOG !== 'undefined' && FOG.raw) ? FOG.raw : null;   // полная игровая маска, x-major (x*G+z)
     for (let z = 0; z < G; z++) {
       for (let x = 0; x < G; x++) {
         const o = (z * G + x) * 4;
         let k = 1;
-        if (fog) { const i=x*G+z, v=((prevFog?prevFog[i]:fog[i])+(fog[i]-(prevFog?prevFog[i]:fog[i]))*fogBlend)/255; k = FOG_MIN + (1 - FOG_MIN) * v; }
+        if (fog) { const v=fog[x*G+z]; k = FOG_MIN + (1 - FOG_MIN) * v; }
         d[o] = base[o] * k; d[o + 1] = base[o + 1] * k; d[o + 2] = base[o + 2] * k; d[o + 3] = 255;
       }
     }
@@ -103,15 +101,13 @@
   // города + видимые армии → #mmTop
   function drawEntities() {
     ctxT.clearRect(0, 0, G, G);
-    const fog = (typeof FOG !== 'undefined' && FOG.tex) ? FOG.tex.image.data : null;
-    const prevFog = (typeof FOG !== 'undefined' && FOG.prevTex) ? FOG.prevTex.image.data : null;
-    const fogBlend = (typeof FOG !== 'undefined' ? FOG.blend : 1);
+    const fog = (typeof FOG !== 'undefined' && FOG.raw) ? FOG.raw : null;
     if (typeof cities !== 'undefined') {
       for (const c of cities) {
         if (!c) continue;
         const hex = (typeof OWNER_COL !== 'undefined' && OWNER_COL[c.owner] != null) ? OWNER_COL[c.owner] : 0x9aa6b2;
         let k = 1;
-        if (fog) { const i=Math.round(c.gx)*G+Math.round(c.gz), a=prevFog?prevFog[i]:fog[i], v=(a+(fog[i]-a)*fogBlend)/255; k = FOG_MIN + (1 - FOG_MIN) * v; }
+        if (fog) { const x=Math.max(0,Math.min(G-1,Math.round(c.gx))),z=Math.max(0,Math.min(G-1,Math.round(c.gz))); k = FOG_MIN + (1 - FOG_MIN) * fog[x*G+z]; }
         const r = ((hex >> 16) & 255) * k, g = ((hex >> 8) & 255) * k, b = (hex & 255) * k;
         ctxT.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`;
         const s = c.capital ? 4 : 3;

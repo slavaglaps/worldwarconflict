@@ -1,4 +1,4 @@
 Tiny World Builder dist
-Built: 2026-07-13T16:47:01Z
-Commit: ffe667b
+Built: 2026-07-13T17:20:42Z
+Commit: 8a10c74
 Dirty: no

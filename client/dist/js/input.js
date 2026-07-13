@@ -412,6 +412,8 @@ renderer.domElement.addEventListener('touchend',e=>{
   startTouchControl(touchControl);
   touchMouse('mouseup',x,y,button,window);
   if(button===0&&!moved)touchMouse('click',x,y,0,renderer.domElement); // construction placement uses click capture
+  // тап по пустой местности (не панорама) = снять выделение и закрыть панель города — как ЛКМ по пустому месту на десктопе
+  else if(button===2&&!moved&&!selectedUnits.size){ clearSel(); if(typeof updatePanel==='function')updatePanel(); }
   touchControl=null;
 },{passive:false});
 renderer.domElement.addEventListener('touchcancel',e=>{e.preventDefault();cancelTouchControl();touchPinch=null;},{passive:false});

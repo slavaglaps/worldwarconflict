@@ -10,20 +10,25 @@
   const T = (typeof T3 !== 'undefined') ? T3 : THREE;
   const G = (typeof GRID !== 'undefined') ? GRID : 256;
   const N = G * G;
+  const MASK_G = Math.max(1, Math.ceil(G * 0.5));
+  const MASK_N = MASK_G * MASK_G;
   const LERP_T = 0.3;            // сек до полного проявления/затухания
   const CALC_EVERY = 0.4;        // период пересчёта целевой маски
-  const BLUR_R = 2;              // радиус размытия маски (тайлы) — мягкая полутень на границе
-  const BLUR_PASSES = 2;         // 2 прохода box-blur ≈ гаусс — без «лесенки» по текселям
-  let tex = null, prevTex = null, target = null, raw = null, _tmpA = null, _tmpB = null, calcT = 0, started = false;
+  const BLUR_R = 1;              // один дешёвый box-blur; bilinear GPU сглаживает уменьшенную маску
+  const BLUR_PASSES = 1;
+  let tex = null, prevTex = null, target = null, raw = null, maskRaw = null, _tmpA = null, _tmpB = null, calcT = 0, started = false;
   let blend = 1, animating = false;
+  let lastVisionSig = null;
+  let fogQuality = localStorage.getItem('wwc_fog_quality') === 'low' ? 'low' : 'high';
 
   function ensureTex() {
     if (tex) return;
-    target = new Float32Array(N);    // размытая цель (0..1)
+    target = new Float32Array(MASK_N); // размытая GPU-цель (0..1), половинное разрешение
     raw = new Uint8Array(N);         // бинарная маска из computeVision
-    _tmpA = new Float32Array(N); _tmpB = new Float32Array(N);
-    tex = new T.DataTexture(new Uint8Array(N), G, G, T.LuminanceFormat !== undefined ? T.LuminanceFormat : T.RedFormat, T.UnsignedByteType);
-    prevTex = new T.DataTexture(new Uint8Array(N), G, G, T.LuminanceFormat !== undefined ? T.LuminanceFormat : T.RedFormat, T.UnsignedByteType);
+    maskRaw = new Uint8Array(MASK_N);
+    _tmpA = new Float32Array(MASK_N); _tmpB = new Float32Array(MASK_N);
+    tex = new T.DataTexture(new Uint8Array(MASK_N), MASK_G, MASK_G, T.LuminanceFormat !== undefined ? T.LuminanceFormat : T.RedFormat, T.UnsignedByteType);
+    prevTex = new T.DataTexture(new Uint8Array(MASK_N), MASK_G, MASK_G, T.LuminanceFormat !== undefined ? T.LuminanceFormat : T.RedFormat, T.UnsignedByteType);
     tex.magFilter = T.LinearFilter; tex.minFilter = T.LinearFilter;
     tex.wrapS = T.ClampToEdgeWrapping; tex.wrapT = T.ClampToEdgeWrapping;
     prevTex.magFilter = T.LinearFilter; prevTex.minFilter = T.LinearFilter;
@@ -35,21 +40,41 @@
   // сепарабельный box-blur (окно 2R+1, скользящая сумма — O(N)); src/dst: Float32Array
   function blurAxis(src, dst, horizontal) {
     const R = BLUR_R, W = 2 * R + 1;
-    for (let a = 0; a < G; a++) {
+    for (let a = 0; a < MASK_G; a++) {
       let sum = 0;
-      const idx = (b) => horizontal ? (a * G + b) : (b * G + a);
-      for (let b = -R; b <= R; b++) sum += src[idx(Math.max(0, Math.min(G - 1, b)))];
-      for (let b = 0; b < G; b++) {
+      const idx = (b) => horizontal ? (a * MASK_G + b) : (b * MASK_G + a);
+      for (let b = -R; b <= R; b++) sum += src[idx(Math.max(0, Math.min(MASK_G - 1, b)))];
+      for (let b = 0; b < MASK_G; b++) {
         dst[idx(b)] = sum / W;
-        const add = Math.min(G - 1, b + R + 1), del = Math.max(0, b - R);
+        const add = Math.min(MASK_G - 1, b + R + 1), del = Math.max(0, b - R);
         sum += src[idx(add)] - src[idx(del)];
       }
     }
   }
   function blurMask() {
-    for (let i = 0; i < N; i++) _tmpA[i] = raw[i];
+    const scale=G/MASK_G;
+    for(let x=0;x<MASK_G;x++)for(let z=0;z<MASK_G;z++){
+      const x0=Math.floor(x*scale),x1=Math.min(G,Math.ceil((x+1)*scale));
+      const z0=Math.floor(z*scale),z1=Math.min(G,Math.ceil((z+1)*scale));
+      let v=0;for(let sx=x0;sx<x1&&!v;sx++)for(let sz=z0;sz<z1;sz++)if(raw[sx*G+sz]){v=1;break;}
+      maskRaw[x*MASK_G+z]=v;
+    }
+    for (let i = 0; i < MASK_N; i++) _tmpA[i] = maskRaw[i];
     for (let p = 0; p < BLUR_PASSES; p++) { blurAxis(_tmpA, _tmpB, true); blurAxis(_tmpB, _tmpA, false); }
     target.set(_tmpA);
+  }
+
+  function visionSignature(){
+    let h=2166136261>>>0;
+    const mix=(v)=>{h^=(v|0);h=Math.imul(h,16777619)>>>0;};
+    mix(typeof PLAYER==='undefined'?0:PLAYER+1);
+    if(typeof cities!=='undefined')for(const c of cities){mix((c.owner|0)+1);mix(c.occ?1:0);}
+    if(typeof relations!=='undefined')for(const k of Object.keys(relations).sort())if(relations[k]==='ally')for(let i=0;i<k.length;i++)mix(k.charCodeAt(i));
+    if(window.MAP_BUILDINGS)for(const b of window.MAP_BUILDINGS)if(b&&b.item&&b.item.role==='tower'){mix((b.owner|0)+1);mix(Math.round(b.gx*2));mix(Math.round(b.gz*2));}
+    if(typeof MP!=='undefined'&&MP.ghosts)for(const gh of MP.ghosts.values())if(gh&&gh.group){const p=gh.group.position;mix((gh.owner|0)+1);mix((gh.kind|0)+1);mix(Math.round(p.x*2));mix(Math.round(p.z*2));}
+    if(typeof ships!=='undefined')for(const s of ships)if(s&&s.pos){mix((s.owner|0)+1);mix(2);mix(Math.round(s.pos.x*2));mix(Math.round(s.pos.z*2));}
+    if(typeof planes!=='undefined')for(const p of planes)if(p&&p.pos){mix((p.owner|0)+1);mix(3);mix(Math.round(p.pos.x*2));mix(Math.round(p.pos.z*2));}
+    return h;
   }
 
   // sim-подобный шим над клиентским состоянием: города + собственные призраки.
@@ -106,16 +131,19 @@
     ensureTex();
     calcT -= dt;
     if (calcT <= 0) {
-      if (computeTarget()) {
-        calcT = CALC_EVERY;
+      calcT = CALC_EVERY;
+      const sig=visionSignature();
+      if (sig!==lastVisionSig&&computeTarget()) {
+        lastVisionSig=sig;
         const next = tex.image.data, prev = prevTex.image.data, oldBlend = blend;
-        for (let i = 0; i < N; i++) {
+        for (let i = 0; i < MASK_N; i++) {
           const current = started ? Math.round(prev[i] + (next[i] - prev[i]) * oldBlend) : Math.round(target[i] * 255);
           prev[i] = current;
           next[i] = Math.round(target[i] * 255);
+          if(fogQuality==='low')prev[i]=next[i];
         }
         prevTex.needsUpdate = true; tex.needsUpdate = true;
-        started = true; blend = 0; animating = true;
+        started = true; blend = fogQuality==='low'?1:0; animating = fogQuality!=='low';
       }
     }
     if (!started || !animating) return;
@@ -218,5 +246,11 @@
 
   window.fogUpdate = fogUpdate;
   window.fogRender = fogRender;
-  window.FOG = { get tex() { return tex; }, get prevTex(){return prevTex;}, get blend(){return blend;}, computeTarget, _shim: shim, get started() { return started; } };
+  window.FOG = {
+    get tex(){return tex;}, get prevTex(){return prevTex;}, get raw(){return raw;}, get grid(){return MASK_G;},
+    get blend(){return blend;}, computeTarget, _shim:shim, get started(){return started;},
+    invalidate(){lastVisionSig=null;calcT=0;},
+    setQuality(q){fogQuality=q==='low'?'low':'high';localStorage.setItem('wwc_fog_quality',fogQuality);lastVisionSig=null;calcT=0;},
+    get quality(){return fogQuality;},
+  };
 })();
