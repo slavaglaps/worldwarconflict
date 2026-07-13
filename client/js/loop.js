@@ -1293,23 +1293,10 @@ function loop(now){
       if((pool&&pool.length)||[...MP.ghosts.values()].some(g=>g.kind===0&&g.owner===owner))return;
       const gh=ghostMesh(0,owner), n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
       gh.comp={inf:n-each*2,arc:each,cav:each};
-      ghostSwarm(gh,n);                 // CPU geometry + GPU buffers are prepared outside the send gesture.
-      // WebGPU creates render pipelines lazily. Compile the representative swarm
-      // in an isolated scene: compiling the live scene while orders add/remove
-      // squads can leave the renderer permanently waiting on a stale render object.
-      if(renderer&&typeof renderer.compileAsync==='function'){
-        try{
-          const warmScene=new T3.Scene();
-          warmScene.environment=scene.environment;
-          scene.remove(gh.group); warmScene.add(gh.group);
-          scene.traverse(o=>{if(o.isLight&&o.clone)warmScene.add(o.clone());});
-          const pending=renderer.compileAsync(warmScene,camera);
-          if(pending&&pending.then){pending.catch(()=>{}).finally(()=>{
-            warmScene.remove(gh.group); releaseSquadGhost(gh);
-          });return;}
-          warmScene.remove(gh.group);
-        }catch(e){}
-      }
+      // Prepare models and instance buffers away from the send gesture. Do not
+      // call compileAsync on the live renderer: WebGPU can wedge its command
+      // queue when the background compile overlaps the main render pipeline.
+      ghostSwarm(gh,n);
       releaseSquadGhost(gh);
     };
     const enqueue=()=>{
