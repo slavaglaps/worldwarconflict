@@ -21,6 +21,21 @@ const { MODS, buildManifest, CLIENT } = require('./build-manifest.js');
 
 const DIST = path.join(CLIENT, 'dist');
 
+async function buildRenderRuntime() {
+  const outfile = path.join(CLIENT, 'vendor', 'three', 'wwc-three-webgpu.js');
+  await esbuild.build({
+    entryPoints: [path.join(__dirname, 'render-runtime-entry.js')],
+    bundle: true,
+    minify: true,
+    sourcemap: true,
+    format: 'iife',
+    platform: 'browser',
+    target: ['es2022'],
+    outfile,
+  });
+  return fs.statSync(outfile).size;
+}
+
 async function buildClient() {
   let combined = '';
   for (const m of MODS) combined += '\n/* ===== ' + m + ' ===== */\n' + fs.readFileSync(path.join(CLIENT, m), 'utf8');
@@ -47,11 +62,13 @@ module.exports = { buildManifest, MODS };
 
 if (require.main === module) (async () => {
   fs.mkdirSync(DIST, { recursive: true });
+  const rBytes = await buildRenderRuntime();
   const rawClient = MODS.reduce((s, m) => s + fs.statSync(path.join(CLIENT, m)).size, 0);
   const cBytes = await buildClient();
   const sBytes = await buildSim();
   fs.writeFileSync(path.join(DIST, 'build-manifest.json'), JSON.stringify(buildManifest(), null, 2) + '\n');
   const k = (n) => (n / 1024).toFixed(0) + 'KB';
+  console.log('✓ wwc-three-webgpu.js —', k(rBytes), '(WebGPU + WebGL fallback)');
   console.log('✓ game.bundle.js —', k(cBytes), '(из', k(rawClient), 'сырьём,', Math.round((1 - cBytes / rawClient) * 100) + '% меньше) + sourcemap');
   console.log('✓ sim.bundle.js  —', k(sBytes), '+ sourcemap');
   console.log('✓ build-manifest.json — guard свежести (server/test/build-fresh.test.js)');

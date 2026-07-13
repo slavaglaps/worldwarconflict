@@ -206,8 +206,7 @@
   </div>
 </div>
 
-<script src="vendor/three/three.r128.min.js"></script>
-<script src="vendor/three/GLTFLoader.r128.js"></script>
+<script src="vendor/three/wwc-three-webgpu.js"></script>
 <!-- ── Сборщик модулей игры ───────────────────────────────────────────────
      game.html разбит на модули (js/*.js + мост game.net.js) для удобства правок.
      Сборки нет: модули НЕЛЬЗЯ грузить отдельными <script> — функции хойстятся
@@ -232,6 +231,15 @@
   const loadScript = (src) => new Promise((res, rej) => {   // внешний <script src> — CSP-safe
     const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error(src)); document.head.appendChild(s);
   });
+
+  try {
+    setLoading('Initializing graphics...');
+    await window.__WWC_RENDER_READY;
+  } catch (e) {
+    console.error('[render] renderer initialization failed:', e);
+    setLoading('Graphics initialization failed');
+    return;
+  }
 
   // ── 0) хекс-карта: грузим модели KayKit + генерим сетку ДО игровых модулей ──
   try {

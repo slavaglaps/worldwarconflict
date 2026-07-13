@@ -37,6 +37,7 @@ function _updateSiegeFX(now){ const first=now!==_fxNow; _fxNow=now; if(!first||!
     const x=a.x0+(a.x1-a.x0)*k, z=a.z0+(a.z1-a.z0)*k, y=a.y0+(a.y1-a.y0)*k+Math.sin(k*Math.PI)*a.arc;
     a.m.position.set(x,y,z); a.m.lookAt(a.x1,a.y1,a.z1); }
 }
+window.updateSiegeFX=_updateSiegeFX;
 class City{
   constructor(gx,gz,country,size,owner,idx){
     this.gx=gx; this.gz=gz; this.country=country; this.size=size; this.owner=owner; this.idx=idx;
@@ -416,8 +417,14 @@ class City{
     if(sx<-90||sx>innerWidth+90||sy<-55||sy>innerHeight+55){showLab(this.lab,false);return;}
     const zoomR=typeof orbit!=='undefined'?orbit.r:100;
     const isSelected=typeof selected!=='undefined'&&selected===this;
-    const isFriendly=this.owner===PLAYER||(typeof allied==='function'&&allied(this.owner,PLAYER));
-    if(zoomR>60&&!isFriendly){showLab(this.lab,false);return;}
+    const isOwn=this.owner===PLAYER;
+    const isAlly=typeof allied==='function'&&allied(this.owner,PLAYER);
+    const isEnemy=typeof atWar==='function'&&atWar(this.owner,PLAYER);
+    const isHovered=typeof hoverCity!=='undefined'&&hoverCity===this;
+    const isActivelyScouted=this._activelyScouted===true;
+    this.lab.classList.toggle('cityLabEnemy',isEnemy);
+    this.lab.classList.toggle('cityLabAlly',isAlly);
+    if(!isOwn&&!isAlly&&!isEnemy&&!isHovered&&!isActivelyScouted){showLab(this.lab,false);return;}
     showLab(this.lab,true);
     const labelScale=zoomR<=120?1:zoomR<=210?.84:zoomR<=320?.68:.58;
     this.lab.style.setProperty('--city-label-scale',labelScale);
@@ -455,7 +462,6 @@ class City{
   }
   // осаждающие армии видны как сферы у города, дрожат и светятся красным (как полевой бой)
   updateSiegeViz(now){
-    _updateSiegeFX(now);                                                   // пыль/осколки (раз в кадр)
     const orbs=this.siegeOrbs;
     const bx=this._visualGX==null?this.gx:this._visualGX, bz=this._visualGZ==null?this.gz:this._visualGZ, by=this._visualY==null?this.baseY:this._visualY;
     if(!this.siege||this._fog){                                            // 🌫 в тумане чужой бой не показываем

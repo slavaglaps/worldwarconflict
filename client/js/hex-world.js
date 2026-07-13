@@ -106,7 +106,13 @@
   let HEXROADTILES = [];                      // центры видимых road/bridge-тайлов для ворот в стенах
   let HEXTYPES = new Map();                  // "q,r" → тип исходного тайла без игровой подложки
 
-  const dummy = new T.Object3D(), WHITE = new T.Color(0xffffff);
+  const dummy = new T.Object3D(), WHITE = new T.Color(0xffffff), INSTANCE_TINT = new T.Color();
+  const instanceTint = (color) => {
+    INSTANCE_TINT.copy(color || WHITE);
+    // Three r128 treated hexadecimal channels as raw linear instance colors.
+    if (IS_WEBGPU) INSTANCE_TINT.convertLinearToSRGB();
+    return INSTANCE_TINT;
+  };
   const tileTranslate = new T.Matrix4(), tileProjection = new T.Matrix4(), tileRotation = new T.Matrix4();
   function writeProjectedHexMatrix(out, gx, top, gz, ry, sy) {
     // kx/kz are map projection scales. They must stay in world axes; applying them
@@ -216,6 +222,15 @@
     // (трава/дорога/песок), а не biome-override этого батча — иначе захваченный winter/summer/desert
     // тайл при сбросе в обычный биом сохранял бы свою снежную/пустынную текстуру.
     const idx0Map = baseMap || mat.map || null;
+    if (IS_WEBGPU && idx0Map && window.createWWCWebGPUBiomeMaterial) {
+      return window.createWWCWebGPUBiomeMaterial({
+        sourceMaterial: mat,
+        baseMap: idx0Map,
+        desertMap,
+        summerMap,
+        winterMap,
+      });
+    }
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uBiomeBaseMap = { value: idx0Map };
       shader.uniforms.uBiomeDesertMap = { value: desertMap };
@@ -357,7 +372,7 @@
     for (let i = 0; i < list.length; i++) {
       const c = list[i], sy = (c.scaleTop != null ? c.scaleTop : c.top) - FLOORg;
       writeProjectedHexMatrix(dummy.matrix, c.gx, c.top, c.gz, c.ry || 0, sy);
-      im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, c.col != null ? c.col : WHITE);
+      im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, instanceTint(c.col != null ? c.col : WHITE));
       packBiome[i] = packBiomeIndex(c.biome);
     }
     geo.setAttribute('aPackBiome', new T.InstancedBufferAttribute(packBiome, 1));
@@ -433,8 +448,19 @@
       rFlowSpeed: { value: 0.18 }, rFlowScale: { value: 0.06 }, rFlowStrength: { value: 0.35 },
       rFlowContrast: { value: 4.0 }, rNoiseScale: { value: 7.0 }, rNoiseStrength: { value: 0.4 },
     };
-    const waterMat = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.0 });
-    waterMat.onBeforeCompile = (sh) => {
+    let waterMat = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.0 });
+    if (IS_WEBGPU && window.createWWCWebGPUWaterMaterial) {
+      const gpuWater = window.createWWCWebGPUWaterMaterial({
+        dudvMap,
+        coastTexture: coastTex,
+        grid: GRID,
+        deepColor: waterFX.uColorDeep.value,
+        shallowColor: waterFX.uColorShallow.value,
+        foamColor: waterFX.uColorFoam.value,
+      });
+      waterMat = gpuWater.material;
+      waterFX.uTime = gpuWater.uTime;
+    } else waterMat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, waterFX);
       sh.vertexShader = 'varying vec3 vPos; varying vec3 vWorldPos;\n' +
         sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vPos = position; vWorldPos = (modelMatrix * vec4(position,1.0)).xyz;');
@@ -551,7 +577,20 @@
     }
     float streamNoise(vec2 uv, float t){ vec2 s=vec2(uv.x*3.0, uv.y*0.6); return cnoise(vec3(s,0.0))*0.5+0.5; }`;
   function applyRiverFlow(mat) {
-    if (!mat || mat.userData.__riverFlow) return mat;
+    if (!mat) return mat;
+    if (IS_WEBGPU && window.createWWCWebGPURiverMaterial && window.HEXWATER) {
+      if (mat.userData.__riverFlowMaterial) return mat.userData.__riverFlowMaterial;
+      const riverMat = window.createWWCWebGPURiverMaterial({
+        sourceMaterial: mat,
+        dudvMap: window.HEXWATER.tDudv.value,
+        timeNode: window.HEXWATER.uTime,
+        deepColor: window.HEXWATER.rColorDeep.value,
+        shallowColor: window.HEXWATER.rColorShallow.value,
+      });
+      mat.userData.__riverFlowMaterial = riverMat;
+      return riverMat;
+    }
+    if (mat.userData.__riverFlow) return mat;
     mat.userData.__riverFlow = true;
     mat.onBeforeCompile = (sh) => {
       if (window.HEXWATER) Object.assign(sh.uniforms, window.HEXWATER);
@@ -772,7 +811,7 @@
       for (let i = 0; i < list.length; i++) {
         const d = list[i].d, s = (d[5] || 1) * kY;
         dummy.position.set(wxToGX(d[1]), (d[3] || 0) * kY, wzToGZ(d[2])); dummy.rotation.set(0, d[4] || 0, 0); dummy.scale.set(s, s, s); dummy.updateMatrix();
-        im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, list[i].col || WHITE);   // instanceColor ОБЯЗАТЕЛЕН: без него THREE падает в рендере (смешение инстансов с/без цвета)
+        im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, instanceTint(list[i].col || WHITE));   // instanceColor ОБЯЗАТЕЛЕН: без него THREE падает в рендере (смешение инстансов с/без цвета)
         if (packBiome) packBiome[i] = packBiomeIndex(d[6] || 'default');
       }
       if (packBiome) im.geometry.setAttribute('aPackBiome', new T.InstancedBufferAttribute(packBiome, 1));
@@ -1172,7 +1211,7 @@
       if (hasPackBiomeTexture(biome)) tmp.copy(WHITE);                         // готовый KayKit-атлас даёт цвет сам
       else if (biome === g.biome) tmp.copy(g.base || WHITE);                   // владелец = родной биом → базовый цвет этого биома
       else tmp.copy(biomeTint(biome));                                        // захват → прямой цвет биома нового владельца
-      g.mesh.setColorAt(g.idx, tmp);
+      g.mesh.setColorAt(g.idx, instanceTint(tmp));
     }
     const meshes = new Set(); for (const g of refs) meshes.add(g.mesh);
     for (const mm of meshes) if (mm.instanceColor) mm.instanceColor.needsUpdate = true;
@@ -1347,7 +1386,7 @@
       const im = new T.InstancedMesh(b.model.geo, b.mat, b.matrices.length);
       // 🌗 города — ДИНАМИЧЕСКИЕ кастеры: из статичной карты исключены (castShadow=false),
       //    тень рисуют через отдельную карту (слой DYN_SHADOW_LAYER) — апгрейд перепекает только её
-      im.castShadow = false; im.receiveShadow = true;
+      im.castShadow = !!IS_WEBGPU; im.receiveShadow = true;
       im.layers.enable(typeof DYN_SHADOW_LAYER !== 'undefined' ? DYN_SHADOW_LAYER : 2);
       im.userData.perfGroup = b.group;
       for (let i = 0; i < b.matrices.length; i++) {
@@ -1358,6 +1397,7 @@
       CITY_BATCH_GROUP.add(im);
     }
     scene.add(CITY_BATCH_GROUP);
+    if (IS_WEBGPU && typeof markShadowsDirty === 'function') markShadowsDirty();
     if (typeof markDynShadowsDirty === 'function') markDynShadowsDirty();   // батчи городов пересобраны → одна перепечь динамической карты
   }
   window.rebuildCityBatchesIfDirty = rebuildCityBatchesIfDirty;

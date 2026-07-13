@@ -102,8 +102,12 @@ function newGame(){
 }
 
 const _regCol=new T3.Color(), _polCol=new T3.Color();
-let regionsDirty=false;
-function markRegions(){regionsDirty=true;} // отложенная перекраска (тяжёлая на большой карте)
+let regionsDirty=false, regionsVersion=0;
+function markRegions(){
+  regionsDirty=true;
+  window.__WWC_REGIONS_VERSION=++regionsVersion;
+  if(typeof window.invalidateMinimapTerritory==='function')window.invalidateMinimapTerritory();
+} // отложенная перекраска (тяжёлая на большой карте)
 function politicalColor(c){
   // цвет фракции-владельца (страна → захватчик)
   return _polCol.setHex(OWNER_COL[c.owner]??0x9aa6b2);
@@ -627,14 +631,23 @@ function openDiplo(fid){
 }
 function closeDiplo(){diploTarget=null;diploBtnSig='';document.getElementById('diploWin').style.display='none';}
 // плавающий список войн в стадии мобилизации (виден без открытия попапа)
+const WAR_PREPS_REFRESH_MS=1000;
+let _warPrepsNextRefresh=0, _warPrepsSig='';
+function invalidateWarPreps(){_warPrepsNextRefresh=0;}
+window.invalidateWarPreps=invalidateWarPreps;
 function updateWarPreps(){
+  const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  if(now<_warPrepsNextRefresh)return;
+  _warPrepsNextRefresh=now+WAR_PREPS_REFRESH_MS;
   let html='';
   for(const f of FACTIONS){
     if(f.id===PLAYER||!atWar(PLAYER,f.id))continue;
     const cd=warCountdown(PLAYER,f.id);
     if(cd>0)html+=`<div style="background:rgba(48,20,10,.86);color:#ffce6a;font-weight:800;font-size:12px;padding:6px 11px;border-radius:8px;">`+t('polit.warPrep',{name:countryDisp(f.country),s:Math.ceil(cd)})+`</div>`;
   }
-  document.getElementById('warPreps').innerHTML=html;
+  if(html===_warPrepsSig)return;
+  _warPrepsSig=html;
+  const el=document.getElementById('warPreps'); if(el)el.innerHTML=html;
 }
 const REL_RU={neutral:t('polit.relNeutral'),war:t('polit.relWar'),ally:t('polit.relAlly')};
 function refreshDiplo(){

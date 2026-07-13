@@ -130,6 +130,8 @@ function _mergeGeoParts(parts){   // parts: [{geo, matrix, tint?}] — тинт 
   out.setAttribute('uv',new T3.BufferAttribute(uv,2));
   out.setAttribute('color',new T3.BufferAttribute(col,3));
   out.setIndex(new T3.BufferAttribute(index,1));
+  out.computeBoundingBox();
+  out.computeBoundingSphere();
   return out;
 }
 const _typedCache={};
@@ -514,17 +516,22 @@ function cityTowersFX(dt){
       for(const s of ships){ if(s.hp<=0||!atWar(owner,s.owner))continue; out.push({x:s.pos.x,z:s.pos.z,y:WATER_Y_SHIP+0.2,ref:s,kind:'ship'}); }
       for(const s of planes){ if(s.hp<=0||!atWar(owner,s.owner))continue; out.push({x:s.pos.x,z:s.pos.z,y:PLANE_ALT,ref:s,kind:'plane'}); } }
     return out; };
+  const targetsByOwner=new Map();
   for(const c of cities){
     const range=c.fireRange; if(range<=0)continue;
-    c._fxT=(c._fxT||0)+dt; if(c._fxT<TOWER_FIRE_CD)continue;
+    c._fxT=(c._fxT||0)+dt;
+    c._fxRetry=Math.max(0,(c._fxRetry||0)-dt);
+    if(c._fxT<TOWER_FIRE_CD||c._fxRetry>0)continue;
     const cgx=c._visualGX==null?c.gx:c._visualGX, cgz=c._visualGZ==null?c.gz:c._visualGZ;  // hex-город смещён — стреляем из ВИЗУАЛЬНОЙ башни
     const cvy=c._visualY==null?c.baseY:c._visualY;
     const fromY=cvy+(c.topY||0.6)*CITY_SCALE+0.3, from={x:cgx,y:fromY,z:cgz};
     // ближайший ВРАЖЕСКИЙ ЮНИТ в радиусе
     let best=null,bd=range*range;
-    for(const t of enemyTargets(c.owner)){ const dx=cgx-t.x,dz=cgz-t.z,dd=dx*dx+dz*dz; if(dd<bd){bd=dd;best=t;} }
-    if(!best)continue;                              // нет юнита в радиусе → не стреляем (по зданиям больше не бьём)
+    let targets=targetsByOwner.get(c.owner); if(!targets){targets=enemyTargets(c.owner);targetsByOwner.set(c.owner,targets);}
+    for(const t of targets){ const dx=cgx-t.x,dz=cgz-t.z,dd=dx*dx+dz*dz; if(dd<bd){bd=dd;best=t;} }
+    if(!best){c._fxRetry=0.15;continue;}             // без цели повторяем редким сканом, а не каждый кадр
     c._fxT=0;
+    c._fxRetry=0;
     const dmg=Math.max(1,Math.round(c.fireDmg||1));
     missiles.push(new TowerShot(c.owner,from,{kind:best.ref&&guest?'ghost':(best.kind||'none'),ref:best.ref||null,x:best.x,y:best.y,z:best.z,dmg}));
   }
@@ -536,25 +543,34 @@ function cityTowersFX(dt){
 // Каденс зеркалит сим (таймер сбрасываем только при наличии цели, как fireTimer на сервере).
 function shipBombardFX(dt){
   const guest=(typeof MP!=='undefined'&&MP.guest&&MP.ghosts);
-  // корабли-стрелки: в guest — гхосты kind 1; их «_fxT» держим на ghost-объекте
-  const shooters=guest?[...MP.ghosts.values()].filter(g=>g.kind===1&&!g.transport).map(g=>({o:g.owner,x:g.group.position.x,z:g.group.position.z,alive:(g.count||1)>0,fx:g}))
-                      :ships.map(s=>({o:s.owner,x:s.pos.x,z:s.pos.z,alive:s.hp>0,fx:s,muzzle:s}));
-  for(const s of shooters){
-    if(!s.alive||!techFlag(s.o,'shipMissile'))continue;
-    s.fx._fxT=(s.fx._fxT||0)+dt; if(s.fx._fxT<SHIP_FIRE_CD)continue;
-    const R=SHIP_ATTACK_RANGE*techVal(s.o,'sr'), R2=R*R;
+  const CELL=8, groundGrid=new Map(); let gridReady=false;
+  const gridKey=(x,z)=>((Math.floor(x/CELL)*100003)+Math.floor(z/CELL));
+  const buildGroundGrid=()=>{
+    if(gridReady)return; gridReady=true;
+    const add=(owner,x,z)=>{const k=gridKey(x,z);let a=groundGrid.get(k);if(!a){a=[];groundGrid.set(k,a);}a.push({owner,x,z});};
+    if(guest){for(const g of MP.ghosts.values())if(g.kind===0&&(g.count||0)>=0.5){const p=g.group.position;add(g.owner,p.x,p.z);}}
+    else for(const q of squads)if(q.fcount>=0.5)add(q.owner,q.pos.x,q.pos.z);
+  };
+  const fire=(owner,x,z,fxObj,muzzle,alive)=>{
+    if(!alive||!techFlag(owner,'shipMissile'))return;
+    fxObj._fxT=(fxObj._fxT||0)+dt;
+    fxObj._fxRetry=Math.max(0,(fxObj._fxRetry||0)-dt);
+    if(fxObj._fxT<SHIP_FIRE_CD||fxObj._fxRetry>0)return;
+    const R=SHIP_ATTACK_RANGE*techVal(owner,'sr'), R2=R*R;
     let tx=null,tz=null,ty=null,bd=R2;
-    for(const c of cities){ if(c.owner===s.o||!atWar(s.o,c.owner))continue;
+    for(const c of cities){ if(c.owner===owner||!atWar(owner,c.owner))continue;
       const cx=c._visualGX==null?c.gx:c._visualGX, cz=c._visualGZ==null?c.gz:c._visualGZ;
-      const dx=s.x-cx,dz=s.z-cz,dd=dx*dx+dz*dz; if(dd<bd){bd=dd;tx=cx;tz=cz;ty=getTerrainHeight(cx,cz)+0.3;} }
-    const enemyUnits=guest?[...MP.ghosts.values()].filter(g=>g.kind===0&&(g.count||0)>=0.5&&atWar(s.o,g.owner)).map(g=>[g.group.position.x,g.group.position.z])
-                          :squads.filter(q=>q.fcount>=0.5&&atWar(s.o,q.owner)).map(q=>[q.pos.x,q.pos.z]);
-    for(const u of enemyUnits){ const dx=s.x-u[0],dz=s.z-u[1],dd=dx*dx+dz*dz; if(dd<bd){bd=dd;tx=u[0];tz=u[1];ty=getTerrainHeight(u[0],u[1])+0.3;} }
-    if(tx===null)continue; s.fx._fxT=0;
-    const from={x:s.x,y:WATER_Y_SHIP+0.6,z:s.z};
-    missiles.push(new TowerShot(s.o,from,{kind:'none',ref:null,x:tx,y:ty,z:tz,dmg:0}));
-    if(s.muzzle&&typeof spawnMuzzle==='function')spawnMuzzle(s.muzzle);
-  }
+      const dx=x-cx,dz=z-cz,dd=dx*dx+dz*dz; if(dd<bd){bd=dd;tx=cx;tz=cz;ty=getTerrainHeight(cx,cz)+0.3;} }
+    buildGroundGrid();
+    const cr=Math.ceil(R/CELL),cx0=Math.floor(x/CELL),cz0=Math.floor(z/CELL);
+    for(let ox=-cr;ox<=cr;ox++)for(let oz=-cr;oz<=cr;oz++){const a=groundGrid.get((cx0+ox)*100003+(cz0+oz));if(!a)continue;
+      for(const u of a){if(!atWar(owner,u.owner))continue;const dx=x-u.x,dz=z-u.z,dd=dx*dx+dz*dz;if(dd<bd){bd=dd;tx=u.x;tz=u.z;ty=getTerrainHeight(u.x,u.z)+0.3;}}}
+    if(tx===null){fxObj._fxRetry=0.15;return;} fxObj._fxT=0; fxObj._fxRetry=0;
+    missiles.push(new TowerShot(owner,{x,y:WATER_Y_SHIP+0.6,z},{kind:'none',ref:null,x:tx,y:ty,z:tz,dmg:0}));
+    if(muzzle&&typeof spawnMuzzle==='function')spawnMuzzle(muzzle);
+  };
+  if(guest){for(const g of MP.ghosts.values()){if(g.kind!==1||g.transport)continue;const p=g.group.position;fire(g.owner,p.x,p.z,g,null,(g.count||1)>0);}}
+  else for(const s of ships)fire(s.owner,s.pos.x,s.pos.z,s,s,s.hp>0);
 }
 /* ── авиабомба: падает с самолёта на город ──────────────────── */
 class Bomb{

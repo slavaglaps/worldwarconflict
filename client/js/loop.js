@@ -114,17 +114,20 @@ function applyPerfStressOnce(){
   const center=target||new T3.Vector3(GRID/2,0,GRID/2);
   for(let s=0;s<squadsMax;s++){
     const bx=center.x-26+(s%10)*5.8, bz=center.z-18+Math.floor(s/10)*5.4, by=getTerrainHeight(bx,bz)+0.35;
-    const im=new T3.InstancedMesh(unitSrc?unitSrc.geo:UNIT_GEO,unitMat,18);
-    im.castShadow=false; im.receiveShadow=true; im.userData.perfGroup='units';
+    const typed=typeof unitTypedSource==='function'?unitTypedSource(owner,['inf','arc','cav'][s%3]):null;
+    const src=typed||unitSrc;
+    const parts=[{geo:src?src.geo:UNIT_GEO,mat:src?src.mat:unitMat,local:src&&src.local}];
+    if(src&&src.accGeo)parts.push({geo:src.accGeo,mat:src.accMat,local:null});
+    const meshes=parts.map(p=>{const im=new T3.InstancedMesh(p.geo,p.mat,18);
+      im.castShadow=false;im.receiveShadow=true;im.frustumCulled=false;im.userData.perfGroup='units';perfStressGroup.add(im);return {im,p};});
     for(let i=0;i<18;i++){
       const a=i*2.399963, r=0.18+Math.sqrt((i+0.5)/18)*0.75;
       perfStressDummy.position.set(bx+Math.cos(a)*r,by,bz+Math.sin(a)*r);
-      perfStressDummy.rotation.set(0,a,0); perfStressDummy.scale.setScalar(unitSrc?unitSrc.scale:1); perfStressDummy.updateMatrix();
-      if(unitSrc){const m=new T3.Matrix4().multiplyMatrices(perfStressDummy.matrix,unitSrc.local);im.setMatrixAt(i,m);}
-      else im.setMatrixAt(i,perfStressDummy.matrix);
+      perfStressDummy.rotation.set(0,a,0); perfStressDummy.scale.setScalar(src?src.scale:1); perfStressDummy.updateMatrix();
+      for(const part of meshes){if(part.p.local){const m=new T3.Matrix4().multiplyMatrices(perfStressDummy.matrix,part.p.local);part.im.setMatrixAt(i,m);}
+        else part.im.setMatrixAt(i,perfStressDummy.matrix);}
     }
-    im.instanceMatrix.needsUpdate=true;
-    perfStressGroup.add(im);
+    for(const part of meshes)part.im.instanceMatrix.needsUpdate=true;
   }
   const stressMatrix=new T3.Matrix4();
   const stressShipParts=[
@@ -182,6 +185,8 @@ function applyPerfStressOnce(){
 
 let last=performance.now(), panelTick=0, cityLabelTick=0;
 const cityLabelCamPos=new T3.Vector3().copy(camera.position),cityLabelCamQuat=new T3.Quaternion().copy(camera.quaternion);
+const labelsRoot=document.getElementById('labels');
+let labelsHiddenUntil=0, labelsAreHidden=false;
 
 // ── кольцо выделения кораблей/дирижаблей (как у города): пульсирующий белый торус вокруг выбранного мувера ──
 const _moverSelRings=[];
@@ -220,11 +225,20 @@ function loop(now){
     if(c.position.x>GRID+12)c.position.x=-12;
   }
   if(typeof fogUpdate==='function')fogUpdate(dt);   // 🌫 туман войны: маска + лерп текстуры + патч материалов
+  if(typeof perfChipTick==='function')perfChipTick(now);   // 📈 перф-чип (FPS/мс под хэдером)
   if(typeof minimapUpdate==='function')minimapUpdate(dt);   // 🗺 миникарта: территория × туман + города/армии/вьюпорт
   const gdt=dt*gameSpeed; // игровое время с учётом паузы/ускорения
   if(MP.localSim){   // 🧪 соло на ЛОКАЛЬНОМ серверном Sim: тик Sim → проекция в guest-рендер, визуал как у гостя
-    if(typeof localSimStep==='function')localSimStep(gdt);
-    if(!gameOver&&gdt>0){ for(const c of cities)c.drawProdRing(); if(typeof cityTowersFX==='function')cityTowersFX(gdt); if(typeof shipBombardFX==='function')shipBombardFX(gdt); if(typeof updateMissiles==='function')updateMissiles(gdt); }
+    if(typeof localSimStep==='function')localSimStep(gdt,dt);
+    if(!gameOver&&gdt>0){
+      for(const c of cities){
+        if(c.batches.length){const b=c.batches[0];if(b.elapsed<b.time)b.elapsed=Math.min(b.time,b.elapsed+gdt);}
+        if((c.isShipyard||c.hasShipyard)&&c.shipQueue>0&&c.shipTimer<SHIP_BUILD_TIME)c.shipTimer=Math.min(SHIP_BUILD_TIME,c.shipTimer+gdt);
+        if((c.isAirport||c.hasAirport)&&c.planeQueue>0&&c.planeTimer<PLANE_BUILD_TIME)c.planeTimer=Math.min(PLANE_BUILD_TIME,c.planeTimer+gdt);
+        c.drawProdRing();
+      }
+      if(typeof cityTowersFX==='function')cityTowersFX(gdt); if(typeof shipBombardFX==='function')shipBombardFX(gdt); if(typeof updateMissiles==='function')updateMissiles(gdt);
+    }
   } else if(MP.guest && !gameOver && gdt>0){
     // гость: сим заморожен, но локально продвигаем ТОЛЬКО таймеры (плавность между снапшотами; сервер их корректирует)
     gameTime+=gdt;                                                          // ⏳ отсчёт мобилизации войны
@@ -240,24 +254,38 @@ function loop(now){
     updateMissiles(gdt);   // анимируем трассеры/взрывы
   }
   if(!gameOver&&gdt>0&&typeof window.updateMapBuildings==='function')window.updateMapBuildings(gdt);
-  // во время поворота камеры (Q/E или мышь) прячем DOM-подписи целиком — иначе они дрожат
-  const _rot=camRotating; document.getElementById('labels').style.visibility=_rot?'hidden':'visible';
+  // При любом движении камеры скрываем DOM-плашки и не пересчитываем их позиции.
+  // Короткая задержка предотвращает мигание между соседними событиями ввода.
+  const _rot=camRotating;
   const cityLabelCamMoved=cityLabelCamPos.distanceToSquared(camera.position)>1e-6||1-Math.abs(cityLabelCamQuat.dot(camera.quaternion))>1e-7;
-  if(cityLabelCamMoved){cityLabelCamPos.copy(camera.position);cityLabelCamQuat.copy(camera.quaternion);}
-  const updateCityLabels=!_rot&&(cityLabelCamMoved||now>=cityLabelTick);
+  if(cityLabelCamMoved){
+    cityLabelCamPos.copy(camera.position);cityLabelCamQuat.copy(camera.quaternion);
+    labelsHiddenUntil=now+120;
+  }
+  const cameraMoving=_rot||cityLabelCamMoved||now<labelsHiddenUntil;
+  if(cameraMoving!==labelsAreHidden){
+    labelsAreHidden=cameraMoving;
+    labelsRoot.style.visibility=cameraMoving?'hidden':'visible';
+  }
+  const updateCityLabels=!cameraMoving&&now>=cityLabelTick;
   if(updateCityLabels)cityLabelTick=now+33;
-  for(const c of cities){if(updateCityLabels)c.updateLabel();c.updateSiegeViz(now);}
-  if(!_rot)for(const s of squads)s.updateLabel();
+  if(typeof window.updateSiegeFX==='function')window.updateSiegeFX(now);
+  for(const c of cities){
+    if(updateCityLabels)c.updateLabel();
+    if(c.siege||c._siegeVizActive){c.updateSiegeViz(now);c._siegeVizActive=!!c.siege;}
+  }
+  if(!cameraMoving)for(const s of squads)s.updateLabel();
   const tintUnit=s=>{const m=s.tintMat;if(m&&m.emissive)m.emissive.setHex(s.foe?0x6b1a12:(selectedUnits.has(s)?0x1f6fc0:0x000000));};
-  for(const s of ships){if(!_rot)s.updateLabel();tintUnit(s);
+  for(const s of ships){if(!cameraMoving)s.updateLabel();tintUnit(s);
     const sel=selectedUnits.has(s); s.rangeRing.visible=sel;
     if(sel)s.rangeRing.position.set(s.pos.x,WATER_Y_SHIP+0.1,s.pos.z); // кольцо следует за кораблём
   }
-  for(const s of planes){if(!_rot)s.updateLabel();tintUnit(s);}
+  for(const s of planes){if(!cameraMoving)s.updateLabel();tintUnit(s);}
   // selection rings (multi) + drag source highlight + pulse
   const k=1+Math.sin(now/220)*0.08;
   const bk=1+Math.sin(now/110)*0.14;
   for(const c of cities){
+    if(c!==dragFrom&&c.owner!==OWNER.PLAYER&&selectedSet.has(c)){selectedSet.delete(c);if(typeof updatePanel==='function')updatePanel();}   // город захвачен врагом → снять выделение (иначе кольцо селектора зависает)
     const on=selectedSet.has(c)||c===dragFrom;
     c.ring.visible=on;
     if(on)c.ring.scale.set(k,k,k);
@@ -271,7 +299,7 @@ function loop(now){
     c.bring.visible=!!c.siege;
     if(c.siege)c.bring.scale.set(bk,bk,bk);
   }
-  if(MP.on)mpTick(now,dt);   // хост рассылает снапшот/сущности; гость интерполирует зеркала
+  if(MP.on)mpTick(now,dt,!cameraMoving);   // скрытые при движении плашки не проецируем в DOM
   updateMoverSelRings(now);  // кольца выделения кораблей/дирижаблей (после mpTick — позиции призраков обновлены)
   updateHUD(); updateWarPreps();
   panelTick+=dt; if(panelTick>0.25){panelTick=0;if(regionsDirty){regionsDirty=false;assignRegions();}updatePanel();refreshTechAfford();refreshHeroBar();if(diploTarget!=null)refreshDiplo();refreshPol();if(peaceTarget!=null)refreshPeaceDialog();}  // refresh UI
@@ -438,7 +466,7 @@ function loop(now){
     MP._lastTime=m.time; gameTime=m.time;
     const list=m.c||m.dc;
     if(m.c)MP._synced=true;   // получили полный keyframe → можно судить о победе/поражении
-    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15],d[16],d[17],d[18],d[19],d[20],d[21],d[22]); } regionsDirty=true; }
+    if(list){ for(const d of list){ const c=ci(d[0]); if(c)applyCity(c,d[1],d[2],d[3],d[4],d[5],d[6],d[7],d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15],d[16],d[17],d[18],d[19],d[20],d[21],d[22]); } }
     if(m.g){ const g=m.g; for(let i=0;i<g.length;i++){gold[i]=g[i];politPts[i]=m.p[i];manpower[i]=m.m[i];} }  // в cs-режиме экономика идёт через 'econ'; в relay — здесь
     if(m.rel){ relations={}; for(const [k,v] of m.rel)relations[k]=v; warSince={}; for(const [k,v] of m.ws)warSince[k]=+v; warNotify(); allyNotify(); }
     // победа/поражение — только после keyframe И если видели партию ИДУЩЕЙ (не врываемся в уже оконченную)
@@ -1140,11 +1168,11 @@ function loop(now){
         const src=typeof unitTypedSource==='function'?unitTypedSource(gh.owner,b.t):null;
         b.cap=Math.max(18,Math.ceil((b.n+extra)*1.3));
         b.mesh=new T3.InstancedMesh(src?src.geo:UNIT_GEO,src?src.mat:gh.mat,b.cap);
-        b.mesh.count=0; b.mesh.castShadow=false; b.mesh.receiveShadow=true; b.mesh.userData.perfGroup='units';
+        b.mesh.count=0; b.mesh.castShadow=false; b.mesh.receiveShadow=true; b.mesh.frustumCulled=false; b.mesh.userData.perfGroup='units';
         gh.group.add(b.mesh);
         if(src&&src.accGeo){                                                    // 👥 аксессуар (лук/конь): отдельный меш, те же матрицы
           b.acc=new T3.InstancedMesh(src.accGeo,src.accMat,b.cap);
-          b.acc.count=0; b.acc.castShadow=false; b.acc.receiveShadow=true; b.acc.userData.perfGroup='units';
+          b.acc.count=0; b.acc.castShadow=false; b.acc.receiveShadow=true; b.acc.frustumCulled=false; b.acc.userData.perfGroup='units';
           gh.group.add(b.acc);
         }
       }
@@ -1218,7 +1246,7 @@ function loop(now){
   }
 
   const _labV=new T3.Vector3();   // переиспользуемый вектор проекции меток (без new Vector3 на метку/кадр)
-  window.mpTick=(now,dt)=>{
+  window.mpTick=(now,dt,updateLabels=true)=>{
     if(MP.host){ if(MP._lastGS!==gameSpeed){MP._lastGS=gameSpeed;setPill();}
       if(now-tSnap>140){tSnap=now;MP.send(buildSnap(now));}
       if(now-tEnt>70){tEnt=now;const ent=buildEnt();if(ent)MP.send(ent);} return; }
@@ -1301,7 +1329,7 @@ function loop(now){
         if(gh._lastUX==null||Math.abs(p.x-gh._lastUX)>1e-4||Math.abs(p.z-gh._lastUZ)>1e-4||gh.fighting||(ud0.cheerT>0)||gh.count!==gh._lastUC){
           gh._lastUX=p.x; gh._lastUZ=p.z; gh._lastUC=gh.count; placeGhostUnits(gh,now); }
       }
-      if(gh.lab && !gh._dying){ const v=_labV.set(p.x,p.y+0.4,p.z).project(camera);   // переиспользуемый вектор + запись в DOM ТОЛЬКО при изменении (без reflow каждый кадр)
+      if(updateLabels && gh.lab && !gh._dying){ const v=_labV.set(p.x,p.y+0.4,p.z).project(camera);   // скрытые при движении метки не проецируем
         const vis=v.z<1;
         if(gh._labVis!==vis){ gh._labVis=vis; gh.lab.style.display=vis?'block':'none'; }
         if(vis){
@@ -1339,7 +1367,10 @@ function loop(now){
   }
 
   function onMsg(ev){
-    let m; try{m=JSON.parse(ev.data);}catch(e){return;}
+    let m;
+    if(ev&&ev.data&&typeof ev.data==='object')m=ev.data;       // локальный Sim: без stringify/parse на каждом snapshot
+    else if(ev&&ev.t)m=ev;
+    else try{m=JSON.parse(ev.data);}catch(e){return;}
     switch(m.t){
       case 'hello':
         MP.id=m.id; MP.hostId=m.hostId; MP.on=true;   // роль уже задана из URL, не переопределяем

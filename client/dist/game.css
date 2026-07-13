@@ -1,5 +1,7 @@
   @font-face{font-family:'KnightsQuest';src:url('assets/fonts/KnightsQuest.ttf') format('truetype');font-display:swap;}
   *{margin:0;padding:0;box-sizing:border-box;}
+  /* Icons and labels inside a button must not steal its pointer target. */
+  button *{pointer-events:none;}
   html,body{height:100%;overflow:hidden;background:#8fd0e8;font-family:-apple-system,Segoe UI,Roboto,sans-serif;}
   #app{position:fixed;inset:0;}
   canvas{display:block;}
@@ -66,6 +68,12 @@
     background:linear-gradient(180deg,rgba(31,32,31,.96),rgba(13,15,15,.97));
     box-shadow:0 4px 10px rgba(0,0,0,.48),inset 0 0 0 1px rgba(255,255,255,.04);text-shadow:none;
     scale:var(--city-label-scale,1);transform-origin:center;transition:scale .12s ease,opacity .12s ease;}
+  .cityLab.cityLabEnemy{border-color:rgba(235,82,64,.9);
+    background:linear-gradient(180deg,rgba(112,31,27,.8),rgba(49,10,13,.86));
+    box-shadow:0 4px 12px rgba(38,0,0,.58),inset 0 0 0 1px rgba(255,145,122,.1);}
+  .cityLab.cityLabAlly{border-color:rgba(74,196,112,.9);
+    background:linear-gradient(180deg,rgba(31,104,57,.8),rgba(10,48,27,.86));
+    box-shadow:0 4px 12px rgba(0,35,13,.58),inset 0 0 0 1px rgba(143,245,170,.1);}
   .cityLab .cityHead,.cityLab .cityStats{display:flex;align-items:center;justify-content:center;min-height:16px;}
   .cityLab .cityHead{gap:5px;padding-bottom:3px;border-bottom:1px solid rgba(207,178,111,.28);}
   .cityLab .cityFlag{font-size:13px;line-height:1;filter:drop-shadow(0 1px 1px rgba(0,0,0,.8));}

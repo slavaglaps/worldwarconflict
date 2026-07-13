@@ -16,14 +16,14 @@ const MODS = [
   'js/sim-loader.js', 'js/solo-sim.js',
   'js/data.js', 'js/world.js', 'js/heroes.js', 'js/decor.js', 'js/roads.js',
   'js/city.js', 'js/units.js', 'js/logic.js', 'js/ui.js', 'js/input.js',
-  'js/hud.js', 'js/build.js', 'js/loop.js', 'js/fog.js', 'js/minimap.js', 'game.net.js',
+  'js/hud.js', 'js/build.js', 'js/loop.js', 'js/fog.js', 'js/minimap.js', 'js/perf-chip.js', 'game.net.js',
   'js/tutorial.js',   // 🎓 туториал — после game.net.js (оборачивает MP.cmd)
 ];
 
 const sha = (files) => { const h = crypto.createHash('sha256'); for (const p of files) h.update(fs.readFileSync(p)); return h.digest('hex').slice(0, 16); };
 
 function buildManifest() {
-  const clientFiles = MODS.map((m) => path.join(CLIENT, m)).concat(path.join(__dirname, 'build.js'), path.join(__dirname, 'build-manifest.js'));
+  const clientFiles = MODS.map((m) => path.join(CLIENT, m)).concat(path.join(__dirname, 'build.js'), path.join(__dirname, 'build-manifest.js'), path.join(__dirname, 'render-runtime-entry.js'));
   const simDir = path.join(ROOT, 'server', 'sim');
   const simFiles = fs.readdirSync(simDir).filter((f) => /\.(js|json)$/.test(f)).sort().map((f) => path.join(simDir, f)).concat(path.join(__dirname, 'sim-entry.js'));
   return { client: sha(clientFiles), sim: sha(simFiles) };
