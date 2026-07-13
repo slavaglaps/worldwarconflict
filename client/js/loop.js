@@ -206,7 +206,9 @@ function dynamicRenderTier(pos,yOffset=0){
 function dynamicInRenderZone(pos,yOffset=0){return dynamicRenderTier(pos,yOffset)>0;}
 function dynamicVisualDue(gh,now,tier){
   if(!tier){gh._renderTier=0;return false;}
-  const interval=tier===3?0:tier===2?40:125;
+  // The group itself still moves every render frame. Rebuilding and uploading up
+  // to 90 unit matrices above 60 Hz only duplicates work on high-refresh screens.
+  const interval=tier===3?1000/60:tier===2?40:125;
   const promoted=tier>(gh._renderTier||0);
   gh._renderTier=tier;
   if(promoted||interval===0||now>=(gh._nextVisualUpdate||0)){
@@ -761,6 +763,8 @@ function loop(now){
 
   /* ── гость: зеркала сущностей ── */
   const ghostSquadPool=new Map();
+  const PLAYER_SQUAD_POOL_SIZE=6;
+  const playerSquadPoolOwners=new Set([PLAYER|0]);
   const ghostPoolKey=(owner)=>String(owner|0);
   function ghostMesh(kind,owner){
     const col=(OWNER_COL[owner]!=null?OWNER_COL[owner]:0x9aa6b2), g=new T3.Group(); let lab=null, mat=null;
@@ -801,7 +805,7 @@ function loop(now){
   function releaseSquadGhost(gh){
     selectedUnits.delete(gh); resetSquadGhost(gh); scene.remove(gh.group); if(gh.lab)gh.lab.remove();
     const key=ghostPoolKey(gh.owner), pool=ghostSquadPool.get(key)||[];
-    const maxPool=gh.owner===PLAYER?3:1;
+    const maxPool=playerSquadPoolOwners.has(gh.owner|0)?PLAYER_SQUAD_POOL_SIZE:1;
     if(pool.length>=maxPool){killGhost(gh);return;}
     pool.push(gh); ghostSquadPool.set(key,pool);
   }
@@ -1308,15 +1312,23 @@ function loop(now){
   window.__prewarmSquadPipelines=prewarmSquadPipelines;
   async function warmSquadOwnerFrame(owner){
     owner=owner|0;
+    playerSquadPoolOwners.add(owner);
     const pool=ghostSquadPool.get(ghostPoolKey(owner));
-    if((pool&&pool.length)||[...MP.ghosts.values()].some(g=>g.kind===0&&g.owner===owner))return;
+    const active=[...MP.ghosts.values()].filter(g=>g.kind===0&&g.owner===owner).length;
+    const needed=Math.max(0,PLAYER_SQUAD_POOL_SIZE-(pool?pool.length:0)-active);
+    if(!needed)return;
     if(typeof ensureUnitModels==='function')await ensureUnitModels();
-    const gh=ghostMesh(0,owner), n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
-    gh.comp={inf:n-each*2,arc:each,cav:each}; ghostSwarm(gh,n); gh.group.visible=true;
+    const warm=[], n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
+    for(let i=0;i<needed;i++){
+      const gh=ghostMesh(0,owner);
+      gh.comp={inf:n-each*2,arc:each,cav:each}; ghostSwarm(gh,n); gh.group.visible=true;
+      warm.push(gh);
+    }
     // The regular loop is already running behind the country picker. Keep the
-    // owner-specific buffers in scene for one complete frame, then pool them.
+    // owner-specific buffers in scene for complete frames, then pool them. This
+    // moves WebGPU buffer creation/uploads out of the first parallel dispatches.
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    releaseSquadGhost(gh);
+    for(const gh of warm)releaseSquadGhost(gh);
   }
   window.__warmSquadOwnerFrame=warmSquadOwnerFrame;
   function scheduleSquadGhostWarm(owner){
