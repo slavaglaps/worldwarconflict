@@ -1,0 +1,34 @@
+{
+  "name": "wwc-desktop",
+  "productName": "World War Conflict",
+  "version": "1.0.0",
+  "description": "World War Conflict — desktop wrapper (forces discrete GPU)",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable nsis"
+  },
+  "devDependencies": {
+    "electron": "^31.7.6",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "ai.banamind.worldwarconflict",
+    "productName": "WorldWarConflict",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "package.json"],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] },
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "portable": { "artifactName": "WorldWarConflict-portable-${version}.exe" },
+    "nsis": {
+      "artifactName": "WorldWarConflict-setup-${version}.exe",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

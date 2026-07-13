@@ -1,0 +1,41 @@
+name: Build Desktop (Windows .exe)
+
+# Собирает Windows-бинарь Electron-обёртки на облачном Windows-раннере
+# (с мака .exe не собрать). Запуск: вручную (workflow_dispatch) или при правках desktop/.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/build-desktop.yml'
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm install
+
+      - name: Build .exe (portable + installer)
+        run: npm run dist
+        env:
+          # без code-signing (иначе electron-builder ищет сертификаты)
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload .exe artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorldWarConflict-windows
+          path: |
+            desktop/dist/*.exe
+          if-no-files-found: error
+          retention-days: 30
