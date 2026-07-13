@@ -107,15 +107,15 @@
   let HEXTYPES = new Map();                  // "q,r" → тип исходного тайла без игровой подложки
 
   const dummy = new T.Object3D(), WHITE = new T.Color(0xffffff), INSTANCE_TINT = new T.Color();
-  // Статическая карта целиком остаётся в памяти, но рендерится пространственными
-  // батчами. Запас расширяет bounds за край чанка, чтобы мелкий декор включался
-  // до входа в кадр и не появлялся на самой границе экрана.
-  const MAP_CHUNK_SIZE = 24;
-  const MAP_CHUNK_PAD = 8;
-  const chunkLists = (list, pos = (o) => o) => {
+  // Только тяжёлый декор дробится пространственно. Земля, дороги, реки и мосты
+  // остаются крупными батчами: на обычном зуме видна почти вся Европа, поэтому
+  // сотни маленьких submissions дороже, чем лишние видимые треугольники.
+  const DECOR_CHUNK_SIZE = 96;
+  const DECOR_CHUNK_PAD = 12;
+  const chunkLists = (list, pos = (o) => o, size = DECOR_CHUNK_SIZE) => {
     const out = new Map();
     for (const item of list) {
-      const p = pos(item), cx = Math.floor(p.gx / MAP_CHUNK_SIZE), cz = Math.floor(p.gz / MAP_CHUNK_SIZE);
+      const p = pos(item), cx = Math.floor(p.gx / size), cz = Math.floor(p.gz / size);
       const key = cx + ',' + cz;
       let bucket = out.get(key);
       if (!bucket) { bucket = []; out.set(key, bucket); }
@@ -123,7 +123,7 @@
     }
     return out;
   };
-  const setChunkBounds = (mesh, list, pos = (o) => o, pad = MAP_CHUNK_PAD) => {
+  const setChunkBounds = (mesh, list, pos = (o) => o, pad = DECOR_CHUNK_PAD) => {
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
     for (const item of list) {
       const p = pos(item), x = p.gx, z = p.gz, y = Number.isFinite(p.top) ? p.top : (Number.isFinite(p.y) ? p.y : 0);
@@ -147,17 +147,14 @@
     mesh.userData.mapChunk = true;
     return mesh;
   };
-  const makeChunkMeshes = (list, create, pos = (o) => o) => {
+  const makeChunkMeshes = (list, create, pos = (o) => o, size = DECOR_CHUNK_SIZE, pad = DECOR_CHUNK_PAD) => {
     const out = [];
-    for (const bucket of chunkLists(list, pos).values()) {
+    for (const bucket of chunkLists(list, pos, size).values()) {
       const mesh = create(bucket);
-      if (mesh) {
-        // Bounds belong to a chunk, not to the shared source model. Mutating a
-        // shared geometry made WebGPU cull unrelated chunks with the last
-        // chunk's box, producing black holes during busy frames.
-        if (mesh.geometry && mesh.geometry.clone) mesh.geometry = mesh.geometry.clone();
-        out.push({ mesh: setChunkBounds(mesh, bucket, pos), list: bucket });
-      }
+      // create() already gives each chunk its own geometry because per-instance
+      // attributes and bounds belong to that chunk. Cloning again doubled startup
+      // allocations without adding isolation.
+      if (mesh) out.push({ mesh: setChunkBounds(mesh, bucket, pos, pad), list: bucket });
     }
     return out;
   };
@@ -774,12 +771,10 @@
     GRASSREF = [];                                   // индекс инстансов травы → перекраска территории при захвате
     for (const textureKey in grassByTexture) {
       const list = grassByTexture[textureKey], model = landBatchModel(textureKey);
-      for (const chunk of makeChunkMeshes(list, part => instMesh(model, part, 'map-land', false))) {
-        _add(chunk.mesh);
-        for (let i = 0; i < chunk.list.length; i++) {
-          const c = chunk.list[i]; GRASSREF.push({ mesh: chunk.mesh, idx: i, gx: c.gx, gz: c.gz, base: c.col, biome: c.biome || 'default' });
-        }
-      }
+      const mm = instMesh(model, list, 'map-land', false);
+      if (mm) { mm.frustumCulled = false; _add(mm); for (let i = 0; i < list.length; i++) {
+        const c = list[i]; GRASSREF.push({ mesh: mm, idx: i, gx: c.gx, gz: c.gz, base: c.col, biome: c.biome || 'default' });
+      } }
     }
     // течение по руслу: BFS от моря через речные хексы → per-instance aFlowDir (координаты игры)
     const rivDir = (() => {
@@ -799,40 +794,34 @@
     })();
     for (const k in rivByKey) {
       const list = rivByKey[k], model = M[k]; if (!model || !list.length) continue;
-      for (const chunk of makeChunkMeshes(list, part => {
-        const geo = model.geo.clone(), im = new T.InstancedMesh(geo, applyRiverFlow(model.mat), part.length);
-        im.castShadow = false; im.receiveShadow = true; im.userData.perfGroup = 'map-rivers';
-        const fa = new Float32Array(part.length * 2);
-        for (let i = 0; i < part.length; i++) {
-          const c = part[i], sy = c.top - FLOORg;
-          writeProjectedHexMatrix(dummy.matrix, c.gx, c.top, c.gz, c.ry || 0, sy);
-          im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, WHITE);
-          const d = rivDir.get(c.q + ',' + c.r) || [0, 1]; fa[i * 2] = d[0]; fa[i * 2 + 1] = d[1];
-        }
-        geo.setAttribute('aFlowDir', new T.InstancedBufferAttribute(fa, 2));
-        im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
-        return im;
-      })) scene.add(chunk.mesh);
+      const geo = model.geo.clone(), im = new T.InstancedMesh(geo, applyRiverFlow(model.mat), list.length);
+      im.castShadow = false; im.receiveShadow = true; im.frustumCulled = false; im.userData.perfGroup = 'map-rivers';
+      const fa = new Float32Array(list.length * 2);
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i], sy = c.top - FLOORg;
+        writeProjectedHexMatrix(dummy.matrix, c.gx, c.top, c.gz, c.ry || 0, sy);
+        im.setMatrixAt(i, dummy.matrix); im.setColorAt(i, WHITE);
+        const d = rivDir.get(c.q + ',' + c.r) || [0, 1]; fa[i * 2] = d[0]; fa[i * 2 + 1] = d[1];
+      }
+      geo.setAttribute('aFlowDir', new T.InstancedBufferAttribute(fa, 2));
+      im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      scene.add(im);
     }
     ROADREF = [];                                    // индекс инстансов дорог → перекраска при захвате (как трава)
     for (const k in roadByKey) {
       const bucket = roadByKey[k], list = bucket.list, model = roadBatchModel(M[bucket.modelKey], bucket.textureKey);
-      for (const chunk of makeChunkMeshes(list, part => instMesh(model, part, 'map-roads', true))) {
-        scene.add(chunk.mesh);
-        for (let i = 0; i < chunk.list.length; i++) {
-          const c = chunk.list[i]; ROADREF.push({ mesh: chunk.mesh, idx: i, gx: c.gx, gz: c.gz, base: c.col, biome: c.biome || 'default' });
-        }
-      }
+      const mm = instMesh(model, list, 'map-roads', true);
+      if (mm) { mm.frustumCulled = false; scene.add(mm); for (let i = 0; i < list.length; i++) {
+        const c = list[i]; ROADREF.push({ mesh: mm, idx: i, gx: c.gx, gz: c.gz, base: c.col, biome: c.biome || 'default' });
+      } }
     }
     TILEREF = [];
     for (const k in tileByKey) {
       const bucket = tileByKey[k], model = tileBatchModel(M[bucket.modelKey], bucket.textureKey, bucket.modelKey);
-      for (const chunk of makeChunkMeshes(bucket.list, part => instMesh(model, part, 'map-overrides', true))) {
-        scene.add(chunk.mesh);
-        for (let i = 0; i < chunk.list.length; i++) {
-          const c = chunk.list[i]; TILEREF.push({ mesh: chunk.mesh, idx: i, gx: c.gx, gz: c.gz, base: c.col, biome: c.biome || 'default' });
-        }
-      }
+      const mm = instMesh(model, bucket.list, 'map-overrides', true);
+      if (mm) { mm.frustumCulled = false; scene.add(mm); for (let i = 0; i < bucket.list.length; i++) {
+        const c = bucket.list[i]; TILEREF.push({ mesh: mm, idx: i, gx: c.gx, gz: c.gz, base: c.col, biome: c.biome || 'default' });
+      } }
     }
 
     // мосты: [wx, wz, bridgeKey, bridgeRy, bankY]
@@ -851,7 +840,7 @@
       });
     }
     window.HEXBRIDGES = bridgeCenters;                       // центры мостов → рой сужается в колонну на мосту
-    for (const k in brByKey) for (const chunk of makeChunkMeshes(brByKey[k], part => instObjectMesh(M[k], part, 'map-bridges', true))) scene.add(chunk.mesh);
+    for (const k in brByKey) { const mm = instObjectMesh(M[k], brByKey[k], 'map-bridges', true); if (mm) { mm.frustumCulled = false; scene.add(mm); } }
 
     // декор: [asset, wx, wz, y, yaw, scale, biome] — модель с равномерным масштабом
     const decByKey = {};
@@ -1027,7 +1016,6 @@
     addHexRoadGraphEdges();                               // ручные дороги редактора тоже должны быть путями
     console.log('[hex] карта из hex-map.json: tiles=' + MAP.tiles.length + ' bridges=' + MAP.bridges.length + ' decor=' + MAP.decor.length + ' roads=' + HEXROADS.size);
     if (typeof markShadowsDirty === 'function') markShadowsDirty();   // вся статичная геометрия карты в сцене → перепечь тени один раз
-    window._shadowWarmUntil = (typeof performance !== 'undefined' ? performance.now() : 0) + 2000;   // страховка: ~2с печём тени каждый кадр (если что-то догрузилось асинхронно)
     if (typeof installDynShadowOnWorld === 'function') installDynShadowOnWorld();   // 🌗 земля/дороги/мосты принимают тени городов/построек из динамической карты
   }
 

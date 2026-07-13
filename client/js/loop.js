@@ -195,18 +195,13 @@ let labelsHiddenUntil=0, labelsAreHidden=false;
 // в WebGPU/WebGL. Запас даёт время подготовить instance-буферы до входа в кадр.
 const dynamicCullV=new T3.Vector3();
 const DYNAMIC_CULL_MARGIN_X=0.38, DYNAMIC_CULL_MARGIN_Y=0.42;
-const DYNAMIC_NEAR_DIST2=75*75, DYNAMIC_MID_DIST2=190*190;
 function dynamicRenderTier(pos,yOffset=0){
-  const dx=pos.x-camera.position.x,dy=pos.y+yOffset-camera.position.y,dz=pos.z-camera.position.z;
-  const dist2=dx*dx+dy*dy+dz*dz;
   dynamicCullV.set(pos.x,pos.y+yOffset,pos.z).project(camera);
   if(dynamicCullV.z< -1||dynamicCullV.z>1)return 0;
   const ax=Math.abs(dynamicCullV.x),ay=Math.abs(dynamicCullV.y);
   if(ax>1+DYNAMIC_CULL_MARGIN_X||ay>1+DYNAMIC_CULL_MARGIN_Y)return 0;
-  if(ax>1||ay>1)return 1;                                              // запас за кадром: ~8 Гц
-  if(dist2<=DYNAMIC_NEAR_DIST2)return 3;                               // близко: каждый кадр
-  if(dist2<=DYNAMIC_MID_DIST2)return 2;                                // средне: ~25 Гц
-  return 1;                                                           // далеко: ~8 Гц
+  if(ax>1||ay>1)return 1;                                              // запас ЗА кадром: ~8 Гц (глазу не видно)
+  return 3;                                                            // в кадре: каждый кадр — тир по абсолютной дистанции превращал весь мир в 8 Гц слайдшоу при обычном зуме (orbit.r≈240 > порога 190)
 }
 function dynamicInRenderZone(pos,yOffset=0){return dynamicRenderTier(pos,yOffset)>0;}
 function dynamicVisualDue(gh,now,tier){
@@ -343,7 +338,6 @@ function loop(now){
   panelTick+=dt; if(panelTick>0.25){panelTick=0;if(regionsDirty){regionsDirty=false;assignRegions();}updatePanel();refreshTechAfford();refreshHeroBar();if(diploTarget!=null)refreshDiplo();refreshPol();if(peaceTarget!=null)refreshPeaceDialog();}  // refresh UI
   applyPerfStressOnce();
   if(typeof window.rebuildCityBatchesIfDirty==='function')window.rebuildCityBatchesIfDirty();
-  if(window._shadowWarmUntil&&now<window._shadowWarmUntil)renderer.shadowMap.needsUpdate=true;   // прогрев теней после загрузки карты (страховка от async-геометрии)
   if(typeof bakeDynShadowIfDirty==='function')bakeDynShadowIfDirty();   // 🌗 динамическая карта теней (города/постройки): перепечь только при изменениях, события кадра коалесятся
   if(typeof fogRender==='function')fogRender(renderer,scene,camera);    // 🌫 туман войны: пост-процесс (сцена → RT → затемнение вне вижена)
   else renderer.render(scene,camera);

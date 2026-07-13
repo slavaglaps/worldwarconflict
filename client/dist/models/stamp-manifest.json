@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-13T18:31:37.600Z",
+  "generatedAt": "2026-07-13T18:42:28.851Z",
   "source": "tools/model-stamps.js",
   "models": [
     {
@@ -11,7 +11,7 @@
       "format": "glb",
       "supported": true,
       "size": 264956,
-      "mtimeMs": 1783967441562,
+      "mtimeMs": 1783968078620,
       "sidecars": {
         "textures": [
           {
