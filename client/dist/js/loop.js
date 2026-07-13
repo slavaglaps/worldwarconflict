@@ -1306,13 +1306,20 @@ function loop(now){
       const gh=ghostMesh(0,owner), n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
       gh.comp={inf:n-each*2,arc:each,cav:each};
       ghostSwarm(gh,n);                 // CPU geometry + GPU buffers are prepared outside the send gesture.
-      // WebGPU creates render pipelines lazily. Merely constructing an off-screen
-      // swarm did not warm them, so the first army order could block while three
-      // unit materials, accessories and blob shadows compiled at once.
+      // WebGPU creates render pipelines lazily. Compile the representative swarm
+      // in an isolated scene: compiling the live scene while orders add/remove
+      // squads can leave the renderer permanently waiting on a stale render object.
       if(renderer&&typeof renderer.compileAsync==='function'){
         try{
-          const pending=renderer.compileAsync(scene,camera);
-          if(pending&&pending.then){pending.catch(()=>{}).finally(()=>releaseSquadGhost(gh));return;}
+          const warmScene=new T3.Scene();
+          warmScene.environment=scene.environment;
+          scene.remove(gh.group); warmScene.add(gh.group);
+          scene.traverse(o=>{if(o.isLight&&o.clone)warmScene.add(o.clone());});
+          const pending=renderer.compileAsync(warmScene,camera);
+          if(pending&&pending.then){pending.catch(()=>{}).finally(()=>{
+            warmScene.remove(gh.group); releaseSquadGhost(gh);
+          });return;}
+          warmScene.remove(gh.group);
         }catch(e){}
       }
       releaseSquadGhost(gh);
