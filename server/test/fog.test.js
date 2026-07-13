@@ -119,6 +119,29 @@ test('союзник делится виженом', () => {
   eq(at(after, cap1.gx, cap1.gz), 1, 'после союза — территория союзника видна');
 });
 
+test('статическая территория кэшируется, динамические источники её не пересобирают', () => {
+  computeVision(s, 0);
+  const base = s._visionStaticCache[0].mask;
+  const c = capOf(1);
+  s.squads.push({ owner: 0, x: c.gx, z: c.gz });
+  computeVision(s, 0);
+  s.squads.pop();
+  assert(s._visionStaticCache[0].mask === base, 'движение использует прежнюю статическую маску');
+});
+
+test('захват города инвалидирует статическую территорию', () => {
+  const c = capOf(1), owner = c.owner;
+  computeVision(s, 0);
+  const before = s._visionStaticCache[0].mask;
+  c.owner = 0;
+  const captured = computeVision(s, 0);
+  const after = s._visionStaticCache[0].mask;
+  c.owner = owner;
+  assert(after !== before, 'после смены владельца создана новая статическая маска');
+  eq(at(captured, c.gx, c.gz), 1, 'захваченный город и его территория открылись');
+  computeVision(s, 0); // восстановить кэш после возврата владельца
+});
+
 test('кэш: повторный вызов в окне VISION_REFRESH не пересчитывает', () => {
   const a = visionMask(s, 2), b = visionMask(s, 2);
   assert(a === b, 'та же ссылка из кэша');

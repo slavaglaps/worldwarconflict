@@ -20,6 +20,7 @@
   let blend = 1, animating = false;
   let lastVisionSig = null;
   let fogQuality = localStorage.getItem('wwc_fog_quality') === 'low' ? 'low' : 'high';
+  const stats = { computes:0, uploads:0, skippedUploads:0 };
 
   function ensureTex() {
     if (tex) return;
@@ -52,28 +53,40 @@
     }
   }
   function blurMask() {
-    const scale=G/MASK_G;
-    for(let x=0;x<MASK_G;x++)for(let z=0;z<MASK_G;z++){
-      const x0=Math.floor(x*scale),x1=Math.min(G,Math.ceil((x+1)*scale));
-      const z0=Math.floor(z*scale),z1=Math.min(G,Math.ceil((z+1)*scale));
-      let v=0;for(let sx=x0;sx<x1&&!v;sx++)for(let sz=z0;sz<z1;sz++)if(raw[sx*G+sz]){v=1;break;}
-      maskRaw[x*MASK_G+z]=v;
+    if(G===MASK_G*2){
+      for(let x=0;x<MASK_G;x++)for(let z=0;z<MASK_G;z++){
+        const i=(x*2)*G+z*2;
+        maskRaw[x*MASK_G+z]=raw[i]|raw[i+1]|raw[i+G]|raw[i+G+1];
+      }
+    }else{
+      const scale=G/MASK_G;
+      for(let x=0;x<MASK_G;x++)for(let z=0;z<MASK_G;z++){
+        const x0=Math.floor(x*scale),x1=Math.min(G,Math.ceil((x+1)*scale));
+        const z0=Math.floor(z*scale),z1=Math.min(G,Math.ceil((z+1)*scale));
+        let v=0;for(let sx=x0;sx<x1&&!v;sx++)for(let sz=z0;sz<z1;sz++)if(raw[sx*G+sz]){v=1;break;}
+        maskRaw[x*MASK_G+z]=v;
+      }
     }
     for (let i = 0; i < MASK_N; i++) _tmpA[i] = maskRaw[i];
     for (let p = 0; p < BLUR_PASSES; p++) { blurAxis(_tmpA, _tmpB, true); blurAxis(_tmpB, _tmpA, false); }
     target.set(_tmpA);
   }
 
+  function visionFriendly(owner){
+    if(owner===PLAYER)return true;
+    const k=owner<PLAYER?owner+'_'+PLAYER:PLAYER+'_'+owner;
+    return typeof relations!=='undefined'&&relations[k]==='ally';
+  }
   function visionSignature(){
     let h=2166136261>>>0;
     const mix=(v)=>{h^=(v|0);h=Math.imul(h,16777619)>>>0;};
     mix(typeof PLAYER==='undefined'?0:PLAYER+1);
     if(typeof cities!=='undefined')for(const c of cities){mix((c.owner|0)+1);mix(c.occ?1:0);}
     if(typeof relations!=='undefined')for(const k of Object.keys(relations).sort())if(relations[k]==='ally')for(let i=0;i<k.length;i++)mix(k.charCodeAt(i));
-    if(window.MAP_BUILDINGS)for(const b of window.MAP_BUILDINGS)if(b&&b.item&&b.item.role==='tower'){mix((b.owner|0)+1);mix(Math.round(b.gx*2));mix(Math.round(b.gz*2));}
-    if(typeof MP!=='undefined'&&MP.ghosts)for(const gh of MP.ghosts.values())if(gh&&gh.group){const p=gh.group.position;mix((gh.owner|0)+1);mix((gh.kind|0)+1);mix(Math.round(p.x*2));mix(Math.round(p.z*2));}
-    if(typeof ships!=='undefined')for(const s of ships)if(s&&s.pos){mix((s.owner|0)+1);mix(2);mix(Math.round(s.pos.x*2));mix(Math.round(s.pos.z*2));}
-    if(typeof planes!=='undefined')for(const p of planes)if(p&&p.pos){mix((p.owner|0)+1);mix(3);mix(Math.round(p.pos.x*2));mix(Math.round(p.pos.z*2));}
+    if(window.MAP_BUILDINGS)for(const b of window.MAP_BUILDINGS)if(b&&b.item&&b.item.role==='tower'&&visionFriendly(b.owner)){mix((b.owner|0)+1);mix(Math.round(b.gx));mix(Math.round(b.gz));}
+    if(typeof MP!=='undefined'&&MP.ghosts)for(const gh of MP.ghosts.values())if(gh&&gh.group&&visionFriendly(gh.owner)){const p=gh.group.position;mix((gh.owner|0)+1);mix((gh.kind|0)+1);mix(Math.round(p.x));mix(Math.round(p.z));}
+    if(typeof ships!=='undefined')for(const s of ships)if(s&&s.pos&&visionFriendly(s.owner)){mix((s.owner|0)+1);mix(2);mix(Math.round(s.pos.x));mix(Math.round(s.pos.z));}
+    if(typeof planes!=='undefined')for(const p of planes)if(p&&p.pos&&visionFriendly(p.owner)){mix((p.owner|0)+1);mix(3);mix(Math.round(p.pos.x));mix(Math.round(p.pos.z));}
     return h;
   }
 
@@ -100,18 +113,19 @@
     shim.squads.length = 0; shim.ships.length = 0; shim.planes.length = 0; shim.towers.length = 0;
     // 🗼 башни из меню строительства — «глаза» на границе
     if (window.MAP_BUILDINGS) for (const b of window.MAP_BUILDINGS)
-      if (b && b.item && b.item.role === 'tower') shim.towers.push({ owner: b.owner, x: b.gx, z: b.gz });
+      if (b && b.item && b.item.role === 'tower' && visionFriendly(b.owner)) shim.towers.push({ owner: b.owner, x: b.gx, z: b.gz });
     if (typeof MP !== 'undefined' && MP.ghosts) {
       for (const gh of MP.ghosts.values()) {
-        if (!gh || gh.owner == null || !gh.group) continue;
+        if (!gh || gh.owner == null || !gh.group || !visionFriendly(gh.owner)) continue;
         const p = gh.group.position, src = { owner: gh.owner, x: p.x, z: p.z };
         if (gh.kind === 1) shim.ships.push(src);
         else if (gh.kind === 2) shim.planes.push(src);
         else shim.squads.push(src);
       }
     }
-    if (typeof ships !== 'undefined') for (const s of ships) if (s && s.pos) shim.ships.push({ owner: s.owner, x: s.pos.x, z: s.pos.z });
-    if (typeof planes !== 'undefined') for (const p of planes) if (p && p.pos) shim.planes.push({ owner: p.owner, x: p.pos.x, z: p.pos.z });
+    if (typeof ships !== 'undefined') for (const s of ships) if (s && s.pos && visionFriendly(s.owner)) shim.ships.push({ owner: s.owner, x: s.pos.x, z: s.pos.z });
+    if (typeof planes !== 'undefined') for (const p of planes) if (p && p.pos && visionFriendly(p.owner)) shim.planes.push({ owner: p.owner, x: p.pos.x, z: p.pos.z });
+    stats.computes++;
     const shared = typeof MP !== 'undefined' && MP.localSim && window.__LOCAL_VISION_MASK;
     if (shared && shared.length === raw.length) raw.set(shared);
     else V.computeVision(shim, PLAYER, raw);
@@ -136,14 +150,20 @@
       if (sig!==lastVisionSig&&computeTarget()) {
         lastVisionSig=sig;
         const next = tex.image.data, prev = prevTex.image.data, oldBlend = blend;
-        for (let i = 0; i < MASK_N; i++) {
-          const current = started ? Math.round(prev[i] + (next[i] - prev[i]) * oldBlend) : Math.round(target[i] * 255);
-          prev[i] = current;
-          next[i] = Math.round(target[i] * 255);
-          if(fogQuality==='low')prev[i]=next[i];
+        let changed=!started;
+        for(let i=0;i<MASK_N&&!changed;i++)changed=next[i]!==Math.round(target[i]*255);
+        if(!changed)stats.skippedUploads++;
+        else{
+          for (let i = 0; i < MASK_N; i++) {
+            const current = started ? Math.round(prev[i] + (next[i] - prev[i]) * oldBlend) : Math.round(target[i] * 255);
+            prev[i] = current;
+            next[i] = Math.round(target[i] * 255);
+            if(fogQuality==='low')prev[i]=next[i];
+          }
+          prevTex.needsUpdate = true; tex.needsUpdate = true;
+          stats.uploads++;
+          started = true; blend = fogQuality==='low'?1:0; animating = fogQuality!=='low';
         }
-        prevTex.needsUpdate = true; tex.needsUpdate = true;
-        started = true; blend = fogQuality==='low'?1:0; animating = fogQuality!=='low';
       }
     }
     if (!started || !animating) return;
@@ -152,9 +172,18 @@
   }
 
   // ── пост-процесс: сцена → RT(+depth) → fullscreen-затемнение по vision ──
-  let rt = null, postScene = null, postCam = null, postMat = null, _w = 0, _h = 0;
+  let rt = null, postScene = null, postCam = null, postMat = null, noiseTex = null, _w = 0, _h = 0;
   let webgpuPipeline = null;
-  const _invPV = new T.Matrix4(), _pv = new T.Matrix4();
+  const _invPV = new T.Matrix4(), _pv = new T.Matrix4(), _lastCamWorld = new T.Matrix4(), _lastCamProj = new T.Matrix4();
+  let _invReady=false;
+  function ensureNoiseTex(){
+    if(noiseTex)return noiseTex;
+    const S=64,data=new Uint8Array(S*S);let seed=0x6d2b79f5;
+    for(let i=0;i<data.length;i++){seed=(Math.imul(seed^seed>>>15,1|seed)+0x6d2b79f5)|0;data[i]=((seed^seed>>>14)>>>0)&255;}
+    noiseTex=new T.DataTexture(data,S,S,T.LuminanceFormat!==undefined?T.LuminanceFormat:T.RedFormat,T.UnsignedByteType);
+    noiseTex.wrapS=noiseTex.wrapT=T.RepeatWrapping;noiseTex.minFilter=noiseTex.magFilter=T.LinearFilter;noiseTex.generateMipmaps=false;noiseTex.needsUpdate=true;
+    return noiseTex;
+  }
   function ensurePost(renderer) {
     const size = renderer.getDrawingBufferSize(new T.Vector2());
     if (rt && size.x === _w && size.y === _h) return true;
@@ -162,6 +191,7 @@
     if (rt) { rt.dispose(); }
     if (!_w || !_h) return false;
     rt = new T.WebGLRenderTarget(_w, _h, { minFilter: T.LinearFilter, magFilter: T.LinearFilter });
+    rt.texture.generateMipmaps=false;
     rt.depthTexture = new T.DepthTexture(_w, _h);
     rt.depthTexture.type = T.UnsignedIntType;
     if (!postMat) {
@@ -169,16 +199,14 @@
         uniforms: {
           tDiffuse: { value: null }, tDepth: { value: null }, uFogPrev: { value: null }, uFog: { value: null },
           uInvPV: { value: _invPV }, uTime: { value: 0 }, uFogBlend: { value: 1 },
+          uFogAnimating:{value:0}, uNoise:{value:ensureNoiseTex()},
         },
         depthTest: false, depthWrite: false,
         vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
         fragmentShader: `
-          uniform sampler2D tDiffuse, tDepth, uFogPrev, uFog;
-          uniform mat4 uInvPV; uniform float uTime, uFogBlend;
+          uniform sampler2D tDiffuse, tDepth, uFogPrev, uFog, uNoise;
+          uniform mat4 uInvPV; uniform float uTime, uFogBlend, uFogAnimating;
           varying vec2 vUv;
-          float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-          float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
-            return mix( mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y ); }
           // RT хранит ЛИНЕЙНЫЙ цвет (r128 не применяет outputEncoding при рендере в таргет) —
           // конвертируем в sRGB сами, той же кусочной формулой, что three encodings_fragment,
           // иначе финальная картинка темнее оригинала («свет поехал» после ввода пост-процесса)
@@ -191,18 +219,17 @@
             vec4 ndc = vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
             vec4 wp = uInvPV * ndc; wp /= wp.w;                          // мировая позиция пикселя
             vec2 fogUv = (vec2(wp.z, wp.x) + 0.5) / ${G.toFixed(1)};
-            float v = mix(texture2D(uFogPrev, fogUv).r, texture2D(uFog, fogUv).r, uFogBlend);
+            float fogNow = texture2D(uFog, fogUv).r;
+            float v = fogNow;
+            if(uFogAnimating>0.5) v=mix(texture2D(uFogPrev,fogUv).r,fogNow,uFogBlend);
             // 🌫 органический край: порог гуляет по шуму → граница не ровная изолиния, а облачная
-            float n1 = vnoise(wp.xz * 0.30 + vec2(uTime * 0.020, -uTime * 0.015));
+            float n1 = texture2D(uNoise,wp.xz*0.026+vec2(uTime*0.0020,-uTime*0.0015)).r;
             v = smoothstep(0.30, 0.70, v + (n1 - 0.5) * 0.18);
             // клочья на границе: медленный крупный шум тянет «языки» тумана вдоль края
             float edge = v * (1.0 - v) * 4.0;                            // 1 в центре перехода, 0 вдали
-            float n2 = vnoise(wp.xz * 0.09 - vec2(uTime * 0.030, uTime * 0.022));
+            float n2 = texture2D(uNoise,wp.xz*0.009-vec2(uTime*0.0015,uTime*0.0011)).r;
             v = clamp(v + edge * (n2 - 0.5) * 0.28, 0.0, 1.0);
-            // «клубление» внутри тьмы: медленный шум приглушает туман неравномерно
-            float n = vnoise(wp.xz * 0.14 + vec2(uTime * 0.05, uTime * 0.037)) * 0.5
-                    + vnoise(wp.xz * 0.05 - vec2(uTime * 0.021, uTime * 0.03));
-            float dim = 0.50 + 0.08 * (n - 0.75);                        // база ~50% ±небольшая рябь
+            float dim = 0.48 + 0.08 * n2;
             // WC3-ночь: полудесатурация + затемнение + холодный сдвиг
             float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
             vec3 night = mix(vec3(luma), c.rgb, 0.45) * dim * vec3(0.80, 0.90, 1.18);
@@ -232,13 +259,17 @@
     renderer.setRenderTarget(rt);
     renderer.render(scene, camera);
     renderer.setRenderTarget(null);
-    _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-    _invPV.copy(_pv).invert();   // r128: Matrix4.invert есть с r123
+    if(!_invReady||!_lastCamWorld.equals(camera.matrixWorld)||!_lastCamProj.equals(camera.projectionMatrix)){
+      _lastCamWorld.copy(camera.matrixWorld);_lastCamProj.copy(camera.projectionMatrix);
+      _pv.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
+      _invPV.copy(_pv).invert();_invReady=true;
+    }
     postMat.uniforms.tDiffuse.value = rt.texture;
     postMat.uniforms.tDepth.value = rt.depthTexture;
     postMat.uniforms.uFogPrev.value = prevTex;
     postMat.uniforms.uFog.value = tex;
     postMat.uniforms.uFogBlend.value = blend;
+    postMat.uniforms.uFogAnimating.value = animating?1:0;
     postMat.uniforms.uInvPV.value = _invPV;
     postMat.uniforms.uTime.value = performance.now() / 1000;
     renderer.render(postScene, postCam);
@@ -251,6 +282,6 @@
     get blend(){return blend;}, computeTarget, _shim:shim, get started(){return started;},
     invalidate(){lastVisionSig=null;calcT=0;},
     setQuality(q){fogQuality=q==='low'?'low':'high';localStorage.setItem('wwc_fog_quality',fogQuality);lastVisionSig=null;calcT=0;},
-    get quality(){return fogQuality;},
+    get quality(){return fogQuality;}, stats,
   };
 })();

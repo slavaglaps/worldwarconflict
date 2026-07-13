@@ -151,7 +151,13 @@
     const out = [];
     for (const bucket of chunkLists(list, pos).values()) {
       const mesh = create(bucket);
-      if (mesh) out.push({ mesh: setChunkBounds(mesh, bucket, pos), list: bucket });
+      if (mesh) {
+        // Bounds belong to a chunk, not to the shared source model. Mutating a
+        // shared geometry made WebGPU cull unrelated chunks with the last
+        // chunk's box, producing black holes during busy frames.
+        if (mesh.geometry && mesh.geometry.clone) mesh.geometry = mesh.geometry.clone();
+        out.push({ mesh: setChunkBounds(mesh, bucket, pos), list: bucket });
+      }
     }
     return out;
   };

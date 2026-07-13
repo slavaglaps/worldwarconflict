@@ -68,27 +68,86 @@ function stampDisc(mask, GRID, x, z, radius) {
 
 // Раскрывает только воду вокруг видимого берега. Это даёт естественную
 // прибрежную полосу обзора, не возвращая бесконечный океан от Вороного.
-function stampWaterDisc(mask, GRID, x, z, radius) {
+function stampWaterDisc(mask, GRID, x, z, radius, water) {
   const cx = Math.round(x), cz = Math.round(z), r = Math.max(0, Math.round(radius));
   for (let dx = -r; dx <= r; dx++) {
     const px = cx + dx; if (px < 0 || px >= GRID) continue;
     for (let dz = -r; dz <= r; dz++) {
       const pz = cz + dz; if (pz < 0 || pz >= GRID || dx * dx + dz * dz > r * r) continue;
-      if (isWaterAt(px, pz)) mask[px * GRID + pz] = 1;
+      const i = px * GRID + pz;
+      if (water ? water[i] : isWaterAt(px, pz)) mask[i] = 1;
     }
   }
 }
 
-function hasWaterNear(GRID, x, z, radius) {
-  const r = Math.max(1, Math.round(radius));
-  for (let dx = -r; dx <= r; dx++) {
-    const px = x + dx; if (px < 0 || px >= GRID) continue;
-    for (let dz = -r; dz <= r; dz++) {
-      const pz = z + dz; if (pz < 0 || pz >= GRID || dx * dx + dz * dz > r * r) continue;
-      if (isWaterAt(px, pz)) return true;
-    }
+function staticVisionKey(sim, fid, friendly) {
+  let h = 2166136261 >>> 0;
+  const mix = (v) => { h ^= v | 0; h = Math.imul(h, 16777619) >>> 0; };
+  mix(fid); mix(sim.K.GRID); mix(sim.K.VISION_COAST || 0); mix(sim.K.VISION_COAST_SEARCH || 1);
+  for (let i = 0; i < friendly.length; i++) mix(friendly[i]);
+  for (const c of sim.cities) { mix(c.owner); mix(Math.round(c.gx * 4)); mix(Math.round(c.gz * 4)); }
+  return h;
+}
+
+// Вода и потенциальные береговые клетки не зависят от фракции. Считаем их
+// один раз на матч вместо тысяч повторных вызовов isWaterAt на каждый клиент.
+function worldVisionCache(sim, GRID, coastSearch) {
+  let posHash = 2166136261 >>> 0;
+  for (const c of sim.cities) {
+    posHash ^= Math.round(c.gx * 4); posHash = Math.imul(posHash, 16777619) >>> 0;
+    posHash ^= Math.round(c.gz * 4); posHash = Math.imul(posHash, 16777619) >>> 0;
   }
-  return false;
+  const key = GRID + ':' + coastSearch + ':' + sim.cities.length + ':' + posHash;
+  if (sim._visionWorld && sim._visionWorld.key === key) return sim._visionWorld;
+  const N = GRID * GRID, water = new Uint8Array(N), coast = [];
+  for (let x = 0; x < GRID; x++) for (let z = 0; z < GRID; z++) {
+    const i = x * GRID + z;
+    if (isWaterAt(x, z)) water[i] = 1;
+  }
+  const r = Math.max(1, Math.round(coastSearch));
+  for (let x = 0; x < GRID; x++) for (let z = 0; z < GRID; z++) {
+    const i = x * GRID + z; if (water[i]) continue;
+    let near = false;
+    for (let dx = -r; dx <= r && !near; dx++) {
+      const px = x + dx; if (px < 0 || px >= GRID) continue;
+      for (let dz = -r; dz <= r; dz++) {
+        const pz = z + dz;
+        if (pz >= 0 && pz < GRID && dx * dx + dz * dz <= r * r && water[px * GRID + pz]) { near = true; break; }
+      }
+    }
+    if (near) coast.push(i);
+  }
+  sim._visionWorld = { key, water, coast: Uint32Array.from(coast) };
+  sim._visionStaticCache = [];
+  return sim._visionWorld;
+}
+
+function staticVisionBase(sim, fid, friendly) {
+  const GRID = sim.K.GRID, N = GRID * GRID, cities = sim.cities;
+  if (!sim._voronoi || sim._voronoiN !== cities.length) {
+    sim._voronoi = buildVoronoi(cities, GRID);
+    sim._voronoiN = cities.length;
+    sim._visionStaticCache = [];
+  }
+  const coastSearch = sim.K.VISION_COAST_SEARCH || 1;
+  const world = worldVisionCache(sim, GRID, coastSearch);
+  const key = staticVisionKey(sim, fid, friendly);
+  const cache = sim._visionStaticCache || (sim._visionStaticCache = []);
+  if (cache[fid] && cache[fid].key === key) return cache[fid].mask;
+
+  const mask = new Uint8Array(N), cityOwn = new Uint8Array(cities.length), vor = sim._voronoi;
+  for (let i = 0; i < cities.length; i++) cityOwn[i] = friendly[cities[i].owner] || 0;
+  for (let i = 0; i < N; i++) {
+    const ci = vor[i];
+    if (ci !== 65535 && cityOwn[ci] && !world.water[i]) mask[i] = 1;
+  }
+  const coastRadius = sim.K.VISION_COAST || 0;
+  if (coastRadius > 0) for (let i = 0; i < world.coast.length; i++) {
+    const cell = world.coast[i];
+    if (mask[cell]) stampWaterDisc(mask, GRID, Math.floor(cell / GRID), cell % GRID, coastRadius, world.water);
+  }
+  cache[fid] = { key, mask };
+  return mask;
 }
 
 // Полная маска видимости фракции. sim — Sim; out — переиспользуемый Uint8Array (опц.).
@@ -96,36 +155,15 @@ function computeVision(sim, fid, out) {
   const GRID = sim.K.GRID;
   const K = sim.K;
   const N = GRID * GRID;
-  const mask = (out && out.length === N) ? out.fill(0) : new Uint8Array(N);
+  const mask = (out && out.length === N) ? out : new Uint8Array(N);
   // «свой» = сам + союзники (общий вижен)
   const friendly = new Uint8Array(sim.factions);
   for (let o = 0; o < sim.factions; o++) friendly[o] = (o === fid || sim.allied(fid, o)) ? 1 : 0;
 
-  // 1) территория: сухопутный хекс виден, если его ближайший город принадлежит своим.
-  // Океан нельзя открывать Вороной: на островах ближайший дружественный город иначе
-  // подсвечивает море до следующей страны. Воду раскрывают только источники ниже.
-  if (!sim._voronoi || sim._voronoiN !== sim.cities.length) {
-    sim._voronoi = buildVoronoi(sim.cities, GRID);
-    sim._voronoiN = sim.cities.length;
-  }
-  const vor = sim._voronoi, cities = sim.cities;
-  const cityOwn = new Uint8Array(cities.length);
-  for (let i = 0; i < cities.length; i++) cityOwn[i] = friendly[cities[i].owner] || 0;
-  for (let x = 0; x < GRID; x++) for (let z = 0; z < GRID; z++) {
-    const i = x * GRID + z, ci = vor[i];
-    if (ci !== 65535 && cityOwn[ci] && !isWaterAt(x, z)) mask[i] = 1;
-  }
-
-  // Полоса моря вдоль своей/союзной территории. На hex-карте береговая вода
-  // не всегда лежит прямо в 8 соседях растра, поэтому ищем воду в малом радиусе,
-  // но всё ещё штампуем только от уже видимой суши, чтобы не открыть океан Вороного.
-  const coastRadius = K.VISION_COAST || 0;
-  const coastSearch = K.VISION_COAST_SEARCH || 1;
-  if (coastRadius > 0) for (let x = 0; x < GRID; x++) for (let z = 0; z < GRID; z++) {
-    const i = x * GRID + z;
-    if (!mask[i] || isWaterAt(x, z)) continue;
-    if (hasWaterNear(GRID, x, z, coastSearch)) stampWaterDisc(mask, GRID, x, z, coastRadius);
-  }
+  // 1) Статическая территория + побережье пересобираются только при захвате
+  // города или смене союза. В обычном тике это один memcpy на 64 КБ.
+  const cities = sim.cities;
+  mask.set(staticVisionBase(sim, fid, friendly));
 
   // 2) свои отряды/корабли/самолёты — «фонарики» (разведка боем)
   const rSquad = K.VISION_SQUAD, rShip = K.VISION_SHIP, rPlane = K.VISION_PLANE;

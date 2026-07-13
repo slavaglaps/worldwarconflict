@@ -102,12 +102,15 @@ window.createWWCWebGPUFogPipeline = function createWWCWebGPUFogPipeline(renderer
   const worldPosition = nearWorld.add(ray.mul(rayDistance));
   const fogUv = vec2(worldPosition.z, worldPosition.x).add(0.5).div(grid).clamp(0.0, 1.0);
   const fogBlend = uniform(1);
-  const visibility = smoothstep(0.3, 0.7, mix(texture(previousFogTexture, fogUv).r, texture(fogTexture, fogUv).r, fogBlend));
+  const fogAnimating = uniform(0);
+  const fogNow = texture(fogTexture, fogUv).r;
+  const fogValue = fogAnimating.greaterThan(0.5).select(mix(texture(previousFogTexture, fogUv).r, fogNow, fogBlend), fogNow);
+  const visibility = smoothstep(0.3, 0.7, fogValue);
   const night = sceneColor.rgb.mul(vec3(0.40, 0.45, 0.59));
   const fogged = vec4(mix(night, sceneColor.rgb, visibility), sceneColor.a);
   const pipeline = new RenderPipeline(renderer);
   pipeline.outputNode = fogged;
-  pipeline.setFogBlend = (value) => { fogBlend.value = value; };
+  pipeline.setFogBlend = (value) => { fogBlend.value = value; fogAnimating.value = value < 0.999 ? 1 : 0; };
   return pipeline;
 };
 

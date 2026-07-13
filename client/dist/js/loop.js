@@ -805,7 +805,6 @@ function loop(now){
     if(ud){
       ud.st=null; ud.trail=[]; ud.travelled=0; ud.lastHead=null; ud.fwd=null; ud.dieDir=null; ud._dieAt=null;
       ud.corpses=null; ud.cheerT=0; ud.battleTgt=null; ud.battleFoeCount=0;
-      if(ud.logicalVisible)ud.logicalVisible.fill(false);
       if(ud.orbs)for(const u of ud.orbs){u.ex=null;u.ey=null;u.ez=null;u.cy=null;}
     }
     if(gh.lab){gh.lab.style.display='none';gh._labVis=false;gh._labN=null;}
@@ -837,7 +836,6 @@ function loop(now){
   // Голова заходит на дугу — хвост ещё идёт прямо; поворот перетекает по колонне (как поезд). Никаких резких разворотов.
   function placeGhostSwarm(gh,now){
     const ud=gh.group.userData; if(!ud.tm||!ud.putUnitMatrix)return;   // 👥 бакеты типов создаёт ghostSwarm
-    ud.beginUnits();                                                   // компактная запись: только реально видимые бойцы
     const tt=now/1000, sc=ud.unitScale||1, n=ud.orbN;
     const dt=Math.min(0.1,Math.max(0,(now-(ud._lt||now))/1000)); ud._lt=now;
     const p=gh.group.position, t=gh.target, dx=t.x-p.x, dz=t.z-p.z, dist=Math.hypot(dx,dz);
@@ -927,7 +925,9 @@ function loop(now){
       const born=(ud.travelled||0)-rank*rankSp;
       fadeK*=born>=rankSp*0.6?1:Math.max(0,born/(rankSp*0.6));
       if(rank>=visRanks || fadeK<=0.02){                                   // ещё в здании (не вышел) / уже полностью втянулся → скрыт
-        ud.hideUnit(i); continue; }
+        ghostUnitDummy.position.set(0,-999,0); ghostUnitDummy.scale.set(0,0,0); ghostUnitDummy.updateMatrix();
+        if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
+        ud.putUnitMatrix(i,ghostUnitMatrix); ud.putUnitShadow(i,0,-999,0,0); continue; }
       const cx=c[0], cz=c[1], dx2=d[0], dz2=d[1];                         // ряд стоит ТОЧНО на следе (дороге) — без прямых блендов
       const rowHead=-Math.atan2(dz2,dx2);
       let acOff=((file-(W-1)/2)+(u.lj||0))*fileSp*(funnelR[rank]||1);   // поперёк ряда — ровно по центру оси; воронка СВОЕГО ряда
@@ -973,7 +973,7 @@ function loop(now){
     if(ud.corpses&&ud.corpses.length){
       for(let j=ud.corpses.length-1;j>=0;j--){ const c2=ud.corpses[j]; c2.t+=dt; if(c2.t>0.95)ud.corpses.splice(j,1); }
       const ti=ud.tmInf||ud.tm[0];
-      cN=Math.min(ud.corpses.length,Math.max(0,(ti.cap||n)-(ti.drawN||0)));
+      cN=Math.min(ud.corpses.length,Math.max(0,(ti.cap||n)-(ti.n||n)));
       for(let j=0;j<cN;j++){ const c2=ud.corpses[j];
         // аккуратный «сплэт» вместо кувырка: короткий подскок → приплющивается к земле → лежит → тонет и тает
         const fall=Math.min(1,c2.t/0.25), sink=Math.max(0,(c2.t-0.55)/0.4);
@@ -985,7 +985,7 @@ function loop(now){
         ghostUnitDummy.scale.set(sc*splatXZ*k2, sc*splatY*k2, sc*splatXZ*k2);
         ghostUnitDummy.updateMatrix();
         if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
-        ud.putCorpseMatrix(ghostUnitMatrix);
+        { const s=ud.corpseSlot(j); if(ti.mesh&&s<ti.cap)ti.mesh.setMatrixAt(s,ghostUnitMatrix); }
       }
     }
     ud.finalizeUnits(cN);
@@ -1018,7 +1018,6 @@ function loop(now){
     if(a==null||b==null||typeof hexRoadSample!=='function'||typeof hexRoadLen!=='function') return false;
     const ud=gh.group.userData; if(!ud.tm||!ud.putUnitMatrix) return false;
     const len=hexRoadLen(a,b); if(!len) return false;
-    ud.beginUnits();                                                   // компактная запись: только реально видимые бойцы
     const n=ud.orbN, sc=ud.unitScale||1, tt=now/1000, p=gh.group.position;
     const dt=Math.min(0.1,Math.max(0,(now-(ud._lt||now))/1000)); ud._lt=now;
     const key=Math.min(a,b)+'_'+Math.max(a,b);
@@ -1099,7 +1098,9 @@ function loop(now){
         else fadeK*=localP;
       }
       if(!smp||(s<=0.001&&!st.prev)||fadeK<=0.02){                        // ещё в здании-источнике / уже втянулся / на борту
-        ud.hideUnit(i); continue; }
+        ghostUnitDummy.position.set(0,-999,0); ghostUnitDummy.scale.set(0,0,0); ghostUnitDummy.updateMatrix();
+        if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
+        ud.putUnitMatrix(i,ghostUnitMatrix); ud.putUnitShadow(i,0,-999,0,0); continue; }
       const smp2=rowSmp2[row]||smp;                                      // fallback для старого sampler; новый уже отдаёт tangent
       let txv=smp.tx||1,tzv=smp.tz||0; { const l0=Math.hypot(txv,tzv); if(l0>1e-4){txv/=l0;tzv/=l0;} else { const ddx=smp2.x-smp.x,ddz=smp2.z-smp.z,l=Math.hypot(ddx,ddz); if(l>1e-4){txv=ddx/l;tzv=ddz/l;} } }
       const isCav=ud.bucketOf(i).t==='cav';
@@ -1178,7 +1179,7 @@ function loop(now){
     if(ud.corpses&&ud.corpses.length){
       for(let j=ud.corpses.length-1;j>=0;j--){ const c2=ud.corpses[j]; c2.t+=dt; if(c2.t>0.95)ud.corpses.splice(j,1); }
       const ti=ud.tmInf||ud.tm[0];
-      cN=Math.min(ud.corpses.length,Math.max(0,(ti.cap||n)-(ti.drawN||0)));
+      cN=Math.min(ud.corpses.length,Math.max(0,(ti.cap||n)-(ti.n||n)));
       for(let j=0;j<cN;j++){ const c2=ud.corpses[j];
         const fall=Math.min(1,c2.t/0.25), sink=Math.max(0,(c2.t-0.55)/0.4);
         const rx=(c2.wx!=null?c2.wx-p.x:0), rz=(c2.wz!=null?c2.wz-p.z:0);
@@ -1188,7 +1189,7 @@ function loop(now){
         ghostUnitDummy.scale.set(sc*splatXZ*k2, sc*splatY*k2, sc*splatXZ*k2);
         ghostUnitDummy.updateMatrix();
         if(ud.unitLocal)ghostUnitMatrix.multiplyMatrices(ghostUnitDummy.matrix,ud.unitLocal); else ghostUnitMatrix.copy(ghostUnitDummy.matrix);
-        ud.putCorpseMatrix(ghostUnitMatrix);
+        { const s=ud.corpseSlot(j); if(ti.mesh&&s<ti.cap)ti.mesh.setMatrixAt(s,ghostUnitMatrix); }
       }
     }
     ud.finalizeUnits(cN);
@@ -1232,13 +1233,13 @@ function loop(now){
     // 👥 три бакета по типам (inf/arc/cav): свой InstancedMesh на тип (merged-модели из unitTypedSource).
     //    Пересоздаём бакет только при смене модели или нехватке ёмкости; смещения (off) пересчитываем всегда.
     const modelChanged=ud.unitSourceKey!==srcKey;
-    if(modelChanged&&ud.tm){ for(const b of ud.tm){if(b.mesh)gh.group.remove(b.mesh);if(b.acc)gh.group.remove(b.acc);} ud.tm=null; ud.orbs.length=0; ud.corpses=null; ud.logicalMatrices=[]; ud.logicalVisible=[]; }
+    if(modelChanged&&ud.tm){ for(const b of ud.tm){if(b.mesh)gh.group.remove(b.mesh);if(b.acc)gh.group.remove(b.acc);} ud.tm=null; ud.orbs.length=0; ud.corpses=null; }
     ud.unitSourceKey=srcKey; ud.unitLocal=null;                                 // typed-геометрии уже нормализованы (local впечатан)
     ud.hasUnitModel=!!base;                                                     // модель уже ориентирована — без наклона в беге (заваливались в пути)
     // 🐎→🪖→🏹 порядок марша: конница ВПЕРЕДИ колонны, пехота в середине, лучники замыкают
     //    (индексы бакетов идут от головы: rank=(i/W)|0, off накапливается по порядку tm)
     if(!ud.tm)ud.tm=[{t:'cav',mesh:null,cap:0,off:0,n:0},{t:'inf',mesh:null,cap:0,off:0,n:0},{t:'arc',mesh:null,cap:0,off:0,n:0}];
-    ud.tmInf=ud.tm.find(b=>b.t==='inf');                                        // трупы дописываются в хвост компактного пехотного бакета
+    ud.tmInf=ud.tm.find(b=>b.t==='inf');                                        // трупы живут в пехотном бакете (см. corpseSlot)
     let off=0;
     for(const b of ud.tm){
       b.n=q[b.t]; b.off=off; off+=b.n;
@@ -1267,21 +1268,18 @@ function loop(now){
       gh.group.add(ud.shadow);
     }
     // helpers: глобальный индекс юнита → бакет по типу
-    ud.logicalMatrices=ud.logicalMatrices||[]; ud.logicalVisible=ud.logicalVisible||[];
     ud.bucketOf=(i)=>{ for(const b of ud.tm){ if(i<b.off+b.n)return b; } return ud.tm[0]; };
-    ud.beginUnits=()=>{ for(const b of ud.tm){b.drawN=0;b.liveDrawN=0;} ud.shadowDrawN=0; };
-    ud.hideUnit=(i)=>{ud.logicalVisible[i]=false;};
-    ud.putUnitMatrix=(i,m4)=>{ const b=ud.bucketOf(i), j=b.drawN|0;
-      if(b.mesh&&j<b.cap){ b.mesh.setMatrixAt(j,m4); if(b.acc)b.acc.setMatrixAt(j,m4); b.drawN=j+1;b.liveDrawN=(b.liveDrawN|0)+1; }
-      let cached=ud.logicalMatrices[i]; if(!cached)cached=ud.logicalMatrices[i]=new T3.Matrix4(); cached.copy(m4); ud.logicalVisible[i]=true; };
-    ud.putUnitShadow=(i,x,y,z,size)=>{ const j=ud.shadowDrawN|0; if(!ud.shadow||j>=ud._shadowCap)return;
-      ghostShadowDummy.position.set(x,y,z);ghostShadowDummy.rotation.set(0,0,0);ghostShadowDummy.scale.set(size,size,size);ghostShadowDummy.updateMatrix();ud.shadow.setMatrixAt(j,ghostShadowDummy.matrix);ud.shadowDrawN=j+1; };
-    ud.putCorpseMatrix=(m4)=>{ const b=ud.tmInf||ud.tm[0],j=b.drawN|0;if(b.mesh&&j<b.cap){b.mesh.setMatrixAt(j,m4);b.drawN=j+1;} };
-    ud.getUnitMatrix=(i,out)=>{ const cached=ud.logicalMatrices[i];if(!cached||!ud.logicalVisible[i])return false;out.copy(cached);return true; };
-    ud.finalizeUnits=()=>{ for(const b of ud.tm){ if(!b.mesh)continue;
-      b.mesh.count=Math.min(b.cap,b.drawN|0); b.mesh.instanceMatrix.needsUpdate=true;
-      if(b.acc){ b.acc.count=Math.min(b.cap,b.liveDrawN|0); b.acc.instanceMatrix.needsUpdate=true; } }
-      if(ud.shadow){ud.shadow.count=Math.min(ud.shadowDrawN|0,ud._shadowCap);ud.shadow.instanceMatrix.needsUpdate=true;} };
+    ud.putUnitMatrix=(i,m4)=>{ const b=ud.bucketOf(i); const j=i-b.off;
+      if(b.mesh&&j<b.cap){ b.mesh.setMatrixAt(j,m4); if(b.acc)b.acc.setMatrixAt(j,m4); } };
+    ud.putUnitShadow=(i,x,y,z,size)=>{ if(!ud.shadow||i>=ud._shadowCap)return;
+      ghostShadowDummy.position.set(x,y,z);ghostShadowDummy.rotation.set(0,0,0);ghostShadowDummy.scale.set(size,size,size);ghostShadowDummy.updateMatrix();ud.shadow.setMatrixAt(i,ghostShadowDummy.matrix); };
+    ud.getUnitMatrix=(i,out)=>{ const b=ud.bucketOf(i); if(!b.mesh||i-b.off>=b.cap)return false; b.mesh.getMatrixAt(i-b.off,out); return true; };
+    ud.finalizeUnits=(cN)=>{ for(const b of ud.tm){ if(!b.mesh)continue;
+      b.mesh.count=Math.min(b.cap,b.n+(b.t==='inf'?(cN||0):0));
+      b.mesh.instanceMatrix.needsUpdate=true;
+      if(b.acc){ b.acc.count=Math.min(b.cap,b.n); b.acc.instanceMatrix.needsUpdate=true; } }
+      if(ud.shadow){ud.shadow.count=Math.min(n,ud._shadowCap);ud.shadow.instanceMatrix.needsUpdate=true;} };
+    ud.corpseSlot=(j)=>(ud.tmInf||ud.tm[0]).n+j;
     // СТАБИЛЬНЫЙ рой: позиция по индексу (золотая спираль, не зависит от n) → при убыли армии
     // лишние фигурки просто прячутся с краю, остальные не «перетасовываются».
     while(ud.orbs.length<n){
@@ -1308,6 +1306,15 @@ function loop(now){
       const gh=ghostMesh(0,owner), n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
       gh.comp={inf:n-each*2,arc:each,cav:each};
       ghostSwarm(gh,n);                 // CPU geometry + GPU buffers are prepared outside the send gesture.
+      // WebGPU creates render pipelines lazily. Merely constructing an off-screen
+      // swarm did not warm them, so the first army order could block while three
+      // unit materials, accessories and blob shadows compiled at once.
+      if(renderer&&typeof renderer.compileAsync==='function'){
+        try{
+          const pending=renderer.compileAsync(scene,camera);
+          if(pending&&pending.then){pending.catch(()=>{}).finally(()=>releaseSquadGhost(gh));return;}
+        }catch(e){}
+      }
       releaseSquadGhost(gh);
     };
     const enqueue=()=>{
