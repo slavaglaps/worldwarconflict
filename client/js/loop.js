@@ -1285,31 +1285,23 @@ function loop(now){
   }
   let ghostWarmOwner=-1, ghostWarmPending=false;
   async function prewarmSquadPipelines(owner){
-    if(!IS_WEBGPU||!renderer||typeof renderer.compileAsync!=='function')return;
     const loadingText=document.getElementById('gameLoadingText');
     if(loadingText)loadingText.textContent='Preparing unit shaders...';
     if(typeof ensureUnitModels==='function')await ensureUnitModels();
     const gh=ghostMesh(0,owner), n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
     gh.comp={inf:n-each*2,arc:each,cav:each};
-    ghostSwarm(gh,n);
-    const warmScene=new T3.Scene();
-    warmScene.environment=scene.environment;
-    scene.remove(gh.group); warmScene.add(gh.group); gh.group.visible=true;
-    scene.traverse(o=>{if(o.isLight&&o.clone)warmScene.add(o.clone());});
+    ghostSwarm(gh,n); gh.group.visible=true;
     let parked=false;
     try{
-      // No requestAnimationFrame has started yet, so compileAsync owns the
-      // renderer exclusively and cannot race the live WebGPU command queue.
-      await renderer.compileAsync(warmScene,camera);
-      // Keep the representative swarm in the real scene for the first hidden
-      // game frame. The normal loop uploads buffers without a second renderer.
-      warmScene.remove(gh.group); scene.add(gh.group); gh.group.visible=true; parked=true;
+      // Keep the representative swarm in the real scene while the normal game
+      // loop warms up. Avoid compileAsync entirely: it can poison WebGPU state
+      // even when called before requestAnimationFrame in production bundles.
+      parked=true;
       window.__finishSquadPipelineWarm=()=>{
         if(!parked)return;
         parked=false; releaseSquadGhost(gh); delete window.__finishSquadPipelineWarm;
       };
     }finally{
-      warmScene.remove(gh.group);
       if(!parked)releaseSquadGhost(gh);
     }
   }
@@ -1660,9 +1652,19 @@ newGame();
   try{if(typeof window.__prewarmSquadPipelines==='function')await window.__prewarmSquadPipelines(PLAYER);}
   catch(e){console.warn('[unit] pipeline preload skipped:',e);}
   requestAnimationFrame(loop);
-  await new Promise(resolve=>requestAnimationFrame(()=>{
-    if(typeof window.__finishSquadPipelineWarm==='function')window.__finishSquadPipelineWarm();
-    resolve();
-  }));
+  // Keep the loading overlay until the real scene has produced several smooth
+  // frames. All first-use pipeline and buffer work happens behind this screen.
+  await new Promise(resolve=>{
+    let last=performance.now(),stableSince=0;
+    const deadline=last+10000;
+    const check=now=>{
+      const dt=now-last; last=now;
+      if(dt<24){if(!stableSince)stableSince=now;}else stableSince=0;
+      if((stableSince&&now-stableSince>=600)||now>=deadline){resolve();return;}
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  });
+  if(typeof window.__finishSquadPipelineWarm==='function')window.__finishSquadPipelineWarm();
   openCountryPick();   // на старте — окно выбора страны (партия за Францию идёт фоном до выбора)
 })();

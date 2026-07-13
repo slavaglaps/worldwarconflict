@@ -251,12 +251,6 @@ function loop(now){
   waterShader.uniforms.time.value = now / 1000;
   waterShader.uniforms.camPos.value.copy(camera.position);
   if(window.HEXWATER)window.HEXWATER.uTime.value = now / 1000;   // ⬡ хекс-карта: шейдерная вода (flow+пена)
-  // дрейф облаков (с заворотом за край карты)
-  if(typeof updateClouds==='function')updateClouds(dt);
-  else for(const c of cloudList){
-    c.position.x+=c.userData.speed*dt;
-    if(c.position.x>GRID+12)c.position.x=-12;
-  }
   if(typeof fogUpdate==='function')fogUpdate(dt);   // 🌫 туман войны: маска + лерп текстуры + патч материалов
   if(typeof perfChipTick==='function')perfChipTick(now);   // 📈 перф-чип (FPS/мс под хэдером)
   if(typeof minimapUpdate==='function')minimapUpdate(dt);   // 🗺 миникарта: территория × туман + города/армии/вьюпорт
@@ -797,7 +791,8 @@ function loop(now){
     gh._dying=null; gh._perish=null; gh._dmgT=0; gh._wasF=false; gh._lastUX=null; gh._lastUZ=null; gh._lastUC=null;
     gh._fracR=null; gh._fracEdge=null; gh.fighting=false; gh.count=0; gh.comp=null; gh.edgeA=null; gh.edgeB=null; gh.frac=0;
     if(ud){
-      ud.st=null; ud.trail=[]; ud.travelled=0; ud.lastHead=null; ud.fwd=null; ud.dieDir=null; ud._dieAt=null;
+      ud.st=null; ud.trail=null; ud.travelled=0; ud._lastP=null; ud._lt=null;
+      ud.lastHead=null; ud.fwd=null; ud.dieDir=null; ud._dieAt=null;
       ud.corpses=null; ud.cheerT=0; ud.battleTgt=null; ud.battleFoeCount=0;
       if(ud.orbs)for(const u of ud.orbs){u.ex=null;u.ey=null;u.ez=null;u.cy=null;}
     }
@@ -1034,7 +1029,7 @@ function loop(now){
     const cheer=Math.max(0,ud.cheerT||0); if(cheer>0)ud.cheerT=cheer-dt;   // 🎉 чир после победы
     // след поддерживаем и в потоке → бой/откат/полевой режим подхватываются без телепорта хвоста
     { const jump=ud._lastP?Math.hypot(p.x-ud._lastP[0],p.z-ud._lastP[1]):0; ud._lastP=[p.x,p.z];
-      let tr=ud.trail; if(!tr||jump>2){tr=ud.trail=[[p.x,p.z]]; ud.travelled=0;}
+      let tr=ud.trail; if(!tr||!tr.length||jump>2){tr=ud.trail=[[p.x,p.z]]; ud.travelled=0;}
       else { ud.travelled=(ud.travelled||0)+jump; const last=tr[tr.length-1]; if(Math.hypot(p.x-last[0],p.z-last[1])>0.1)tr.push([p.x,p.z]); }
       while(tr.length>160)tr.shift(); }
     // 👥 спокойный поток: стабильные дорожки без маршевого бокового "столкновения".
@@ -1289,6 +1284,41 @@ function loop(now){
     if(renderVisible)placeGhostUnits(gh,performance.now());
   }
   let ghostWarmOwner=-1, ghostWarmPending=false;
+  async function prewarmSquadPipelines(owner){
+    const loadingText=document.getElementById('gameLoadingText');
+    if(loadingText)loadingText.textContent='Preparing unit shaders...';
+    if(typeof ensureUnitModels==='function')await ensureUnitModels();
+    const gh=ghostMesh(0,owner), n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
+    gh.comp={inf:n-each*2,arc:each,cav:each};
+    ghostSwarm(gh,n); gh.group.visible=true;
+    let parked=false;
+    try{
+      // Keep the representative swarm in the real scene while the normal game
+      // loop warms up. Avoid compileAsync entirely: it can poison WebGPU state
+      // even when called before requestAnimationFrame in production bundles.
+      parked=true;
+      window.__finishSquadPipelineWarm=()=>{
+        if(!parked)return;
+        parked=false; releaseSquadGhost(gh); delete window.__finishSquadPipelineWarm;
+      };
+    }finally{
+      if(!parked)releaseSquadGhost(gh);
+    }
+  }
+  window.__prewarmSquadPipelines=prewarmSquadPipelines;
+  async function warmSquadOwnerFrame(owner){
+    owner=owner|0;
+    const pool=ghostSquadPool.get(ghostPoolKey(owner));
+    if((pool&&pool.length)||[...MP.ghosts.values()].some(g=>g.kind===0&&g.owner===owner))return;
+    if(typeof ensureUnitModels==='function')await ensureUnitModels();
+    const gh=ghostMesh(0,owner), n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
+    gh.comp={inf:n-each*2,arc:each,cav:each}; ghostSwarm(gh,n); gh.group.visible=true;
+    // The regular loop is already running behind the country picker. Keep the
+    // owner-specific buffers in scene for one complete frame, then pool them.
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    releaseSquadGhost(gh);
+  }
+  window.__warmSquadOwnerFrame=warmSquadOwnerFrame;
   function scheduleSquadGhostWarm(owner){
     owner=owner|0;
     if(ghostWarmPending&&ghostWarmOwner===owner)return;
@@ -1299,23 +1329,10 @@ function loop(now){
       if((pool&&pool.length)||[...MP.ghosts.values()].some(g=>g.kind===0&&g.owner===owner))return;
       const gh=ghostMesh(0,owner), n=unitsForCount(Number.MAX_SAFE_INTEGER), each=Math.floor(n/3);
       gh.comp={inf:n-each*2,arc:each,cav:each};
-      ghostSwarm(gh,n);                 // CPU geometry + GPU buffers are prepared outside the send gesture.
-      // WebGPU creates render pipelines lazily. Compile the representative swarm
-      // in an isolated scene: compiling the live scene while orders add/remove
-      // squads can leave the renderer permanently waiting on a stale render object.
-      if(renderer&&typeof renderer.compileAsync==='function'){
-        try{
-          const warmScene=new T3.Scene();
-          warmScene.environment=scene.environment;
-          scene.remove(gh.group); warmScene.add(gh.group);
-          scene.traverse(o=>{if(o.isLight&&o.clone)warmScene.add(o.clone());});
-          const pending=renderer.compileAsync(warmScene,camera);
-          if(pending&&pending.then){pending.catch(()=>{}).finally(()=>{
-            warmScene.remove(gh.group); releaseSquadGhost(gh);
-          });return;}
-          warmScene.remove(gh.group);
-        }catch(e){}
-      }
+      // Prepare models and instance buffers away from the send gesture. Do not
+      // call compileAsync on the live renderer: WebGPU can wedge its command
+      // queue when the background compile overlaps the main render pipeline.
+      ghostSwarm(gh,n);
       releaseSquadGhost(gh);
     };
     const enqueue=()=>{
@@ -1600,7 +1617,16 @@ function buildCountryPick(){
     });
     if(start)start.disabled=isTaken(countryPickChoice);
   };
-  if(start)start.onclick=()=>{ if(isTaken(countryPickChoice))return; selectCountry(countryPickChoice||free[0]||playable[0]); };
+  if(start)start.onclick=async()=>{
+    const choice=countryPickChoice||free[0]||playable[0];
+    if(isTaken(choice)||start.disabled)return;
+    start.disabled=true;
+    try{
+      const owner=FACT_BY_COUNTRY[choice];
+      if(owner!=null&&typeof window.__warmSquadOwnerFrame==='function')await window.__warmSquadOwnerFrame(owner);
+      selectCountry(choice);
+    }finally{start.disabled=false;}
+  };
   render();
 }
 function openCountryPick(){
@@ -1622,5 +1648,23 @@ function selectCountry(country){
 buildWorld();
 resize();
 newGame();
-openCountryPick();   // на старте — окно выбора страны (партия за Францию идёт фоном до выбора)
-requestAnimationFrame(loop);
+(async()=>{
+  try{if(typeof window.__prewarmSquadPipelines==='function')await window.__prewarmSquadPipelines(PLAYER);}
+  catch(e){console.warn('[unit] pipeline preload skipped:',e);}
+  requestAnimationFrame(loop);
+  // Keep the loading overlay until the real scene has produced several smooth
+  // frames. All first-use pipeline and buffer work happens behind this screen.
+  await new Promise(resolve=>{
+    let last=performance.now(),stableSince=0;
+    const deadline=last+10000;
+    const check=now=>{
+      const dt=now-last; last=now;
+      if(dt<24){if(!stableSince)stableSince=now;}else stableSince=0;
+      if((stableSince&&now-stableSince>=600)||now>=deadline){resolve();return;}
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  });
+  if(typeof window.__finishSquadPipelineWarm==='function')window.__finishSquadPipelineWarm();
+  openCountryPick();   // на старте — окно выбора страны (партия за Францию идёт фоном до выбора)
+})();
