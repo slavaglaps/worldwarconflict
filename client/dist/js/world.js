@@ -3,7 +3,8 @@ const app=document.getElementById('app');
 // Renderer is created and initialized by the WebGPU bootstrap before game modules run.
 const renderer=window.__WWC_RENDERER||new T3.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 const IS_WEBGPU=!!(window.__WWC_RENDER_INFO&&/^(webgpu|webgl2)$/.test(window.__WWC_RENDER_INFO.active));
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const START_GRAPHICS=window.WWC_GRAPHICS||{renderScale:0.9,shadows:true,shadowMap:2048,shadowType:'PCFSoft'};
+renderer.setPixelRatio(Math.max(0.5,Math.min(devicePixelRatio,2)*START_GRAPHICS.renderScale));
 if('outputColorSpace' in renderer&&T3.SRGBColorSpace)renderer.outputColorSpace=T3.SRGBColorSpace;
 else renderer.outputEncoding=T3.sRGBEncoding;
 renderer.toneMapping=T3.ACESFilmicToneMapping;
@@ -49,12 +50,12 @@ const readGameLightSettings=()=>{
 };
 const GAME_LIGHT=readGameLightSettings();
 renderer.toneMappingExposure=Number.isFinite(+GAME_LIGHT.exposure)?+GAME_LIGHT.exposure:0.87;
-renderer.shadowMap.enabled=GAME_LIGHT.shadow!==false;
+renderer.shadowMap.enabled=GAME_LIGHT.shadow!==false&&START_GRAPHICS.shadows!==false;
 renderer.shadowMap.type=({
   Basic:T3.BasicShadowMap,
   PCF:T3.PCFShadowMap,
   PCFSoft:T3.PCFSoftShadowMap
-})[GAME_LIGHT.shadowType]||T3.PCFSoftShadowMap;
+})[START_GRAPHICS.shadowType||GAME_LIGHT.shadowType]||T3.PCFSoftShadowMap;
 // 🌓 ЗАПЕЧЁННЫЕ ТЕНИ (вариант A): мир статичен, солнце фиксировано в мире, юниты тень не кастуют →
 //   теневую карту нет смысла перерисовывать каждый кадр. autoUpdate=false → рендерим её ТОЛЬКО когда
 //   меняется геометрия (новый/захваченный город) или настройки света. Убирает shadow-pass
@@ -105,8 +106,8 @@ applyCam();
 const hemi=new T3.HemisphereLight(GAME_LIGHT.hemiSky,GAME_LIGHT.hemiGround,GAME_LIGHT.hemiIntensity);
 scene.add(hemi);
 var sun=new T3.DirectionalLight(GAME_LIGHT.sunColor,GAME_LIGHT.sunIntensity);
-sun.castShadow=GAME_LIGHT.shadow!==false;
-sun.shadow.mapSize.set(GAME_LIGHT.shadowMap,GAME_LIGHT.shadowMap);
+sun.castShadow=GAME_LIGHT.shadow!==false&&START_GRAPHICS.shadows!==false;
+sun.shadow.mapSize.set(START_GRAPHICS.shadowMap||GAME_LIGHT.shadowMap,START_GRAPHICS.shadowMap||GAME_LIGHT.shadowMap);
 sun.shadow.radius=GAME_LIGHT.shadowRadius;
 sun.shadow.bias=GAME_LIGHT.shadowBias;
 sun.shadow.normalBias=GAME_LIGHT.shadowNormalBias;
@@ -114,6 +115,7 @@ const sc=sun.shadow.camera,SS=GRID*GAME_LIGHT.shadowSize;
 sc.left=-SS;sc.right=SS;sc.top=SS;sc.bottom=-SS;sc.near=GAME_LIGHT.shadowNear;sc.far=GRID*GAME_LIGHT.shadowFar;
 scene.add(sun); scene.add(sun.target);
 updateSunFollow();
+if(typeof applyGraphicsPreset==='function')applyGraphicsPreset(START_GRAPHICS.id||'balanced',false);
 
 /* ── 🌗 ДВЕ КАРТЫ ТЕНЕЙ: статика (окружение) + динамика (города/постройки) ─────────────
    Статичная карта (sun.shadow) печётся ОДИН раз и содержит только неизменяемое окружение

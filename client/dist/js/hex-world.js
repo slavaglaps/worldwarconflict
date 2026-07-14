@@ -585,11 +585,14 @@
     };
     const geo = new T.PlaneGeometry(GRID * 8, GRID * 8);   // большой запас за карту → океан уходит за горизонт, внешняя зона = открытое море
     geo.rotateX(-Math.PI / 2);
-    const seaMesh = new T.Mesh(geo, waterMat);
+    const qualityWaterMat=waterMat;
+    const simpleWaterMat=new T.MeshBasicMaterial({color:0x126b74,depthTest:true,depthWrite:true});
+    const seaMesh = new T.Mesh(geo, window.WWC_GRAPHICS?.water==='low'?simpleWaterMat:qualityWaterMat);
     seaMesh.position.set(GRID / 2, SEA_TOP, GRID / 2);
     seaMesh.renderOrder = -1; seaMesh.frustumCulled = false;
     seaMesh.userData.perfGroup = 'map-water';
     scene.add(seaMesh);
+    waterFX.mesh=seaMesh;waterFX.qualityMaterial=qualityWaterMat;waterFX.simpleMaterial=simpleWaterMat;
     window.HEXWATER = waterFX;                       // loop.js двигает uTime каждый кадр
   }
 
@@ -855,6 +858,7 @@
       for (const chunk of makeChunkMeshes(list, part => {
         const im = new T.InstancedMesh(model.geo.clone(), model.mat, part.length);
         im.castShadow = true; im.receiveShadow = true; im.userData.perfGroup = 'map-decor';
+        im.userData.graphicsFullCount=part.length;
         const packBiome = model.mat?.userData?.packBiomeShader ? new Float32Array(part.length) : null;
         for (let i = 0; i < part.length; i++) {
           const item = part[i], d = item.d, s = (d[5] || 1) * kY;
@@ -867,7 +871,9 @@
         return im;
       })) decorGroup.add(chunk.mesh);
     }
+    window.HEX_DECOR_GROUP=decorGroup;
     scene.add(decorGroup);
+    if(typeof applyGraphicsPreset==='function')applyGraphicsPreset(window.WWC_GRAPHICS?.id||'balanced',false);
 
     // ── хексы под застройку: суша без декора/дорог/реки, не вплотную к городу (там стены) ──
     {

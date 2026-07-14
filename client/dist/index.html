@@ -76,6 +76,15 @@
   .fbtn:hover{border-color:rgba(199,171,109,.62);box-shadow:none}
   .fbtn.on{border-color:#e8c76a;color:#f4dc8c;background:linear-gradient(180deg,rgba(52,74,44,.96),rgba(16,38,26,.98));box-shadow:0 0 16px rgba(232,199,104,.2)}
   .fpsHint{margin-top:9px;color:#8f9b8e;font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
+  .gfxBlock{display:flex;flex-direction:column;gap:8px;padding-top:2px}
+  .gfxLabel{color:#b9c5b4;font-size:13px;font-weight:800;letter-spacing:.55px;text-transform:uppercase}
+  .gfxSeg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .gfxbtn{height:40px;min-width:0;padding:0 7px;border:1px solid rgba(108,139,144,.58);border-radius:3px;clip-path:none;
+    background:linear-gradient(180deg,rgba(26,44,52,.94),rgba(9,21,25,.98));color:#c9d8d6;
+    font-family:KnightsQuest,Georgia,serif;font-size:16px;letter-spacing:.2px;cursor:pointer;box-shadow:none}
+  .gfxbtn:hover{border-color:rgba(199,171,109,.62);box-shadow:none}
+  .gfxbtn.on{border-color:#e8c76a;color:#f4dc8c;background:linear-gradient(180deg,rgba(52,74,44,.96),rgba(16,38,26,.98));box-shadow:0 0 14px rgba(232,199,104,.18)}
+  .gfxHint{min-height:28px;color:#8f9b8e;font:800 11px/1.3 system-ui,sans-serif;letter-spacing:.25px}
 </style>
 </head>
 <body>
@@ -96,6 +105,16 @@
         <h2>Create Room</h2>
         <div class="row">
           <input id="roomName" placeholder="Room name" maxlength="40">
+          <div class="gfxBlock">
+            <div class="gfxLabel">Graphics quality</div>
+            <div class="gfxSeg" id="gfxSeg" role="radiogroup" aria-label="Graphics quality">
+              <button type="button" class="gfxbtn" data-gfx="low" role="radio">Low</button>
+              <button type="button" class="gfxbtn" data-gfx="performance" role="radio">Performance</button>
+              <button type="button" class="gfxbtn" data-gfx="balanced" role="radio">Balanced</button>
+              <button type="button" class="gfxbtn" data-gfx="ultra" role="radio">Ultra</button>
+            </div>
+            <div class="gfxHint" id="gfxHint"></div>
+          </div>
           <button id="createBtn">Create</button>
         </div>
       </div>
@@ -139,6 +158,25 @@
   const statusEl = $('status'), roomsEl = $('rooms'), countEl = $('count');
   const rooms = new Map();   // roomId -> listing
   let client = null, lobby = null;
+
+  const GRAPHICS_KEY='wwc_graphics_preset';
+  const GRAPHICS_HINTS={
+    low:'No shadows · 60% scale · minimal effects',
+    performance:'Cheap shadows · 75% scale · reduced effects',
+    balanced:'Recommended · 90% scale · balanced quality',
+    ultra:'Maximum shadows, fog, water and detail'
+  };
+  let graphicsPreset=GRAPHICS_HINTS[localStorage.getItem(GRAPHICS_KEY)]?localStorage.getItem(GRAPHICS_KEY):'balanced';
+  function paintGraphics(){
+    document.querySelectorAll('#gfxSeg .gfxbtn').forEach(b=>{
+      const on=b.dataset.gfx===graphicsPreset;b.classList.toggle('on',on);b.setAttribute('aria-checked',on?'true':'false');
+    });
+    $('gfxHint').textContent=GRAPHICS_HINTS[graphicsPreset];
+  }
+  document.querySelectorAll('#gfxSeg .gfxbtn').forEach(b=>b.onclick=()=>{
+    graphicsPreset=b.dataset.gfx;localStorage.setItem(GRAPHICS_KEY,graphicsPreset);paintGraphics();
+  });
+  localStorage.setItem(GRAPHICS_KEY,graphicsPreset);paintGraphics();
 
   function setStatus(t, cls){ statusEl.textContent = t; statusEl.className = 'status' + (cls?' '+cls:''); }
 

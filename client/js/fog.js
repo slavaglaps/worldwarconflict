@@ -10,8 +10,9 @@
   const T = (typeof T3 !== 'undefined') ? T3 : THREE;
   const G = (typeof GRID !== 'undefined') ? GRID : 256;
   const N = G * G;
-  const MASK_G = Math.max(1, Math.ceil(G * 0.5));
-  const MASK_N = MASK_G * MASK_G;
+  let MASK_SCALE=window.WWC_GRAPHICS?.fogScale||0.5;
+  let MASK_G = Math.max(1, Math.ceil(G * MASK_SCALE));
+  let MASK_N = MASK_G * MASK_G;
   const LERP_T = 0.3;            // сек до полного проявления/затухания
   const CALC_EVERY = 0.4;        // период пересчёта целевой маски
   const BLUR_R = 1;              // один дешёвый box-blur; bilinear GPU сглаживает уменьшенную маску
@@ -19,7 +20,7 @@
   let tex = null, prevTex = null, target = null, raw = null, maskRaw = null, _tmpA = null, _tmpB = null, calcT = 0, started = false;
   let blend = 1, animating = false;
   let lastVisionSig = null;
-  let fogQuality = localStorage.getItem('wwc_fog_quality') === 'low' ? 'low' : 'high';
+  let fogQuality = window.WWC_GRAPHICS?.fogQuality||(localStorage.getItem('wwc_fog_quality') === 'low' ? 'low' : 'high');
   const stats = { computes:0, uploads:0, skippedUploads:0 };
 
   function ensureTex() {
@@ -36,6 +37,19 @@
     prevTex.wrapS = T.ClampToEdgeWrapping; prevTex.wrapT = T.ClampToEdgeWrapping;
     tex.needsUpdate = true;
     prevTex.needsUpdate = true;
+  }
+
+  function setResolutionScale(scale){
+    scale=Math.max(0.25,Math.min(1,+scale||0.5));
+    const nextG=Math.max(1,Math.ceil(G*scale));
+    if(nextG===MASK_G)return;
+    MASK_SCALE=scale;MASK_G=nextG;MASK_N=MASK_G*MASK_G;
+    if(tex)tex.dispose();if(prevTex)prevTex.dispose();
+    tex=prevTex=target=raw=maskRaw=_tmpA=_tmpB=null;
+    started=false;blend=1;animating=false;lastVisionSig=null;calcT=0;
+    if(webgpuPipeline&&webgpuPipeline.dispose)webgpuPipeline.dispose();
+    webgpuPipeline=null;
+    ensureTex();
   }
 
   // сепарабельный box-blur (окно 2R+1, скользящая сумма — O(N)); src/dst: Float32Array
@@ -282,6 +296,8 @@
     get blend(){return blend;}, computeTarget, _shim:shim, get started(){return started;},
     invalidate(){lastVisionSig=null;calcT=0;},
     setQuality(q){fogQuality=q==='low'?'low':'high';localStorage.setItem('wwc_fog_quality',fogQuality);lastVisionSig=null;calcT=0;},
+    setResolutionScale,get resolutionScale(){return MASK_SCALE;},
     get quality(){return fogQuality;}, stats,
   };
+  if(typeof applyGraphicsPreset==='function')applyGraphicsPreset(window.WWC_GRAPHICS?.id||'balanced',false);
 })();

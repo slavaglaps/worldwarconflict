@@ -382,20 +382,24 @@ function fireMissile(ship,tgt){ missiles.push(new Missile(ship.owner,ship.pos,tg
 const FXGEO_BLAST=new T3.SphereGeometry(0.3,10,8), FXGEO_MUZZLE=new T3.SphereGeometry(0.25,8,6),
       FXGEO_DUST=new T3.SphereGeometry(0.11,6,5), FXGEO_SPARK=new T3.SphereGeometry(0.09,6,5), FXGEO_CLASHDUST=new T3.SphereGeometry(0.14,6,5);
 function spawnBlast(x,y,z){
+  if(fx.length>=(window.graphicsFxLimit?graphicsFxLimit(70):70))return;
   const m=new T3.Mesh(FXGEO_BLAST,new T3.MeshBasicMaterial({color:0xffb24a,transparent:true,opacity:.9}));
   m.position.set(x,y+0.3,z); scene.add(m); fx.push({mesh:m,life:0.35,max:0.35,grow:6});
 }
 function spawnMuzzle(ship){
+  if(fx.length>=(window.graphicsFxLimit?graphicsFxLimit(70):70))return;
   const m=new T3.Mesh(FXGEO_MUZZLE,new T3.MeshBasicMaterial({color:0xfff0c0,transparent:true,opacity:.9}));
   m.position.set(ship.pos.x,WATER_Y_SHIP+0.6,ship.pos.z); scene.add(m); fx.push({mesh:m,life:0.18,max:0.18,grow:3});
 }
 // 🚶 пыль марша: тусклый пуф под бегущей колонной (реюз fx-пула updateMissiles)
 function spawnMarchDust(x,y,z){
+  if(fx.length>=(window.graphicsFxLimit?graphicsFxLimit(70):70))return;
   const d=new T3.Mesh(FXGEO_DUST,new T3.MeshBasicMaterial({color:0xa6977c,transparent:true,opacity:.38}));
   d.position.set(x,y+0.06,z); scene.add(d); fx.push({mesh:d,life:0.45,max:0.45,grow:1.8});
 }
 // ⚔ искра сшибки в полевом бою: маленькая жёлтая вспышка + редкая пыль (дешёвая, реюз fx-пула updateMissiles)
 function spawnClashFX(x,y,z){
+  if(fx.length>=(window.graphicsFxLimit?graphicsFxLimit(70):70))return;
   const m=new T3.Mesh(FXGEO_SPARK,new T3.MeshBasicMaterial({color:Math.random()<0.5?0xfff3c0:0xffd870,transparent:true,opacity:.95}));
   m.position.set(x,y+0.32+Math.random()*0.25,z); scene.add(m); fx.push({mesh:m,life:0.22,max:0.22,grow:2.2});
   if(Math.random()<0.45){ const d=new T3.Mesh(FXGEO_CLASHDUST,new T3.MeshBasicMaterial({color:0x9a8a70,transparent:true,opacity:.5}));
@@ -422,6 +426,7 @@ function applySiegeTowerHit(cityIdx,owner,dmg){
 // ⚔ РАЗЛЁТ юнитов от попадания: N юнит-осколков (N=урон) вылетают из точки удара, летят по баллисте, кувыркаются и тают.
 const _scatter=[];
 function spawnUnitScatter(x,y,z,n,ownerCol,fromX,fromZ){
+  n=Math.round(n*(window.WWC_GRAPHICS?.particles??1));if(n<1)return;
   n=Math.max(1,Math.min(10,Math.round(n)));                                    // 4 урона → 4 осколка (кап 10)
   let ax=x-(fromX==null?x-1:fromX), az=z-(fromZ==null?z:fromZ); const al=Math.hypot(ax,az)||1; ax/=al; az/=al;  // направление «от башни»
   const mat=new T3.MeshLambertMaterial({color:ownerCol==null?0xcc4030:ownerCol});

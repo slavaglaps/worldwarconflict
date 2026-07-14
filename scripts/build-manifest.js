@@ -14,7 +14,7 @@ const MODS = [
   'js/i18n-en-data.js', 'js/i18n-ru-data.js',       // 🌍 дисплей-имена данных
   'js/_rules.gen.js', 'js/_tech.gen.js', 'js/_balance.gen.js',
   'js/sim-loader.js', 'js/solo-sim.js',
-  'js/data.js', 'js/world.js', 'js/heroes.js', 'js/decor.js', 'js/roads.js',
+  'js/data.js', 'js/graphics.js', 'js/world.js', 'js/heroes.js', 'js/decor.js', 'js/roads.js',
   'js/city.js', 'js/units.js', 'js/logic.js', 'js/ui.js', 'js/input.js',
   'js/hud.js', 'js/build.js', 'js/loop.js', 'js/fog.js', 'js/minimap.js', 'js/perf-chip.js', 'game.net.js',
   'js/tutorial.js',   // 🎓 туториал — после game.net.js (оборачивает MP.cmd)

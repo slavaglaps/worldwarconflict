@@ -236,7 +236,7 @@ function loop(now){
   // update water shader (время + позиция камеры для бликов/Френеля)
   waterShader.uniforms.time.value = now / 1000;
   waterShader.uniforms.camPos.value.copy(camera.position);
-  if(window.HEXWATER)window.HEXWATER.uTime.value = now / 1000;   // ⬡ хекс-карта: шейдерная вода (flow+пена)
+  if(window.HEXWATER&&window.WWC_GRAPHICS?.water!=='low')window.HEXWATER.uTime.value = now / 1000;   // ⬡ хекс-карта: шейдерная вода (flow+пена)
   if(typeof fogUpdate==='function')fogUpdate(dt);   // 🌫 туман войны: маска + лерп текстуры + патч материалов
   if(typeof perfChipTick==='function')perfChipTick(now);   // 📈 перф-чип (FPS/мс под хэдером)
   if(typeof minimapUpdate==='function')minimapUpdate(dt);   // 🗺 миникарта: территория × туман + города/армии/вьюпорт
@@ -949,7 +949,7 @@ function loop(now){
     }
     ud.finalizeUnits(cN);
     // ⚔ искры/пыль в линии соприкосновения двух армий (кап по fx-пулу, редкая каденция)
-    if(battle&&bt&&typeof spawnClashFX==='function'&&(typeof fx==='undefined'||fx.length<70)){
+    if(battle&&bt&&typeof spawnClashFX==='function'&&(typeof fx==='undefined'||fx.length<(window.graphicsFxLimit?graphicsFxLimit(70):70))){
       ud._clashT=(ud._clashT||0)+dt;
       if(ud._clashT>0.26+Math.random()*0.22){ ud._clashT=0;
         const mx=p.x+(bt[0]-p.x)*0.5+(Math.random()-0.5)*0.5, mz=p.z+(bt[1]-p.z)*0.5+(Math.random()-0.5)*0.5;
@@ -957,7 +957,7 @@ function loop(now){
       }
     }
     // 🚶 пыль марша: редкие пуфы под бегущей колонной
-    if(!battle&&run>0.6&&!gh._dying&&typeof spawnMarchDust==='function'&&(typeof fx==='undefined'||fx.length<70)){
+    if(!battle&&run>0.6&&!gh._dying&&typeof spawnMarchDust==='function'&&(typeof fx==='undefined'||fx.length<(window.graphicsFxLimit?graphicsFxLimit(70):70))){
       ud._dustT=(ud._dustT||0)+dt;
       if(ud._dustT>0.45+Math.random()*0.4){ ud._dustT=0;
         const rr=Math.min(ranks-1,(Math.random()*ranks)|0), cc=ch[rr];
@@ -1126,7 +1126,7 @@ function loop(now){
     }
     st.tailS=tailS;
     // ⚔ искры/пыль в линии соприкосновения двух армий
-    if(battle&&bt&&typeof spawnClashFX==='function'&&(typeof fx==='undefined'||fx.length<70)){
+    if(battle&&bt&&typeof spawnClashFX==='function'&&(typeof fx==='undefined'||fx.length<(window.graphicsFxLimit?graphicsFxLimit(70):70))){
       ud._clashT=(ud._clashT||0)+dt;
       if(ud._clashT>0.26+Math.random()*0.22){ ud._clashT=0;
         const mx=p.x+(bt[0]-p.x)*0.5+(Math.random()-0.5)*0.5, mz=p.z+(bt[1]-p.z)*0.5+(Math.random()-0.5)*0.5;
@@ -1153,7 +1153,7 @@ function loop(now){
     }
     ud.finalizeUnits(cN);
     // 🚶 пыль марша под потоком
-    if(run>0.6&&!gh._dying&&typeof spawnMarchDust==='function'&&(typeof fx==='undefined'||fx.length<70)){
+    if(run>0.6&&!gh._dying&&typeof spawnMarchDust==='function'&&(typeof fx==='undefined'||fx.length<(window.graphicsFxLimit?graphicsFxLimit(70):70))){
       ud._dustT=(ud._dustT||0)+dt;
       if(ud._dustT>0.45+Math.random()*0.4){ ud._dustT=0;
         const si=st.sHead-Math.random()*Math.min(Math.ceil(n/LANES)*rowGap,st.sHead), sm=smpAt(si);
@@ -1224,6 +1224,7 @@ function loop(now){
       ud._shadowCap=Math.max(18,Math.ceil(n*1.3));
       ud.shadow=new T3.InstancedMesh(GHOST_SHADOW_GEO,GHOST_SHADOW_MAT,ud._shadowCap);
       ud.shadow.count=0;ud.shadow.castShadow=false;ud.shadow.receiveShadow=false;ud.shadow.frustumCulled=false;ud.shadow.renderOrder=1;ud.shadow.userData.perfGroup='unit-blob-shadows';
+      ud.shadow.visible=window.WWC_GRAPHICS?.blobShadows!==false;
       gh.group.add(ud.shadow);
     }
     // helpers: глобальный индекс юнита → бакет по типу
