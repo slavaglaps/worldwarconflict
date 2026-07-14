@@ -1441,7 +1441,7 @@
       const im = new T.InstancedMesh(b.model.geo, b.mat, b.matrices.length);
       // 🌗 города — ДИНАМИЧЕСКИЕ кастеры: из статичной карты исключены (castShadow=false),
       //    тень рисуют через отдельную карту (слой DYN_SHADOW_LAYER) — апгрейд перепекает только её
-      im.castShadow = !!IS_WEBGPU; im.receiveShadow = true;
+      im.castShadow = !!IS_WEBGPU && (typeof graphicsShadowsEnabled !== 'function' || graphicsShadowsEnabled()); im.receiveShadow = true;
       im.layers.enable(typeof DYN_SHADOW_LAYER !== 'undefined' ? DYN_SHADOW_LAYER : 2);
       im.userData.perfGroup = b.group;
       for (let i = 0; i < b.matrices.length; i++) {

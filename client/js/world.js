@@ -61,8 +61,13 @@ renderer.shadowMap.type=({
 //   меняется геометрия (новый/захваченный город) или настройки света. Убирает shadow-pass
 //   (~1.7M tris) из каждого кадра при идентичной картинке. markShadowsDirty() — запрос одного пере-рендера.
 renderer.shadowMap.autoUpdate=false;
-renderer.shadowMap.needsUpdate=true;                 // первый рендер теней (после сборки мира)
-window.markShadowsDirty=function markShadowsDirty(){ renderer.shadowMap.needsUpdate=true; };
+renderer.shadowMap.needsUpdate=START_GRAPHICS.shadows!==false; // первый рендер теней (после сборки мира)
+const shadowsEnabled=()=>window.WWC_GRAPHICS?.shadows!==false&&renderer.shadowMap?.enabled!==false;
+window.graphicsShadowsEnabled=shadowsEnabled;
+window.markShadowsDirty=function markShadowsDirty(){
+  if(!shadowsEnabled()){ if(renderer.shadowMap)renderer.shadowMap.needsUpdate=false; return; }
+  renderer.shadowMap.needsUpdate=true;
+};
 
 const scene=new T3.Scene();
 scene.background=new T3.Color(GAME_LIGHT.background);
@@ -143,10 +148,20 @@ function initDynShadow(){
   DYN_SHADOW.ready=true;
 }
 window.markDynShadowsDirty=function markDynShadowsDirty(){
+  if(!shadowsEnabled()){
+    DYN_SHADOW.dirty=false;
+    if(renderer.shadowMap)renderer.shadowMap.needsUpdate=false;
+    return;
+  }
   if(IS_WEBGPU){ if(renderer.shadowMap)renderer.shadowMap.needsUpdate=true; return; }
   DYN_SHADOW.dirty=true;
 };
 window.bakeDynShadowIfDirty=function bakeDynShadowIfDirty(){            // зовётся из render-цикла; события одного кадра коалесятся в 1 запечку
+  if(!shadowsEnabled()){
+    DYN_SHADOW.dirty=false;
+    if(renderer.shadowMap)renderer.shadowMap.needsUpdate=false;
+    return;
+  }
   if(IS_WEBGPU){
     if(DYN_SHADOW.dirty&&renderer.shadowMap)renderer.shadowMap.needsUpdate=true;
     DYN_SHADOW.dirty=false;
@@ -166,6 +181,11 @@ window.bakeDynShadowIfDirty=function bakeDynShadowIfDirty(){            // зо�
 // город/здание → динамический слой теней (и исключение из статичной карты)
 window.attachDynShadowCaster=function attachDynShadowCaster(root){
   if(!root)return;
+  if(!shadowsEnabled()){
+    root.traverse(o=>{ if(o.isMesh){o.castShadow=false;o.receiveShadow=true;} });
+    DYN_SHADOW.dirty=false;
+    return;
+  }
   if(IS_WEBGPU){
     root.traverse(o=>{ if(o.isMesh){o.castShadow=true;o.receiveShadow=true;} });
     if(renderer.shadowMap)renderer.shadowMap.needsUpdate=true;
@@ -243,6 +263,7 @@ float getDynShadow(){
 };
 // применить ко всем приёмникам (батчи земли/дорог/мостов) — после сборки мира
 window.installDynShadowOnWorld=function installDynShadowOnWorld(){
+  if(!shadowsEnabled())return;
   if(IS_WEBGPU){
     if(renderer.shadowMap)renderer.shadowMap.needsUpdate=true;
     return;
