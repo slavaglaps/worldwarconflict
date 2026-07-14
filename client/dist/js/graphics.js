@@ -6,7 +6,7 @@
 var WWC_GRAPHICS_KEY='wwc_graphics_preset';
 var WWC_GRAPHICS_PRESETS={
   low:{
-    id:'low',renderScale:0.60,shadows:false,shadowMap:0,shadowType:'Basic',
+    id:'low',renderScale:0.75,shadows:false,shadowMap:0,shadowType:'Basic',
     blobShadows:false,fogScale:0.25,fogQuality:'low',water:'low',decorDensity:0.28,particles:0.20
   },
   performance:{
