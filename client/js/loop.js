@@ -184,8 +184,6 @@ function applyPerfStressOnce(){
 }
 
 let last=performance.now(), panelTick=0, cityLabelTick=0;
-window.__fpsCap=parseInt(localStorage.getItem('wwc_fps_cap')||'0',10)||0;
-let _lastRenderT=0;
 const cityLabelCamPos=new T3.Vector3().copy(camera.position),cityLabelCamQuat=new T3.Quaternion().copy(camera.quaternion);
 const labelsRoot=document.getElementById('labels');
 let labelsHiddenUntil=0, labelsAreHidden=false;
@@ -228,9 +226,6 @@ function updateMoverSelRings(now){
 }
 function loop(now){
   requestAnimationFrame(loop);
-  const fpsCap=window.__fpsCap|0;
-  if(fpsCap&&now-_lastRenderT<1000/fpsCap-0.6)return;
-  _lastRenderT=now;
   const dt=Math.min((now-last)/1000,.05); last=now;
   updateCameraKeys(dt);
   // update water shader (время + позиция камеры для бликов/Френеля)
